@@ -140,6 +140,7 @@
 
 
 import express from "express";
+import User from "../models/User.js";
 
 import {
   signup,
@@ -178,6 +179,19 @@ router.post("/forgot-password", forgotPassword);
 
 router.post("/verify-otp", verifyOtp);
 router.post("/reset-password", resetPassword);
+router.post("/token-refresh", async (req, res) => {
+  try {
+    const { userId } = req.body;
+    if (!userId) return res.status(400).json({ message: "userId is required" });
+    const user = await User.findOne({ _id: userId });
+    if (!user) return res.status(404).json({ message: "User not found" });
+    const generateToken = (await import("../../utils/generateToken.js")).default;
+    const token = generateToken(user._id);
+    res.json({ success: true, token });
+  } catch (error) {
+    res.status(555).json({ message: error.message });
+  }
+});
 
 /*
 |--------------------------------------------------------------------------

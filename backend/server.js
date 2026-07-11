@@ -19,10 +19,16 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
+import { configureCloudinary } from "./src/config/cloudinary.js";
+configureCloudinary();
+
 import connectDB from "./src/config/db.js";
 import app from "./src/app.js";
+import seedAttributes from "./src/admin/seed/seedAttributes.js";
 
-connectDB();
+connectDB().then(() => {
+  seedAttributes();
+});
 
 const PORT = process.env.PORT || 5000;
 

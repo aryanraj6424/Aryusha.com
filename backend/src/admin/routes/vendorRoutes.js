@@ -39,35 +39,71 @@ import {
   activateVendor,
   holdVendor,
   deactivateVendor,
+  assignVendorArea,
   updateVendorAccountStatus,
+  getVendorById,
+  createVendor,
+  updateVendor,
+  deleteVendor,
+  getVendorPermissions,
+  updateVendorPermissions,
+  updateVendorServiceArea,
 } from "../controllers/vendorController.js";
 
 const router =
   express.Router();
 
 // Dashboard Stats
-
 router.get(
   "/stats",
   getVendorStats
 );
 
 // All Vendors
-
 router.get(
   "/all",
   getAllVendors
 );
 
 // Pending Vendors
-
 router.get(
   "/pending",
   getPendingVendors
 );
 
-// Approval Actions
+// Permissions endpoints (Admin)
+router.get(
+  "/permissions/:id",
+  getVendorPermissions
+);
 
+router.put(
+  "/permissions/:id",
+  updateVendorPermissions
+);
+
+// CRUD endpoints (Admin)
+router.post(
+  "/",
+  createVendor
+);
+
+router.get(
+  "/:id",
+  getVendorById
+);
+
+router.put(
+  "/:id",
+  updateVendor
+);
+
+router.delete(
+  "/:id",
+  deleteVendor
+);
+
+// Approval Actions
 router.put(
   "/approve/:id",
   approveVendor
@@ -79,7 +115,6 @@ router.put(
 );
 
 // Account Control Actions
-
 router.put(
   "/suspend/:id",
   suspendVendor
@@ -101,8 +136,18 @@ router.put(
 );
 
 router.put(
+  "/assign-area/:id",
+  assignVendorArea
+);
+
+router.put(
   "/account-status/:id",
   updateVendorAccountStatus
+);
+
+router.put(
+  "/:id/service-area",
+  updateVendorServiceArea
 );
 
 export default router;

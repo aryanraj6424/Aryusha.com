@@ -1,0 +1,1455 @@
+import mongoose from "mongoose";
+import {
+  Category,
+  SubCategory,
+  ProductFamily,
+  Product,
+  ProductVariant,
+  VendorListing,
+  VendorProduct
+} from "../models/catalog.js";
+import Vendor from "../vendor/models/Vendor.js";
+
+// @desc    Get all categories
+// @route   GET /api/categories
+// @access  Public
+export const getCategories = async (req, res) => {
+  try {
+    const categories = await Category.find({ status: 'active', isDeleted: { $ne: true } })
+      .populate({ path: 'subCategories', select: '_id' })
+      .populate({ path: 'productFamilies', select: '_id' })
+      .populate({ path: 'products', select: '_id' })
+      .sort({ sortOrder: 1 });
+    res.json({ categories });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Get all subcategories
+// @route   GET /api/sub-categories
+// @access  Public
+export const getAllSubCategories = async (req, res) => {
+  try {
+    const subCategories = await SubCategory.find({ isDeleted: { $ne: true } })
+      .populate('categoryId', 'name')
+      .populate({ path: 'productFamilies', select: '_id' })
+      .populate({ path: 'products', select: '_id' })
+      .sort({ sortOrder: 1 });
+    res.json({ subCategories });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Get subcategories by category
+// @route   GET /api/sub-categories/category/:categoryId
+// @access  Public
+export const getSubCategoriesByCategory = async (req, res) => {
+  try {
+    const { categoryId } = req.params;
+    const subCategories = await SubCategory.find({ 
+      categoryId, 
+      status: 'active',
+      isDeleted: { $ne: true }
+    })
+      .populate({ path: 'productFamilies', select: '_id' })
+      .populate({ path: 'products', select: '_id' })
+      .sort({ sortOrder: 1 });
+    res.json({ subCategories });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Get all product families
+// @route   GET /api/product-families
+// @access  Public
+export const getAllProductFamilies = async (req, res) => {
+  try {
+    const productFamilies = await ProductFamily.find({ isDeleted: { $ne: true } })
+      .populate('categoryId', 'name')
+      .populate('subCategoryId', 'name')
+      .populate({ path: 'products', select: '_id' })
+      .sort({ sortOrder: 1 });
+    res.json({ productFamilies });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Get product families by subcategory
+// @route   GET /api/product-families/sub-category/:subCategoryId
+// @access  Public
+export const getProductFamiliesBySubCategory = async (req, res) => {
+  try {
+    const { subCategoryId } = req.params;
+    const productFamilies = await ProductFamily.find({ 
+      subCategoryId, 
+      status: 'active',
+      isDeleted: { $ne: true }
+    })
+      .populate({ path: 'products', select: '_id' })
+      .sort({ sortOrder: 1 });
+    res.json({ productFamilies });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Get all products
+// @route   GET /api/admin/product/all
+// @access  Private/Admin
+export const getAllProducts = async (req, res) => {
+  try {
+    const products = await Product.find()
+      .populate('categoryId', 'name')
+      .populate('subCategoryId', 'name')
+      .populate('familyId', 'name')
+      .sort({ createdAt: -1 });
+    res.json({ products });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Get single product
+// @route   GET /api/admin/product/:id
+// @access  Private/Admin
+export const getProductById = async (req, res) => {
+  try {
+    const product = await Product.findById(req.params.id)
+      .populate('categoryId', 'name')
+      .populate('subCategoryId', 'name')
+      .populate('familyId', 'name')
+      .populate('variants');
+    
+    if (!product) {
+      return res.status(404).json({ message: 'Product not found' });
+    }
+    
+    res.json({ product });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Create new product
+// @route   POST /api/admin/product/create
+// @access  Private/Admin
+export const createProduct = async (req, res) => {
+  try {
+    const {
+      name,
+      brand,
+      categoryId,
+      subCategoryId,
+      familyId,
+      unitType,
+      description,
+      images,
+      isReturnable,
+      shelfLifeDays,
+      status
+    } = req.body;
+
+    if (!name || !categoryId || !subCategoryId || !familyId || !unitType) {
+      return res.status(400).json({ message: 'name, categoryId, subCategoryId, familyId and unitType are required' });
+    }
+
+    const product = await Product.create({
+      name,
+      brand: brand || '',
+      categoryId,
+      subCategoryId,
+      familyId,
+      unitType: String(unitType).toLowerCase(),
+      description: description || '',
+      images: images || [],
+      isReturnable: isReturnable || false,
+      shelfLifeDays: shelfLifeDays || undefined,
+      status: status || 'draft',
+      createdBy: req.admin?._id,
+      creatorModel: 'Admin'
+    });
+
+    const populated = await Product.findById(product._id)
+      .populate('categoryId', 'name')
+      .populate('subCategoryId', 'name')
+      .populate('familyId', 'name');
+
+    res.status(201).json({ product: populated });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Update product
+// @route   PUT /api/admin/product/update/:id
+// @access  Private/Admin
+export const updateProduct = async (req, res) => {
+  try {
+    const product = await Product.findById(req.params.id);
+    
+    if (!product) {
+      return res.status(404).json({ message: 'Product not found' });
+    }
+
+    const {
+      name,
+      brand,
+      categoryId,
+      subCategoryId,
+      familyId,
+      unitType,
+      description,
+      status
+    } = req.body;
+
+    product.name = name || product.name;
+    product.brand = brand || product.brand;
+    product.categoryId = categoryId || product.categoryId;
+    product.subCategoryId = subCategoryId || product.subCategoryId;
+    product.familyId = familyId || product.familyId;
+    product.unitType = unitType ? String(unitType).toLowerCase() : product.unitType;
+    product.description = description !== undefined ? description : product.description;
+    product.status = status || product.status;
+
+    await product.save();
+
+    const populatedProduct = await Product.findById(product._id)
+      .populate('categoryId', 'name')
+      .populate('subCategoryId', 'name')
+      .populate('familyId', 'name');
+
+    res.json({ product: populatedProduct });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Delete product
+// @route   DELETE /api/admin/product/delete/:id
+// @access  Private/Admin
+export const deleteProduct = async (req, res) => {
+  try {
+    const product = await Product.findById(req.params.id);
+    
+    if (!product) {
+      return res.status(404).json({ message: 'Product not found' });
+    }
+
+    // Delete associated variants
+    await ProductVariant.deleteMany({ productId: req.params.id });
+    
+    // Delete product
+    await Product.deleteOne({ _id: req.params.id });
+
+    res.json({ message: 'Product deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+/* ============================================================================
+ * PRODUCT VARIANTS CRUD
+ * ========================================================================= */
+
+// @desc    Get all variants for a product
+// @route   GET /api/admin/product/:productId/variants
+// @access  Private/Admin
+export const getVariantsByProduct = async (req, res) => {
+  try {
+    const variants = await ProductVariant.find({ productId: req.params.productId })
+      .sort({ createdAt: 1 });
+    res.json({ variants });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Create a variant for a product
+// @route   POST /api/admin/product/:productId/variants
+// @access  Private/Admin
+export const createVariant = async (req, res) => {
+  try {
+    const { productId } = req.params;
+    const product = await Product.findById(productId);
+    if (!product) return res.status(404).json({ message: 'Product not found' });
+
+    const { variantLabel, packSize, sku, barcode, mrp, basePrice, images, status } = req.body;
+
+    if (!variantLabel || !packSize?.value || !packSize?.unit || !sku || !mrp || !basePrice) {
+      return res.status(400).json({ message: 'variantLabel, packSize (value+unit), sku, mrp and basePrice are required' });
+    }
+
+    // Ensure SKU is unique
+    const existingSku = await ProductVariant.findOne({ sku: sku.toUpperCase().trim() });
+    if (existingSku) return res.status(400).json({ message: 'SKU already exists' });
+
+    const variant = await ProductVariant.create({
+      productId,
+      variantLabel: variantLabel.trim(),
+      packSize: { value: Number(packSize.value), unit: packSize.unit },
+      sku: sku.toUpperCase().trim(),
+      barcode: barcode || '',
+      mrp: Number(mrp),
+      basePrice: Number(basePrice),
+      images: images || [],
+      status: status || 'active',
+      createdBy: req.admin?._id
+    });
+
+    res.status(201).json({ variant });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Update a variant
+// @route   PUT /api/admin/variant/:id
+// @access  Private/Admin
+export const updateVariant = async (req, res) => {
+  try {
+    const variant = await ProductVariant.findById(req.params.id);
+    if (!variant) return res.status(404).json({ message: 'Variant not found' });
+
+    const { variantLabel, packSize, sku, barcode, mrp, basePrice, images, status } = req.body;
+
+    if (sku && sku.toUpperCase().trim() !== variant.sku) {
+      const existingSku = await ProductVariant.findOne({ sku: sku.toUpperCase().trim(), _id: { $ne: variant._id } });
+      if (existingSku) return res.status(400).json({ message: 'SKU already exists' });
+      variant.sku = sku.toUpperCase().trim();
+    }
+
+    if (variantLabel) variant.variantLabel = variantLabel.trim();
+    if (packSize?.value) variant.packSize.value = Number(packSize.value);
+    if (packSize?.unit) variant.packSize.unit = packSize.unit;
+    if (barcode !== undefined) variant.barcode = barcode;
+    if (mrp) variant.mrp = Number(mrp);
+    if (basePrice) variant.basePrice = Number(basePrice);
+    if (images !== undefined) variant.images = images;
+    if (status) variant.status = status;
+
+    await variant.save();
+    res.json({ variant });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Delete a variant
+// @route   DELETE /api/admin/variant/:id
+// @access  Private/Admin
+export const deleteVariant = async (req, res) => {
+  try {
+    const variant = await ProductVariant.findById(req.params.id);
+    if (!variant) return res.status(404).json({ message: 'Variant not found' });
+    await ProductVariant.deleteOne({ _id: req.params.id });
+    res.json({ message: 'Variant deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+/* ============================================================================
+ * SUB CATEGORIES CRUD
+ * ========================================================================= */
+
+// @desc    Get single subcategory
+// @route   GET /api/sub-categories/:id
+// @access  Public
+export const getSubCategoryById = async (req, res) => {
+  try {
+    const subCategory = await SubCategory.findOne({ _id: req.params.id, isDeleted: { $ne: true } })
+      .populate("categoryId", "name");
+    
+    if (!subCategory) {
+      return res.status(404).json({ message: 'Subcategory not found' });
+    }
+    
+    res.json(subCategory);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Create subcategory
+// @route   POST /api/sub-categories
+// @access  Private/Admin
+export const createSubCategory = async (req, res) => {
+  try {
+    const {
+      categoryId,
+      name,
+      description,
+      image,
+      sortOrder,
+      status,
+      slug,
+      metaTitle,
+      metaDescription,
+      canonicalUrl,
+      ogImage
+    } = req.body;
+    
+    if (!categoryId || !name) {
+      return res.status(400).json({ message: 'Category ID and Name are required' });
+    }
+
+    const parentCat = await Category.findOne({ _id: categoryId, isDeleted: { $ne: true } });
+    if (!parentCat) {
+      return res.status(400).json({ message: 'Parent Category does not exist' });
+    }
+
+    const existing = await SubCategory.findOne({ categoryId, name: name.trim(), isDeleted: { $ne: true } });
+    if (existing) {
+      return res.status(400).json({ message: 'Subcategory name already exists under this category' });
+    }
+
+    // Slug validation unique under parent category
+    const slugVal = slug ? slug.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') : name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+    const slugExists = await SubCategory.findOne({ categoryId, slug: slugVal, isDeleted: { $ne: true } });
+    if (slugExists) {
+      return res.status(400).json({ message: 'URL Slug is already in use by another subcategory under this category' });
+    }
+
+    // SEO fallbacks
+    let fallbackMetaTitle = metaTitle ? metaTitle.trim() : name.trim();
+    if (fallbackMetaTitle.length > 60) fallbackMetaTitle = fallbackMetaTitle.slice(0, 60);
+
+    let fallbackMetaDesc = metaDescription ? metaDescription.trim() : (description ? description.trim() : name.trim());
+    if (fallbackMetaDesc.length > 160) fallbackMetaDesc = fallbackMetaDesc.slice(0, 160);
+
+    const subCategory = await SubCategory.create({
+      categoryId,
+      name: name.trim(),
+      slug: slugVal,
+      description,
+      image,
+      sortOrder: sortOrder || 0,
+      status: status || 'active',
+      metaTitle: fallbackMetaTitle,
+      metaDescription: fallbackMetaDesc,
+      canonicalUrl: canonicalUrl || "",
+      ogImage: ogImage || "",
+      createdBy: req.admin?._id
+    });
+
+    const populated = await SubCategory.findById(subCategory._id).populate("categoryId", "name");
+    res.status(201).json(populated);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Update subcategory
+// @route   PUT /api/sub-categories/:id
+// @access  Private/Admin
+export const updateSubCategory = async (req, res) => {
+  try {
+    const {
+      categoryId,
+      name,
+      description,
+      image,
+      sortOrder,
+      status,
+      slug,
+      metaTitle,
+      metaDescription,
+      canonicalUrl,
+      ogImage
+    } = req.body;
+    
+    const subCategory = await SubCategory.findOne({ _id: req.params.id, isDeleted: { $ne: true } });
+    if (!subCategory) {
+      return res.status(404).json({ message: 'Subcategory not found' });
+    }
+
+    const catId = categoryId || subCategory.categoryId;
+    if (categoryId) {
+      const parentCat = await Category.findOne({ _id: categoryId, isDeleted: { $ne: true } });
+      if (!parentCat) {
+        return res.status(400).json({ message: 'Parent Category does not exist' });
+      }
+      subCategory.categoryId = categoryId;
+    }
+
+    if (name && name.trim() !== subCategory.name) {
+      const existing = await SubCategory.findOne({ categoryId: catId, name: name.trim(), isDeleted: { $ne: true } });
+      if (existing) {
+        return res.status(400).json({ message: 'Subcategory name already exists under this category' });
+      }
+      subCategory.name = name.trim();
+    }
+
+    // Slug validation unique under parent category
+    if (slug) {
+      const slugVal = slug.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+      const slugExists = await SubCategory.findOne({ categoryId: catId, slug: slugVal, _id: { $ne: req.params.id }, isDeleted: { $ne: true } });
+      if (slugExists) {
+        return res.status(400).json({ message: 'URL Slug is already in use by another subcategory under this category' });
+      }
+      subCategory.slug = slugVal;
+    }
+
+    // SEO fallbacks
+    let fallbackMetaTitle = metaTitle ? metaTitle.trim() : (name ? name.trim() : subCategory.name);
+    if (fallbackMetaTitle.length > 60) fallbackMetaTitle = fallbackMetaTitle.slice(0, 60);
+
+    let fallbackMetaDesc = metaDescription ? metaDescription.trim() : (description ? description.trim() : (subCategory.description || subCategory.name));
+    if (fallbackMetaDesc.length > 160) fallbackMetaDesc = fallbackMetaDesc.slice(0, 160);
+
+    subCategory.description = description !== undefined ? description : subCategory.description;
+    subCategory.image = image !== undefined ? image : subCategory.image;
+    subCategory.sortOrder = sortOrder !== undefined ? sortOrder : subCategory.sortOrder;
+    subCategory.status = status || subCategory.status;
+    subCategory.metaTitle = fallbackMetaTitle;
+    subCategory.metaDescription = fallbackMetaDesc;
+    subCategory.canonicalUrl = canonicalUrl !== undefined ? canonicalUrl : subCategory.canonicalUrl;
+    subCategory.ogImage = ogImage !== undefined ? ogImage : subCategory.ogImage;
+    subCategory.updatedBy = req.admin?._id;
+
+    await subCategory.save();
+
+    const populated = await SubCategory.findById(subCategory._id).populate("categoryId", "name");
+    res.json(populated);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Delete subcategory
+// @route   DELETE /api/sub-categories/:id
+// @access  Private/Admin
+export const deleteSubCategory = async (req, res) => {
+  try {
+    const subCategory = await SubCategory.findOne({ _id: req.params.id, isDeleted: { $ne: true } });
+    if (!subCategory) {
+      return res.status(404).json({ message: 'Subcategory not found' });
+    }
+
+    const productCount = await Product.countDocuments({ subCategoryId: req.params.id, isDeleted: { $ne: true } });
+    if (productCount > 0) {
+      subCategory.status = 'inactive';
+      subCategory.isDeleted = true;
+      await subCategory.save();
+      return res.json({ message: 'Subcategory is in use by products; soft deleted (marked inactive)', success: true, subCategory });
+    }
+
+    await SubCategory.deleteOne({ _id: req.params.id });
+    res.json({ message: 'Subcategory deleted successfully', success: true });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+/* ============================================================================
+ * PRODUCT FAMILIES CRUD
+ * ========================================================================= */
+
+// @desc    Get single product family
+// @route   GET /api/product-families/:id
+// @access  Public
+export const getProductFamilyById = async (req, res) => {
+  try {
+    const family = await ProductFamily.findOne({ _id: req.params.id, isDeleted: { $ne: true } })
+      .populate("categoryId", "name")
+      .populate("subCategoryId", "name");
+    
+    if (!family) {
+      return res.status(404).json({ message: 'Product family not found' });
+    }
+    
+    res.json(family);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Create product family
+// @route   POST /api/product-families
+// @access  Private (Admin or Vendor)
+export const createProductFamily = async (req, res) => {
+  try {
+    const {
+      subCategoryId,
+      brandId,
+      name,
+      description,
+      shortDescription,
+      image,
+      images,
+      tags,
+      unitType,
+      shelfLife,
+      storageInstructions,
+      countryOfOrigin,
+      fssaiLicenseNumber,
+      sortOrder,
+      status,
+      slug,
+      metaTitle,
+      metaDescription,
+      canonicalUrl,
+      ogImage,
+      searchKeywords,
+      structuredDataType
+    } = req.body;
+    
+    if (!subCategoryId || !name) {
+      return res.status(400).json({ message: 'Subcategory ID and Name are required' });
+    }
+
+    const subCat = await SubCategory.findOne({ _id: subCategoryId, isDeleted: { $ne: true } });
+    if (!subCat) {
+      return res.status(400).json({ message: 'Parent Subcategory does not exist' });
+    }
+
+    const existing = await ProductFamily.findOne({ subCategoryId, name: name.trim(), isDeleted: { $ne: true } });
+    if (existing) {
+      return res.status(400).json({ message: 'Product Family name already exists under this subcategory' });
+    }
+
+    // Slug validation unique under parent subcategory
+    const slugVal = slug ? slug.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') : name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+    const slugExists = await ProductFamily.findOne({ subCategoryId, slug: slugVal, isDeleted: { $ne: true } });
+    if (slugExists) {
+      return res.status(400).json({ message: 'URL Slug is already in use by another product family under this subcategory' });
+    }
+
+    // SEO fallbacks
+    let fallbackMetaTitle = metaTitle ? metaTitle.trim() : name.trim();
+    if (fallbackMetaTitle.length > 60) fallbackMetaTitle = fallbackMetaTitle.slice(0, 60);
+
+    let fallbackMetaDesc = metaDescription ? metaDescription.trim() : (description ? description.trim() : name.trim());
+    if (fallbackMetaDesc.length > 160) fallbackMetaDesc = fallbackMetaDesc.slice(0, 160);
+
+    // Determine creator
+    const creatorId = req.admin?._id || req.vendor?._id;
+    const creatorModel = req.admin ? "Admin" : "Vendor";
+    const approvalStatus = req.admin ? "approved" : "pending";
+
+    const family = await ProductFamily.create({
+      subCategoryId,
+      categoryId: subCat.categoryId,
+      brandId: brandId || null,
+      name: name.trim(),
+      slug: slugVal,
+      description,
+      shortDescription: shortDescription || "",
+      image,
+      images: images || [],
+      tags: tags || [],
+      unitType: unitType || "",
+      shelfLife: shelfLife || "",
+      storageInstructions: storageInstructions || "",
+      countryOfOrigin: countryOfOrigin || "",
+      fssaiLicenseNumber: fssaiLicenseNumber || "",
+      sortOrder: sortOrder || 0,
+      status: status || 'draft',
+      approvalStatus,
+      metaTitle: fallbackMetaTitle,
+      metaDescription: fallbackMetaDesc,
+      canonicalUrl: canonicalUrl || "",
+      ogImage: ogImage || "",
+      searchKeywords: searchKeywords || [],
+      structuredDataType: structuredDataType || "",
+      createdBy: creatorId,
+      creatorModel,
+      approvalHistory: [
+        {
+          status: approvalStatus,
+          updatedBy: creatorId,
+          remarks: req.admin ? "Auto-approved (Admin created)" : "Submitted for Admin approval",
+          updatedAt: new Date()
+        }
+      ]
+    });
+
+    const populated = await ProductFamily.findById(family._id)
+      .populate("categoryId", "name")
+      .populate("subCategoryId", "name")
+      .populate("brandId", "name");
+    res.status(201).json(populated);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Update product family
+// @route   PUT /api/product-families/:id
+// @access  Private (Admin or Vendor)
+export const updateProductFamily = async (req, res) => {
+  try {
+    const {
+      subCategoryId,
+      brandId,
+      name,
+      description,
+      shortDescription,
+      image,
+      images,
+      tags,
+      unitType,
+      shelfLife,
+      storageInstructions,
+      countryOfOrigin,
+      fssaiLicenseNumber,
+      sortOrder,
+      status,
+      slug,
+      metaTitle,
+      metaDescription,
+      canonicalUrl,
+      ogImage,
+      searchKeywords,
+      structuredDataType
+    } = req.body;
+    
+    const family = await ProductFamily.findOne({ _id: req.params.id, isDeleted: { $ne: true } });
+    if (!family) {
+      return res.status(404).json({ message: 'Product family not found' });
+    }
+
+    // Vendor permission: can only edit if it is their own requested family
+    if (req.vendor && (family.creatorModel !== "Vendor" || family.createdBy.toString() !== req.vendor._id.toString())) {
+      return res.status(403).json({ message: 'Access Denied: You cannot modify this product family' });
+    }
+
+    const subCatId = subCategoryId || family.subCategoryId;
+    if (subCategoryId) {
+      const subCat = await SubCategory.findOne({ _id: subCategoryId, isDeleted: { $ne: true } });
+      if (!subCat) {
+        return res.status(400).json({ message: 'Parent Subcategory does not exist' });
+      }
+      family.subCategoryId = subCategoryId;
+      family.categoryId = subCat.categoryId;
+    }
+
+    if (name && name.trim() !== family.name) {
+      const existing = await ProductFamily.findOne({ subCategoryId: subCatId, name: name.trim(), isDeleted: { $ne: true } });
+      if (existing) {
+        return res.status(400).json({ message: 'Product Family name already exists under this subcategory' });
+      }
+      family.name = name.trim();
+    }
+
+    // Slug validation unique under parent subcategory
+    if (slug) {
+      const slugVal = slug.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+      const slugExists = await ProductFamily.findOne({ subCategoryId: subCatId, slug: slugVal, _id: { $ne: req.params.id }, isDeleted: { $ne: true } });
+      if (slugExists) {
+        return res.status(400).json({ message: 'URL Slug is already in use by another product family under this subcategory' });
+      }
+      family.slug = slugVal;
+    }
+
+    // SEO fallbacks
+    let fallbackMetaTitle = metaTitle ? metaTitle.trim() : (name ? name.trim() : family.name);
+    if (fallbackMetaTitle.length > 60) fallbackMetaTitle = fallbackMetaTitle.slice(0, 60);
+
+    let fallbackMetaDesc = metaDescription ? metaDescription.trim() : (description ? description.trim() : (family.description || family.name));
+    if (fallbackMetaDesc.length > 160) fallbackMetaDesc = fallbackMetaDesc.slice(0, 160);
+
+    family.brandId = brandId !== undefined ? (brandId || null) : family.brandId;
+    family.description = description !== undefined ? description : family.description;
+    family.shortDescription = shortDescription !== undefined ? shortDescription : family.shortDescription;
+    family.image = image !== undefined ? image : family.image;
+    family.images = images !== undefined ? images : family.images;
+    family.tags = tags !== undefined ? tags : family.tags;
+    family.unitType = unitType !== undefined ? unitType : family.unitType;
+    family.shelfLife = shelfLife !== undefined ? shelfLife : family.shelfLife;
+    family.storageInstructions = storageInstructions !== undefined ? storageInstructions : family.storageInstructions;
+    family.countryOfOrigin = countryOfOrigin !== undefined ? countryOfOrigin : family.countryOfOrigin;
+    family.fssaiLicenseNumber = fssaiLicenseNumber !== undefined ? fssaiLicenseNumber : family.fssaiLicenseNumber;
+    family.sortOrder = sortOrder !== undefined ? sortOrder : family.sortOrder;
+    family.status = status || family.status;
+    family.metaTitle = fallbackMetaTitle;
+    family.metaDescription = fallbackMetaDesc;
+    family.canonicalUrl = canonicalUrl !== undefined ? canonicalUrl : family.canonicalUrl;
+    family.ogImage = ogImage !== undefined ? ogImage : family.ogImage;
+    family.searchKeywords = searchKeywords !== undefined ? searchKeywords : family.searchKeywords;
+    family.structuredDataType = structuredDataType !== undefined ? structuredDataType : family.structuredDataType;
+    family.updatedBy = req.admin?._id || req.vendor?._id;
+
+    // Reset approval if vendor edits it
+    if (req.vendor) {
+      family.approvalStatus = "pending";
+      family.approvalHistory.push({
+        status: "pending",
+        updatedBy: req.vendor._id,
+        remarks: "Resubmitted due to vendor modifications",
+        updatedAt: new Date()
+      });
+    }
+
+    await family.save();
+
+    const populated = await ProductFamily.findById(family._id)
+      .populate("categoryId", "name")
+      .populate("subCategoryId", "name")
+      .populate("brandId", "name");
+    res.json(populated);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Delete product family
+// @route   DELETE /api/product-families/:id
+// @access  Private (Admin or Vendor)
+export const deleteProductFamily = async (req, res) => {
+  try {
+    const family = await ProductFamily.findOne({ _id: req.params.id, isDeleted: { $ne: true } });
+    if (!family) {
+      return res.status(404).json({ message: 'Product family not found' });
+    }
+
+    // Vendor checks
+    if (req.vendor && (family.creatorModel !== "Vendor" || family.createdBy.toString() !== req.vendor._id.toString())) {
+      return res.status(403).json({ message: 'Access Denied: You cannot delete this product family' });
+    }
+
+    const productCount = await Product.countDocuments({ familyId: req.params.id, isDeleted: { $ne: true } });
+    if (productCount > 0) {
+      family.status = 'inactive';
+      family.isDeleted = true;
+      await family.save();
+      return res.json({ message: 'Product Family is in use by products; soft deleted (marked inactive)', success: true, family });
+    }
+
+    await ProductFamily.deleteOne({ _id: req.params.id });
+    res.json({ message: 'Product Family deleted successfully', success: true });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Approve product family
+// @route   PUT /api/product-families/approve/:id
+// @access  Private/Admin
+export const approveProductFamily = async (req, res) => {
+  try {
+    const { remarks } = req.body;
+    const family = await ProductFamily.findOne({ _id: req.params.id, isDeleted: { $ne: true } });
+    if (!family) {
+      return res.status(404).json({ message: 'Product family not found' });
+    }
+
+    family.approvalStatus = "approved";
+    family.status = "active";
+    family.approvalHistory.push({
+      status: "approved",
+      updatedBy: req.admin._id,
+      remarks: remarks || "Approved by Admin",
+      updatedAt: new Date()
+    });
+
+    await family.save();
+
+    const populated = await ProductFamily.findById(family._id)
+      .populate("categoryId", "name")
+      .populate("subCategoryId", "name");
+    res.json({ message: 'Product Family approved successfully', success: true, family: populated });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Reject product family
+// @route   PUT /api/product-families/reject/:id
+// @access  Private/Admin
+export const rejectProductFamily = async (req, res) => {
+  try {
+    const { remarks } = req.body;
+    const family = await ProductFamily.findOne({ _id: req.params.id, isDeleted: { $ne: true } });
+    if (!family) {
+      return res.status(404).json({ message: 'Product family not found' });
+    }
+
+    family.approvalStatus = "rejected";
+    family.status = "inactive";
+    family.approvalHistory.push({
+      status: "rejected",
+      updatedBy: req.admin._id,
+      remarks: remarks || "Rejected by Admin",
+      updatedAt: new Date()
+    });
+
+    await family.save();
+
+    const populated = await ProductFamily.findById(family._id)
+      .populate("categoryId", "name")
+      .populate("subCategoryId", "name");
+    res.json({ message: 'Product Family rejected successfully', success: true, family: populated });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// ============================================================================
+// CUSTOMER PRODUCTS LISTING & FILTERING WITH SERVICE AREA CONTROLS
+// ============================================================================
+
+const deg2rad = (deg) => {
+  return deg * (Math.PI / 180);
+};
+
+const calculateDistance = (lat1, lon1, lat2, lon2) => {
+  const R = 6371; // Earth radius in KM
+  const dLat = deg2rad(lat2 - lat1);
+  const dLon = deg2rad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c; // Distance in KM
+};
+
+// @desc    Get filtered products for customer based on location/pincode
+// @route   GET /api/products
+// @access  Public
+export const getCustomerProducts = async (req, res) => {
+  try {
+    const {
+      pincode,
+      latitude,
+      longitude,
+      search,
+      category,
+      subCategory,
+      productFamily,
+      brand,
+      minPrice,
+      maxPrice,
+      availability
+    } = req.query;
+
+    // 1. Resolve the single nearest vendor covering the location
+    let nearestVendor = null;
+    let minDistance = Infinity;
+
+    if (latitude && longitude) {
+      const latVal = parseFloat(latitude);
+      const lngVal = parseFloat(longitude);
+      if (!isNaN(latVal) && !isNaN(lngVal)) {
+        const nearbyVendors = await Vendor.aggregate([
+          {
+            $geoNear: {
+              near: { type: "Point", coordinates: [lngVal, latVal] },
+              distanceField: "distance", // in meters
+              spherical: true,
+              query: { status: "approved", accountStatus: "active" }
+            }
+          },
+          {
+            $project: {
+              shopName: 1,
+              shopType: 1,
+              phone: 1,
+              businessEmail: 1,
+              ownerDetails: 1,
+              storeDetails: 1,
+              address: 1,
+              latitude: 1,
+              longitude: 1,
+              deliveryRadius: 1,
+              radiusKm: 1,
+              status: 1,
+              accountStatus: 1,
+              creatorModel: 1,
+              createdBy: 1,
+              distanceKm: { $divide: ["$distance", 1000] }
+            }
+          },
+          {
+            $match: {
+              $expr: {
+                $lte: ["$distanceKm", { $ifNull: ["$radiusKm", { $ifNull: ["$deliveryRadius", 5] }] }]
+              }
+            }
+          },
+          {
+            $sort: { distanceKm: 1 }
+          }
+        ]);
+
+        if (nearbyVendors.length > 0) {
+          nearestVendor = nearbyVendors[0];
+          minDistance = nearbyVendors[0].distanceKm;
+        }
+      }
+    }
+
+    // Fallback: search by pincode if coordinates did not yield a vendor, or weren't provided
+    if (!nearestVendor && pincode) {
+      const activeVendors = await Vendor.find({
+        status: "approved",
+        accountStatus: "active"
+      });
+      const servingVendors = activeVendors.filter((vendor) => {
+        const servesPincodeRoot = (vendor.serviceAreas || []).some((sa) => sa.pincode === pincode);
+        const servesPincodeDetails = (vendor.storeDetails?.serviceAreas || []).includes(pincode);
+        const isHomePincode = vendor.address?.pincode === pincode || vendor.storeDetails?.pincode === pincode;
+        const isAssignedArea = vendor.assignedArea === pincode;
+        return servesPincodeRoot || servesPincodeDetails || isHomePincode || isAssignedArea;
+      });
+
+      if (servingVendors.length > 0) {
+        nearestVendor = servingVendors[0];
+      }
+    }
+
+    if (!nearestVendor) {
+      return res.status(200).json({
+        success: true,
+        serviceAvailable: false,
+        products: [],
+        groupedProducts: { featured: [], recentlyAdded: [], byCategory: [] }
+      });
+    }
+
+    // 4. Find listed admin products by this single nearest vendor
+    const matchingListings = await VendorListing.find({
+      vendorId: nearestVendor._id,
+      isAvailable: true,
+      "stock.quantity": { $gt: 0 } // Inventory Quantity > 0
+    }).select("variantId");
+
+    const listedVariantIds = matchingListings.map((l) => l.variantId);
+    const listedVariants = await ProductVariant.find({ _id: { $in: listedVariantIds } }).select("productId");
+    const listedProductIdsFromListing = listedVariants.map((v) => v.productId);
+
+    // Get linked master products from VendorProduct references
+    const matchingVendorProducts = await VendorProduct.find({
+      vendorId: nearestVendor._id,
+      status: "active",
+      stock: { $gt: 0 }
+    });
+
+    const linkedProductIds = matchingVendorProducts.map((vp) => vp.masterProductId.toString());
+    const vendorProductsMap = new Map(matchingVendorProducts.map((vp) => [vp.masterProductId.toString(), vp]));
+
+    // Combine both sets of product IDs
+    const combinedProductIds = [...listedProductIdsFromListing, ...linkedProductIds];
+
+    // 5. Construct Product Query
+    const productQuery = {
+      status: { $in: ["active", "approved"] },
+      isDeleted: { $ne: true },
+      $or: [
+        { creatorModel: "Vendor", createdBy: nearestVendor._id },
+        { _id: { $in: combinedProductIds } }
+      ]
+    };
+
+    // 6. Apply Search & Category Filters
+    if (search) {
+      const searchVariants = await ProductVariant.find({
+        $or: [
+          { sku: { $regex: search, $options: "i" } },
+          { barcode: { $regex: search, $options: "i" } }
+        ]
+      }).select("productId");
+      const searchVarProductIds = searchVariants.map((v) => v.productId);
+
+      productQuery.$and = productQuery.$and || [];
+      productQuery.$and.push({
+        $or: [
+          { name: { $regex: search, $options: "i" } },
+          { brand: { $regex: search, $options: "i" } },
+          { _id: { $in: searchVarProductIds } }
+        ]
+      });
+    }
+
+    if (category && category !== "all") {
+      const categoryDoc = mongoose.isValidObjectId(category)
+        ? { _id: category }
+        : await Category.findOne({ slug: category });
+      if (categoryDoc) {
+        productQuery.categoryId = categoryDoc._id;
+      } else {
+        return res.json({ success: true, products: [], groupedProducts: { featured: [], recentlyAdded: [], byCategory: [] } });
+      }
+    }
+
+    if (subCategory && subCategory !== "all") {
+      const subCategoryDoc = mongoose.isValidObjectId(subCategory)
+        ? { _id: subCategory }
+        : await SubCategory.findOne({ slug: subCategory });
+      if (subCategoryDoc) {
+        productQuery.subCategoryId = subCategoryDoc._id;
+      } else {
+        return res.json({ success: true, products: [], groupedProducts: { featured: [], recentlyAdded: [], byCategory: [] } });
+      }
+    }
+
+    if (productFamily && productFamily !== "all") {
+      const familyDoc = mongoose.isValidObjectId(productFamily)
+        ? { _id: productFamily }
+        : await ProductFamily.findOne({ slug: productFamily });
+      if (familyDoc) {
+        productQuery.familyId = familyDoc._id;
+      } else {
+        return res.json({ success: true, products: [], groupedProducts: { featured: [], recentlyAdded: [], byCategory: [] } });
+      }
+    }
+
+    if (brand && brand !== "all") {
+      productQuery.brand = { $regex: new RegExp("^" + brand.trim() + "$", "i") };
+    }
+
+    // 7. Fetch products and populate variants + listings
+    const products = await Product.find(productQuery)
+      .populate("categoryId", "name slug")
+      .populate("subCategoryId", "name slug")
+      .populate("familyId", "name slug")
+      .populate({
+        path: "variants",
+        populate: {
+          path: "vendorListings",
+          match: { vendorId: nearestVendor._id, isAvailable: true }
+        }
+      });
+
+    // 8. Map prices & inventory
+    const mappedProducts = [];
+    for (const product of products) {
+      const variantsList = [];
+      const vpLink = vendorProductsMap.get(product._id.toString());
+
+      if (vpLink) {
+        // Linked master product details mapping
+        const linkPrice = vpLink.price;
+        const linkStock = vpLink.stock;
+
+        // Map variants of the master product
+        if (product.variants && product.variants.length > 0) {
+          for (const variant of product.variants) {
+            const mrp = variant.mrp || linkPrice;
+            variantsList.push({
+              _id: variant._id,
+              variantLabel: variant.variantLabel,
+              packSize: variant.packSize,
+              sku: vpLink.sku || variant.sku,
+              barcode: variant.barcode,
+              images: variant.images && variant.images.length > 0 ? variant.images : product.images,
+              mrp,
+              sellingPrice: linkPrice,
+              discount: mrp > linkPrice ? Math.round(((mrp - linkPrice) / mrp) * 100) : 0,
+              stockQty: linkStock,
+              stockStatus: "in_stock",
+              vendorId: nearestVendor._id,
+              vendorName: nearestVendor.shopName
+            });
+          }
+        } else {
+          // Virtual default variant fallback if master product has no variants
+          variantsList.push({
+            _id: product._id,
+            variantLabel: "Standard",
+            packSize: { value: 1, unit: product.unitType === "weight" ? "kg" : "pcs" },
+            sku: vpLink.sku,
+            images: product.images,
+            mrp: linkPrice,
+            sellingPrice: linkPrice,
+            discount: 0,
+            stockQty: linkStock,
+            stockStatus: "in_stock",
+            vendorId: nearestVendor._id,
+            vendorName: nearestVendor.shopName
+          });
+        }
+      } else {
+        // Standard flow for custom vendor-created products or products listed via VendorListing
+        for (const variant of (product.variants || [])) {
+          const listings = variant.vendorListings || [];
+          
+          let sellingPrice = variant.basePrice;
+          let mrp = variant.mrp;
+          let stockQty = 0;
+
+          if (product.creatorModel === "Vendor" && product.createdBy?.toString() === nearestVendor._id.toString()) {
+            const matchingListing = listings.find((l) => l.vendorId.toString() === nearestVendor._id.toString());
+            if (matchingListing) {
+              sellingPrice = matchingListing.sellingPrice;
+              stockQty = matchingListing.stock?.quantity ?? 0;
+            } else {
+              sellingPrice = variant.basePrice;
+              stockQty = 15; // Fallback stock qty
+            }
+          } else {
+            const matchingListing = listings.find((l) => l.vendorId.toString() === nearestVendor._id.toString());
+            if (!matchingListing) continue; // skip if this vendor doesn't list it
+            sellingPrice = matchingListing.sellingPrice;
+            stockQty = matchingListing.stock?.quantity ?? 0;
+          }
+
+          // Show only products where inventory quantity > 0 (strictly exclude out of stock variants)
+          if (stockQty <= 0) continue;
+
+          variantsList.push({
+            _id: variant._id,
+            variantLabel: variant.variantLabel,
+            packSize: variant.packSize,
+            sku: variant.sku,
+            barcode: variant.barcode,
+            images: variant.images && variant.images.length > 0 ? variant.images : product.images,
+            mrp,
+            sellingPrice,
+            discount: mrp > sellingPrice ? Math.round(((mrp - sellingPrice) / mrp) * 100) : 0,
+            stockQty,
+            stockStatus: "in_stock", // Always in stock because stockQty > 0
+            vendorId: nearestVendor._id,
+            vendorName: nearestVendor.shopName
+          });
+        }
+      }
+
+      if (variantsList.length === 0) continue;
+
+      let filteredVariants = variantsList;
+      if (minPrice) {
+        filteredVariants = filteredVariants.filter((v) => v.sellingPrice >= Number(minPrice));
+      }
+      if (maxPrice) {
+        filteredVariants = filteredVariants.filter((v) => v.sellingPrice <= Number(maxPrice));
+      }
+
+      if (filteredVariants.length === 0) continue;
+
+      const primaryVariant = filteredVariants[0];
+
+      mappedProducts.push({
+        _id: product._id,
+        name: product.name,
+        brand: product.brand,
+        description: product.description,
+        images: product.images,
+        unitType: product.unitType,
+        status: product.status,
+        categoryId: product.categoryId,
+        subCategoryId: product.subCategoryId,
+        familyId: product.familyId,
+        variants: filteredVariants,
+        createdAt: product.createdAt,
+        primaryPrice: primaryVariant.sellingPrice,
+        primaryMrp: primaryVariant.mrp,
+        primaryDiscount: primaryVariant.discount,
+        primaryUnit: primaryVariant.variantLabel,
+        primaryStockStatus: primaryVariant.stockStatus,
+        primaryVendorName: primaryVariant.vendorName,
+        primaryVendorId: primaryVariant.vendorId
+      });
+    }
+
+    // 9. Group dynamic products lists for default homepage rendering
+    const isFilterActive = !!(search || category || subCategory || productFamily || brand || minPrice || maxPrice || availability);
+    let groupedProducts = {
+      featured: [],
+      recentlyAdded: [],
+      byCategory: []
+    };
+
+    if (!isFilterActive) {
+      groupedProducts.recentlyAdded = [...mappedProducts]
+        .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+        .slice(0, 8);
+
+      groupedProducts.featured = [...mappedProducts]
+        .sort((a, b) => b.primaryDiscount - a.primaryDiscount)
+        .slice(0, 8);
+
+      const categoryMap = {};
+      for (const p of mappedProducts) {
+        const catId = p.categoryId?._id?.toString() || "other";
+        const catName = p.categoryId?.name || "Other";
+        if (!categoryMap[catId]) {
+          categoryMap[catId] = {
+            category: { _id: catId, name: catName },
+            products: []
+          };
+        }
+        categoryMap[catId].products.push(p);
+      }
+      groupedProducts.byCategory = Object.values(categoryMap);
+    }
+
+    res.status(200).json({
+      success: true,
+      serviceAvailable: true,
+      products: mappedProducts,
+      groupedProducts,
+      nearestVendor: {
+        _id: nearestVendor._id,
+        shopName: nearestVendor.shopName,
+        distance: minDistance !== Infinity ? Number(minDistance.toFixed(2)) : null
+      }
+    });
+
+  } catch (error) {
+    console.error("Get Customer Products Error:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Get nearby vendors and their products based on user geolocation
+// @route   GET /api/vendors/nearby
+// @access  Public
+export const getNearbyVendors = async (req, res) => {
+  try {
+    const { lat, lng } = req.query;
+
+    if (!lat || !lng) {
+      return res.status(400).json({ success: false, message: "Latitude (lat) and Longitude (lng) are required." });
+    }
+
+    const latVal = parseFloat(lat);
+    const lngVal = parseFloat(lng);
+
+    if (isNaN(latVal) || latVal < -90 || latVal > 90 || isNaN(lngVal) || lngVal < -180 || lngVal > 180) {
+      return res.status(400).json({ success: false, message: "Invalid latitude or longitude coordinates." });
+    }
+
+    // DB-level geospatial aggregation to find all active vendors covering the customer's coordinate within their radius
+    const nearbyVendors = await Vendor.aggregate([
+      {
+        $geoNear: {
+          near: { type: "Point", coordinates: [lngVal, latVal] },
+          distanceField: "distance", // in meters
+          spherical: true,
+          query: { status: "approved", accountStatus: "active" }
+        }
+      },
+      {
+        $project: {
+          shopName: 1,
+          shopType: 1,
+          phone: 1,
+          businessEmail: 1,
+          ownerDetails: 1,
+          storeDetails: 1,
+          address: 1,
+          latitude: 1,
+          longitude: 1,
+          deliveryRadius: 1,
+          radiusKm: 1,
+          status: 1,
+          accountStatus: 1,
+          distanceKm: { $divide: ["$distance", 1000] }
+        }
+      },
+      {
+        $match: {
+          $expr: {
+            $lte: ["$distanceKm", { $ifNull: ["$radiusKm", { $ifNull: ["$deliveryRadius", 5] }] }]
+          }
+        }
+      },
+      {
+        $sort: { distanceKm: 1 }
+      }
+    ]);
+
+    // For each vendor, fetch active products and listings
+    const vendorsWithProducts = [];
+    for (const vendor of nearbyVendors) {
+      const listings = await VendorListing.find({
+        vendorId: vendor._id,
+        isAvailable: true,
+        "stock.quantity": { $gt: 0 }
+      }).select("variantId");
+
+      const listedVariantIds = listings.map((l) => l.variantId);
+      const listedVariants = await ProductVariant.find({ _id: { $in: listedVariantIds } }).select("productId");
+      const listedProductIds = listedVariants.map((v) => v.productId);
+
+      const products = await Product.find({
+        status: "active",
+        isDeleted: { $ne: true },
+        $or: [
+          { creatorModel: "Vendor", createdBy: vendor._id },
+          { _id: { $in: listedProductIds } }
+        ]
+      })
+        .populate("categoryId", "name slug")
+        .populate("subCategoryId", "name slug")
+        .populate({
+          path: "variants",
+          populate: {
+            path: "vendorListings",
+            match: { vendorId: vendor._id, isAvailable: true }
+          }
+        });
+
+      const mappedProducts = [];
+      for (const product of products) {
+        const variantsList = [];
+        for (const variant of product.variants || []) {
+          const listings = variant.vendorListings || [];
+          let sellingPrice = variant.basePrice;
+          let stockQty = 0;
+
+          const matchingListing = listings.find((l) => l.vendorId.toString() === vendor._id.toString());
+          if (product.creatorModel === "Vendor" && product.createdBy?.toString() === vendor._id.toString()) {
+            if (matchingListing) {
+              sellingPrice = matchingListing.sellingPrice;
+              stockQty = matchingListing.stock?.quantity ?? 0;
+            } else {
+              sellingPrice = variant.basePrice;
+              stockQty = 15;
+            }
+          } else {
+            if (!matchingListing) continue;
+            sellingPrice = matchingListing.sellingPrice;
+            stockQty = matchingListing.stock?.quantity ?? 0;
+          }
+
+          if (stockQty <= 0) continue;
+
+          variantsList.push({
+            _id: variant._id,
+            variantLabel: variant.variantLabel,
+            packSize: variant.packSize,
+            sku: variant.sku,
+            mrp: variant.mrp,
+            sellingPrice,
+            discount: variant.mrp > sellingPrice ? Math.round(((variant.mrp - sellingPrice) / variant.mrp) * 100) : 0,
+            stockQty,
+            vendorId: vendor._id,
+            vendorName: vendor.shopName
+          });
+        }
+
+        if (variantsList.length === 0) continue;
+
+        mappedProducts.push({
+          _id: product._id,
+          name: product.name,
+          brand: product.brand,
+          description: product.description,
+          images: product.images,
+          variants: variantsList
+        });
+      }
+
+      vendorsWithProducts.push({
+        vendor,
+        products: mappedProducts
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      vendors: vendorsWithProducts
+    });
+  } catch (error) {
+    console.error("Get Nearby Vendors Error:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+

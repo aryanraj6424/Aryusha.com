@@ -27,7 +27,7 @@ const createAdmin = async () => {
 
     const hashedPassword =
       await bcrypt.hash(
-        "admin123",
+        "Akshu11@",
         10
       );
 

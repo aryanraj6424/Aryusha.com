@@ -36,6 +36,8 @@ export const registerVendor = async (
       resellerCertificate,
       aadhaar,
       pan,
+      storeFrontImage,
+      storeBackImage,
 
       password,
     } = req.body;
@@ -87,6 +89,8 @@ export const registerVendor = async (
           resellerCertificate,
           aadhaar,
           pan,
+          storeFrontImage,
+          storeBackImage,
         },
 
         password:

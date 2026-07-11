@@ -1,5 +1,7 @@
 import express from "express";
 
+console.log("✅ adminAuthRoutes.js Loaded");
+
 import {
   loginAdmin,
   forgotPassword,
@@ -33,5 +35,14 @@ router.post(
   "/reset-password",
   resetPassword
 );
+
+
+
+router.get("/test", (req, res) => {
+  res.json({
+    success: true,
+    message: "Admin Auth Route Working",
+  });
+});
 
 export default router;

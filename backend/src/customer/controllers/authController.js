@@ -1,6 +1,7 @@
 import User from "../models/User.js";
 import bcrypt from "bcryptjs";
 import generateOtp from "../../utils/generateOtp.js";
+import generateToken from "../../utils/generateToken.js";
 
 /*
 |--------------------------------------------------------------------------
@@ -44,10 +45,13 @@ export const signup = async (req, res) => {
         password: hashedPassword,
       });
 
+    const token = generateToken(user._id);
+
     res.status(201).json({
       success: true,
       message: "Account Created Successfully",
       user,
+      token,
     });
 
   } catch (error) {
@@ -107,10 +111,13 @@ export const login = async (req, res) => {
 
     }
 
+    const token = generateToken(user._id);
+
     res.status(200).json({
       success: true,
       message: "Login Successful",
       user,
+      token,
     });
 
   } catch (error) {
@@ -230,11 +237,13 @@ export const verifyOtp = async (
 
     }
 
+    const token = generateToken(user._id);
+
     res.status(200).json({
       success: true,
-      message:
-        "OTP Verified",
-         user,
+      message: "OTP Verified",
+      user,
+      token,
     });
 
   } catch (error) {
