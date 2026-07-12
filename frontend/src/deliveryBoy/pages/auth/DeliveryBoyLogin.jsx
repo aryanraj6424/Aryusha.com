@@ -1,242 +1,168 @@
-import { useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
-import { useDeliveryBoy } from "../../context/DeliveryBoyContext";
-import { Phone, Lock, Shield, ArrowRight, CheckSquare } from "lucide-react";
+import { useState, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import axios from "axios";
+import { useToast } from "../../../components/Toast";
+import { auth } from "../../../services/firebase";
+import { RecaptchaVerifier, signInWithPhoneNumber } from "firebase/auth";
 
 export default function DeliveryBoyLogin() {
   const navigate = useNavigate();
-  const { login } = useDeliveryBoy();
+  const { showToast } = useToast();
 
-  const [phone, setPhone] = useState("");
-  const [password, setPassword] = useState("");
-  const [loginMode, setLoginMode] = useState("password"); // 'password' or 'otp'
-  const [otpSent, setOtpSent] = useState(false);
-  const [otp, setOtp] = useState("");
-  
+  const [form, setForm] = useState({ phone: "", password: "" });
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [otpLoading, setOtpLoading] = useState(false);
+  const recaptchaVerifierRef = useRef(null);
 
-  const handlePasswordLogin = async (e) => {
+  const handleChange = (e) => setForm({ ...form, [e.target.name]: e.target.value });
+
+  // Password-based login (existing flow — unchanged)
+  const handleLogin = async (e) => {
     e.preventDefault();
-    if (!phone || !password) {
-      setError("Please fill in all fields.");
-      return;
-    }
-
-    setLoading(true);
-    setError("");
-
     try {
-      const res = await axios.post(`${import.meta.env.VITE_API_URL}/delivery-boy/auth/login`, {
-        phone,
-        password
-      });
-
+      setLoading(true);
+      const res = await axios.post(`${import.meta.env.VITE_API_URL}/delivery-boy/auth/login`, form);
       if (res.data.success) {
-        login(res.data.token, res.data.deliveryBoy);
+        localStorage.setItem("deliveryBoyToken", res.data.token);
+        localStorage.setItem("deliveryBoy", JSON.stringify(res.data.deliveryBoy));
+
+        if (res.data.requiresOtp) {
+          localStorage.setItem("deliveryBoyLoginPhone", form.phone);
+          showToast({ type: "info", message: "Login OTP has been sent to your registered number." });
+          navigate("/delivery-boy/otp-verify");
+        } else {
+          navigate("/delivery-boy/dashboard");
+        }
       }
-    } catch (err) {
-      console.error(err);
-      setError(err.response?.data?.message || "Invalid phone number or password.");
+    } catch (error) {
+      console.error(error);
+      showToast({ type: "error", message: error.response?.data?.message || "Login failed. Please check your credentials." });
     } finally {
       setLoading(false);
     }
   };
 
-  const handleSendOtp = async () => {
-    if (!phone) {
-      setError("Please enter your phone number.");
+  // OTP-based login via Firebase
+  const handleOtpLogin = async () => {
+    const rawPhone = form.phone.trim();
+    if (!rawPhone) {
+      showToast({ type: "warning", message: "Enter your phone number first" });
       return;
     }
 
-    setLoading(true);
-    setError("");
+    const e164Phone = rawPhone.startsWith("+")
+      ? rawPhone
+      : `+91${rawPhone.replace(/\D/g, "").slice(-10)}`;
 
     try {
-      const res = await axios.post(`${import.meta.env.VITE_API_URL}/delivery-boy/auth/send-login-otp`, { phone });
-      if (res.data.success) {
-        setOtpSent(true);
-        setError("");
-        alert("Login OTP has been sent. Check server/backend console logs!");
+      setOtpLoading(true);
+
+      if (recaptchaVerifierRef.current) {
+        recaptchaVerifierRef.current.clear();
+        recaptchaVerifierRef.current = null;
       }
-    } catch (err) {
-      console.error(err);
-      setError(err.response?.data?.message || "Rider account not found or pending.");
-    } finally {
-      setLoading(false);
-    }
-  };
 
-  const handleVerifyOtp = async (e) => {
-    e.preventDefault();
-    if (!otp) {
-      setError("Please enter the verification OTP.");
-      return;
-    }
+      recaptchaVerifierRef.current = new RecaptchaVerifier(
+        auth,
+        "recaptcha-container-delivery-login",
+        { size: "invisible" }
+      );
 
-    setLoading(true);
-    setError("");
+      const confirmationResult = await signInWithPhoneNumber(
+        auth,
+        e164Phone,
+        recaptchaVerifierRef.current
+      );
 
-    try {
-      const res = await axios.post(`${import.meta.env.VITE_API_URL}/delivery-boy/auth/verify-login-otp`, {
-        phone,
-        otp
+      showToast({ type: "success", message: "OTP sent to " + e164Phone });
+
+      navigate("/delivery-boy/otp-verify", {
+        state: {
+          phone: rawPhone,
+          e164Phone,
+          confirmationResult,
+          isFirebaseFlow: true,
+          role: "delivery-boy",
+        },
       });
-
-      if (res.data.success) {
-        login(res.data.token, res.data.deliveryBoy);
-      }
-    } catch (err) {
-      console.error(err);
-      setError(err.response?.data?.message || "Invalid or expired OTP.");
+    } catch (error) {
+      console.error("Firebase Delivery Boy OTP error:", error);
+      const msg =
+        error.code === "auth/too-many-requests"
+          ? "Too many requests. Please try again later."
+          : error.code === "auth/invalid-phone-number"
+          ? "Invalid phone number format."
+          : error.message || "Failed to send OTP";
+      showToast({ type: "error", message: msg });
     } finally {
-      setLoading(false);
+      setOtpLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-slate-100 flex justify-center items-center p-4">
-      <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden p-8 border border-slate-100">
-        
-        {/* Header */}
-        <div className="text-center space-y-2 mb-8">
-          <div className="w-16 h-16 bg-purple-100 text-[#6d28d9] rounded-2xl flex items-center justify-center mx-auto shadow-inner">
-            <Shield size={32} />
-          </div>
-          <h2 className="text-2xl font-black text-slate-800 tracking-tight">Rider Portal</h2>
-          <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">Sign In to start earning</p>
+    <div className="min-h-screen bg-gradient-to-br from-violet-50 to-white flex items-center justify-center px-4">
+      <div className="bg-white border border-violet-100 p-8 rounded-3xl shadow-lg w-full max-w-md">
+        <h2 className="text-3xl font-bold mb-2 text-center text-slate-800">Delivery Login</h2>
+        <p className="text-center text-gray-500 mb-6">Sign in to your rider account</p>
+
+        <form onSubmit={handleLogin} className="space-y-4">
+          <input
+            type="tel"
+            name="phone"
+            placeholder="Phone Number"
+            value={form.phone}
+            onChange={handleChange}
+            className="w-full px-4 py-3 border border-violet-200 rounded-2xl outline-none focus:border-violet-500"
+            required
+          />
+          <input
+            type="password"
+            name="password"
+            placeholder="Password"
+            value={form.password}
+            onChange={handleChange}
+            className="w-full px-4 py-3 border border-violet-200 rounded-2xl outline-none focus:border-violet-500"
+          />
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full bg-gradient-to-r from-violet-600 to-purple-700 text-white py-3 rounded-2xl font-semibold disabled:opacity-60"
+          >
+            {loading ? "Signing in..." : "Sign In"}
+          </button>
+        </form>
+
+        {/* Divider */}
+        <div className="relative my-5">
+          <div className="border-t border-gray-200" />
+          <span className="absolute left-1/2 -translate-x-1/2 -top-3 bg-white px-3 text-gray-400 text-sm">OR</span>
         </div>
 
-        {error && (
-          <div className="mb-4 p-3.5 bg-rose-50 border border-rose-100 rounded-2xl text-rose-600 text-xs font-semibold text-center">
-            {error}
-          </div>
-        )}
+        {/* OTP Login via Firebase */}
+        <button
+          type="button"
+          onClick={handleOtpLogin}
+          disabled={otpLoading}
+          className="w-full border-2 border-violet-600 text-violet-700 py-3 rounded-2xl font-semibold hover:bg-violet-50 disabled:opacity-60"
+        >
+          {otpLoading ? "Sending OTP..." : "Login with OTP"}
+        </button>
 
-        {/* Auth Forms */}
-        {!otpSent ? (
-          <form onSubmit={loginMode === "password" ? handlePasswordLogin : (e) => e.preventDefault()} className="space-y-5">
-            {/* Phone */}
-            <div className="space-y-1.5">
-              <label className="text-xs font-black text-slate-500 uppercase tracking-wider">Mobile Number</label>
-              <div className="relative">
-                <Phone size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input
-                  type="tel"
-                  placeholder="Enter 10-digit number"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  className="w-full pl-12 pr-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent font-semibold text-sm"
-                  required
-                />
-              </div>
-            </div>
-
-            {/* Password Field */}
-            {loginMode === "password" && (
-              <div className="space-y-1.5">
-                <div className="flex justify-between items-center">
-                  <label className="text-xs font-black text-slate-500 uppercase tracking-wider">Password</label>
-                  <Link to="/delivery-boy/forgot-password" className="text-xs text-purple-600 hover:text-purple-800 font-extrabold">
-                    Forgot Password?
-                  </Link>
-                </div>
-                <div className="relative">
-                  <Lock size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
-                  <input
-                    type="password"
-                    placeholder="Enter password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="w-full pl-12 pr-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent font-semibold text-sm"
-                    required
-                  />
-                </div>
-              </div>
-            )}
-
-            {/* Actions */}
-            {loginMode === "password" ? (
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full py-4 bg-[#6d28d9] hover:bg-[#5b21b6] text-white rounded-2xl font-bold transition shadow-lg shadow-purple-200 flex items-center justify-center gap-2 cursor-pointer"
-              >
-                {loading ? "Signing In..." : "Sign In"} <ArrowRight size={18} />
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={handleSendOtp}
-                disabled={loading}
-                className="w-full py-4 bg-[#6d28d9] hover:bg-[#5b21b6] text-white rounded-2xl font-bold transition shadow-lg shadow-purple-200 flex items-center justify-center gap-2 cursor-pointer"
-              >
-                {loading ? "Sending..." : "Send Verification OTP"} <ArrowRight size={18} />
-              </button>
-            )}
-
-            {/* Mode Switcher */}
-            <div className="text-center pt-2">
-              <button
-                type="button"
-                onClick={() => setLoginMode(loginMode === "password" ? "otp" : "password")}
-                className="text-xs text-[#6d28d9] font-black uppercase tracking-wider hover:underline"
-              >
-                {loginMode === "password" ? "Login via Phone OTP" : "Login via Password"}
-              </button>
-            </div>
-          </form>
-        ) : (
-          /* OTP verification form */
-          <form onSubmit={handleVerifyOtp} className="space-y-5">
-            <div className="text-center space-y-1.5 mb-2">
-              <p className="text-sm text-slate-500 font-semibold">We sent a 6-digit OTP code to</p>
-              <p className="font-extrabold text-slate-700">{phone}</p>
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-xs font-black text-slate-500 uppercase tracking-wider">Enter OTP</label>
-              <input
-                type="text"
-                maxLength="6"
-                placeholder="0 0 0 0 0 0"
-                value={otp}
-                onChange={(e) => setOtp(e.target.value)}
-                className="w-full py-3.5 bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent font-bold tracking-widest text-center text-lg"
-                required
-              />
-            </div>
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full py-4 bg-[#6d28d9] hover:bg-[#5b21b6] text-white rounded-2xl font-bold transition shadow-lg shadow-purple-200 flex items-center justify-center gap-2 cursor-pointer"
-            >
-              {loading ? "Verifying..." : "Verify & Sign In"} <CheckSquare size={18} />
-            </button>
-
-            <div className="text-center pt-2">
-              <button
-                type="button"
-                onClick={() => setOtpSent(false)}
-                className="text-xs text-slate-400 hover:text-slate-600 font-extrabold"
-              >
-                Change Phone Number
-              </button>
-            </div>
-          </form>
-        )}
-
-        {/* Footer */}
-        <div className="mt-8 pt-6 border-t border-slate-100 text-center text-xs font-semibold text-slate-400">
-          New Rider?{" "}
-          <Link to="/delivery-boy/register" className="text-[#6d28d9] hover:text-[#5b21b6] font-black underline">
-            Register Here
-          </Link>
-        </div>
-
+        <p className="text-center text-sm text-gray-500 mt-4">
+          <button onClick={() => navigate("/delivery-boy/forgot-password")} className="text-violet-600 font-semibold hover:underline">
+            Forgot Password?
+          </button>
+        </p>
+        <p className="text-center text-sm text-gray-500 mt-2">
+          Don't have an account?{" "}
+          <button onClick={() => navigate("/delivery-boy/register")} className="text-violet-600 font-semibold hover:underline">
+            Register
+          </button>
+        </p>
       </div>
+
+      {/* Invisible reCAPTCHA */}
+      <div id="recaptcha-container-delivery-login" />
     </div>
   );
 }

@@ -3,10 +3,12 @@ import { useNavigate, Link } from "react-router-dom";
 import { useDeliveryBoy } from "../../context/DeliveryBoyContext";
 import { User, Phone, Lock, Truck, Shield, ArrowRight } from "lucide-react";
 import axios from "axios";
+import { useToast } from "../../../components/Toast";
 
 export default function DeliveryBoyRegister() {
   const navigate = useNavigate();
   const { login } = useDeliveryBoy();
+  const { showToast } = useToast();
 
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
@@ -37,7 +39,7 @@ export default function DeliveryBoyRegister() {
       });
 
       if (res.data.success) {
-        alert("Registration successful! You are approved and logged in.");
+        showToast({ type: "success", message: "Registration successful! You are approved and logged in." });
         login(res.data.token, res.data.deliveryBoy);
       }
     } catch (err) {

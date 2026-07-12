@@ -2,8 +2,12 @@ import { useEffect, useState } from "react";
 import axios from "axios";
 import { Link } from "react-router-dom";
 import { Plus, Pencil, Trash2, Search } from "lucide-react";
+import { useToast } from "../../../../components/Toast";
+import ConfirmDialog from "../../../../components/Toast/ConfirmDialog";
 
 export default function AttributeList() {
+  const { showToast } = useToast();
+  const [confirmState, setConfirmState] = useState(null);
   const [attributes, setAttributes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
@@ -29,19 +33,25 @@ export default function AttributeList() {
   }, []);
 
   const deleteAttribute = async (id) => {
-    if (window.confirm("Are you sure you want to delete this attribute?")) {
-      try {
-        const token = localStorage.getItem("adminToken");
-        await axios.delete(
-          `${import.meta.env.VITE_API_URL}/admin/attribute/${id}`,
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
-        fetchAttributes();
-      } catch (error) {
-        console.error("Delete error:", error);
-        alert("Failed to delete attribute");
+    setConfirmState({
+      message: "Are you sure you want to delete this attribute?",
+      type: "danger",
+      onConfirm: async () => {
+        setConfirmState(null);
+        try {
+          const token = localStorage.getItem("adminToken");
+          await axios.delete(
+            `${import.meta.env.VITE_API_URL}/admin/attribute/${id}`,
+            { headers: { Authorization: `Bearer ${token}` } }
+          );
+          showToast({ type: "success", message: "Attribute deleted successfully." });
+          fetchAttributes();
+        } catch (error) {
+          console.error("Delete error:", error);
+          showToast({ type: "error", message: "Failed to delete attribute" });
+        }
       }
-    }
+    });
   };
 
   const filteredAttributes = attributes.filter(attr =>
@@ -124,6 +134,14 @@ export default function AttributeList() {
           </div>
         )}
       </div>
+      {confirmState && (
+        <ConfirmDialog
+          message={confirmState.message}
+          type={confirmState.type || "warning"}
+          onConfirm={confirmState.onConfirm}
+          onCancel={() => setConfirmState(null)}
+        />
+      )}
     </div>
   );
 }

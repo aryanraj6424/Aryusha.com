@@ -1,8 +1,10 @@
 import React, { useState } from "react";
 import { uploadFile } from "../../../services/uploadService";
+import { useToast } from "../../../components/Toast";
 
 export default function Images({ formData, setFormData }) {
   const [uploading, setUploading] = useState(false);
+  const { showToast } = useToast();
 
   const handleImage = async (e) => {
     const files = Array.from(e.target.files);
@@ -21,7 +23,7 @@ export default function Images({ formData, setFormData }) {
       }));
     } catch (error) {
       console.error("Image upload failed:", error);
-      alert(error.response?.data?.message || "Failed to upload one or more images");
+      showToast({ type: "error", message: error.response?.data?.message || "Failed to upload one or more images" });
     } finally {
       setUploading(false);
     }

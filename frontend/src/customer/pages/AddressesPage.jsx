@@ -351,6 +351,8 @@
 
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { useToast } from "../../components/Toast";
+import ConfirmDialog from "../../components/Toast/ConfirmDialog";
 
 import {
   createAddress,
@@ -360,6 +362,8 @@ import {
 
 function AddressesPage() {
   const navigate = useNavigate();
+  const { showToast } = useToast();
+  const [confirmState, setConfirmState] = useState(null);
 
   const [formData, setFormData] = useState({
     fullName: "",
@@ -384,7 +388,7 @@ function AddressesPage() {
 
   const handleDetectLocation = () => {
     if (!navigator.geolocation) {
-      alert("Geolocation is not supported by your browser.");
+      showToast({ type: "warning", message: "Geolocation is not supported by your browser." });
       return;
     }
     setLocLoading(true);
@@ -415,16 +419,16 @@ function AddressesPage() {
             state: addr.state || prev.state,
             area: addr.suburb || addr.neighbourhood || addr.road || prev.area || "",
           }));
-          alert("Location coordinates and address resolved successfully!");
+          showToast({ type: "success", message: "Location coordinates and address resolved successfully!" });
         } catch (err) {
           console.error(err);
-          alert(`Coordinates detected: Lat ${latitude.toFixed(6)}, Lng ${longitude.toFixed(6)}. Please input address details manually.`);
+          showToast({ type: "warning", message: `Coordinates detected: Lat ${latitude.toFixed(6)}, Lng ${longitude.toFixed(6)}. Please input address details manually.` });
         }
       },
       (error) => {
         setLocLoading(false);
         console.error(error);
-        alert("Location access denied or failed. Please enter coordinates and address details manually.");
+        showToast({ type: "error", message: "Location access denied or failed. Please enter coordinates and address details manually." });
       }
     );
   };
@@ -476,24 +480,22 @@ function AddressesPage() {
     }, 1000);
   };
 
-  const handleDelete = async (
-    id
-  ) => {
-    try {
-      await deleteAddress(id);
-
-      await loadAddresses();
-
-      alert(
-        "Address Deleted Successfully"
-      );
-    } catch (error) {
-      console.error(error);
-
-      alert(
-        "Failed to Delete Address"
-      );
-    }
+  const handleDelete = async (id) => {
+    setConfirmState({
+      message: "Are you sure you want to delete this address?",
+      type: "danger",
+      onConfirm: async () => {
+        setConfirmState(null);
+        try {
+          await deleteAddress(id);
+          await loadAddresses();
+          showToast({ type: "success", message: "Address Deleted Successfully" });
+        } catch (error) {
+          console.error(error);
+          showToast({ type: "error", message: "Failed to Delete Address" });
+        }
+      }
+    });
   };
 
   const handleSubmit = async (e) => {
@@ -753,6 +755,14 @@ function AddressesPage() {
           </div>
         )}
       </div>
+      {confirmState && (
+        <ConfirmDialog
+          message={confirmState.message}
+          type={confirmState.type || "warning"}
+          onConfirm={confirmState.onConfirm}
+          onCancel={() => setConfirmState(null)}
+        />
+      )}
     </div>
   );
 }

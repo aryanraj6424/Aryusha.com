@@ -2,11 +2,15 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { User, Phone, CheckCircle, Ban, Eye, Settings, RefreshCw, Star, Wallet, Truck } from "lucide-react";
 import axios from "axios";
+import { useToast } from "../../../components/Toast";
+import ConfirmDialog from "../../../components/Toast/ConfirmDialog";
 
 export default function DeliveryBoyOverview() {
   const navigate = useNavigate();
   const [riders, setRiders] = useState([]);
   const [loading, setLoading] = useState(true);
+  const { showToast } = useToast();
+  const [confirmState, setConfirmState] = useState(null);
 
   const fetchRiders = async () => {
     try {
@@ -31,26 +35,30 @@ export default function DeliveryBoyOverview() {
   const handleToggleStatus = async (id, currentStatus) => {
     const nextStatus = currentStatus === "active" ? "suspended" : "active";
     const confirmMsg = `Are you sure you want to ${nextStatus === "suspended" ? "SUSPEND" : "ACTIVATE"} this rider's account?`;
-    if (!confirm(confirmMsg)) return;
+    setConfirmState({
+      message: confirmMsg,
+      onConfirm: async () => {
+        setConfirmState(null);
+        try {
+          const token = localStorage.getItem("adminToken");
+          const headers = { Authorization: `Bearer ${token}` };
+          
+          const res = await axios.put(
+            `${import.meta.env.VITE_API_URL}/admin/delivery-boys/${id}/status`,
+            { accountStatus: nextStatus },
+            { headers }
+          );
 
-    try {
-      const token = localStorage.getItem("adminToken");
-      const headers = { Authorization: `Bearer ${token}` };
-      
-      const res = await axios.put(
-        `${import.meta.env.VITE_API_URL}/admin/delivery-boys/${id}/status`,
-        { accountStatus: nextStatus },
-        { headers }
-      );
-
-      if (res.data.success) {
-        alert(res.data.message);
-        fetchRiders();
+          if (res.data.success) {
+            showToast({ type: "success", message: res.data.message });
+            fetchRiders();
+          }
+        } catch (err) {
+          console.error(err);
+          showToast({ type: "error", message: err.response?.data?.message || "Failed to update account status." });
+        }
       }
-    } catch (err) {
-      console.error(err);
-      alert(err.response?.data?.message || "Failed to update account status.");
-    }
+    });
   };
 
   return (
@@ -199,6 +207,14 @@ export default function DeliveryBoyOverview() {
         </div>
       )}
 
+      {confirmState && (
+        <ConfirmDialog
+          message={confirmState.message}
+          type={confirmState.type || "warning"}
+          onConfirm={confirmState.onConfirm}
+          onCancel={() => setConfirmState(null)}
+        />
+      )}
     </div>
   );
 }

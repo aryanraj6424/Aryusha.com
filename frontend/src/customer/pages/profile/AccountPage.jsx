@@ -1,7 +1,8 @@
 import { useState } from "react";
+import { useToast } from "../../../components/Toast";
 
 export default function AccountPage() {
-
+  const { showToast } = useToast();
   const [formData, setFormData] =
     useState({
       name: "",
@@ -20,7 +21,7 @@ export default function AccountPage() {
   };
 
   const handleSave = () => {
-    alert("Profile Updated");
+    showToast({ type: "success", message: "Profile Updated" });
   };
 
   return (

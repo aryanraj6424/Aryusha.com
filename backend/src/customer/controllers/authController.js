@@ -2,6 +2,12 @@ import User from "../models/User.js";
 import bcrypt from "bcryptjs";
 import generateOtp from "../../utils/generateOtp.js";
 import generateToken from "../../utils/generateToken.js";
+import Vendor from "../../vendor/models/Vendor.js";
+import DeliveryBoy from "../../deliveryBoy/models/DeliveryBoy.js";
+import Admin from "../../admin/models/Admin.js";
+import { generateVendorToken } from "../../vendor/utils/generateVendorToken.js";
+import { generateAdminToken } from "../../admin/utils/generateAdminToken.js";
+import { getFirebaseAdmin } from "../../config/firebase.js";
 
 /*
 |--------------------------------------------------------------------------
@@ -315,4 +321,172 @@ export const resetPassword = async (
 
   }
 
+};
+
+/*
+|--------------------------------------------------------------------------
+| Firebase Login Verification & Session Creation
+|--------------------------------------------------------------------------
+*/
+export const firebaseLogin = async (req, res) => {
+  try {
+    const { idToken, role } = req.body;
+
+    if (!idToken || !role) {
+      return res.status(400).json({
+        success: false,
+        message: "Firebase ID token and role are required."
+      });
+    }
+
+    const admin = getFirebaseAdmin();
+    // Verify token
+    const decodedToken = await admin.auth().verifyIdToken(idToken);
+    const verifiedPhone = decodedToken.phone_number;
+
+    if (!verifiedPhone) {
+      return res.status(400).json({
+        success: false,
+        message: "No phone number associated with this Firebase credential."
+      });
+    }
+
+    // Extract last 10 digits and prepare variations
+    const last10Digits = verifiedPhone.replace(/\D/g, "").slice(-10);
+    const possiblePhones = [verifiedPhone, last10Digits, `+91${last10Digits}`];
+
+    if (role === "customer") {
+      let user = await User.findOne({ phoneNumber: { $in: possiblePhones } });
+      if (!user) {
+        // Create first-time Customer sign-up
+        const dummyPassword = await bcrypt.hash(Math.random().toString(36).slice(-8), 10);
+        user = await User.create({
+          fullName: "Customer",
+          phoneNumber: last10Digits, // Store standard 10 digit number
+          password: dummyPassword,
+          isVerified: true
+        });
+      }
+
+      const token = generateToken(user._id);
+      return res.status(200).json({
+        success: true,
+        message: "Login successful",
+        token,
+        user
+      });
+    }
+
+    if (role === "vendor") {
+      const vendor = await Vendor.findOne({ phone: { $in: possiblePhones } });
+      if (!vendor) {
+        return res.status(404).json({
+          success: false,
+          message: `Vendor account not found for phone number: ${verifiedPhone}`
+        });
+      }
+
+      // Vendor validations
+      if (vendor.status === "pending") {
+        return res.status(403).json({
+          success: false,
+          message: "Your account is under verification. Please wait for admin approval."
+        });
+      }
+      if (vendor.status === "rejected") {
+        return res.status(403).json({
+          success: false,
+          message: "Your vendor account has been rejected."
+        });
+      }
+      if (vendor.accountStatus === "hold") {
+        return res.status(403).json({
+          success: false,
+          message: "Your account is currently on hold."
+        });
+      }
+      if (vendor.accountStatus === "suspended") {
+        return res.status(403).json({
+          success: false,
+          message: "Your account has been suspended by admin."
+        });
+      }
+      if (vendor.accountStatus === "deactivated") {
+        return res.status(403).json({
+          success: false,
+          message: "Your account has been deactivated."
+        });
+      }
+
+      const token = generateVendorToken(vendor._id);
+      return res.status(200).json({
+        success: true,
+        message: "Login successful",
+        token,
+        vendor
+      });
+    }
+
+    if (role === "delivery-boy") {
+      const deliveryBoy = await DeliveryBoy.findOne({ phone: { $in: possiblePhones } });
+      if (!deliveryBoy) {
+        return res.status(404).json({
+          success: false,
+          message: `Delivery Boy account not found for phone number: ${verifiedPhone}`
+        });
+      }
+
+      // Delivery Boy validations
+      if (deliveryBoy.status !== "approved") {
+        return res.status(403).json({
+          success: false,
+          message: `Your account is pending verification or rejected. Current status: ${deliveryBoy.status}`
+        });
+      }
+      if (deliveryBoy.accountStatus !== "active") {
+        return res.status(403).json({
+          success: false,
+          message: `Your account is ${deliveryBoy.accountStatus}.`
+        });
+      }
+
+      const token = generateToken(deliveryBoy._id);
+      return res.status(200).json({
+        success: true,
+        message: "Login successful",
+        token,
+        deliveryBoy
+      });
+    }
+
+    if (role === "admin") {
+      const adminUser = await Admin.findOne({ phone: { $in: possiblePhones } });
+      if (!adminUser) {
+        return res.status(404).json({
+          success: false,
+          message: `Admin account not found for phone number: ${verifiedPhone}`
+        });
+      }
+
+      const token = generateAdminToken(adminUser._id);
+      return res.status(200).json({
+        success: true,
+        message: "Login successful",
+        token,
+        admin: adminUser
+      });
+    }
+
+    return res.status(400).json({
+      success: false,
+      message: "Invalid role specified."
+    });
+
+  } catch (error) {
+    console.error("Firebase Login Error:", error);
+    res.status(401).json({
+      success: false,
+      message: "Invalid or expired Firebase token."
+    });
+  }
 };

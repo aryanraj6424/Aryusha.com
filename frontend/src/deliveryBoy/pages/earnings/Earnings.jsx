@@ -1,12 +1,16 @@
 import { useState, useEffect } from "react";
 import { ArrowLeft, Wallet, TrendingUp, Calendar, AlertCircle, ArrowUpRight } from "lucide-react";
 import axios from "axios";
+import { useToast } from "../../../components/Toast";
+import ConfirmDialog from "../../../components/Toast/ConfirmDialog";
 
 export default function Earnings() {
   const [earnings, setEarnings] = useState(null);
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
   const [payoutPeriod, setPayoutPeriod] = useState("weekly"); // 'daily', 'weekly', 'monthly'
+  const { showToast } = useToast();
+  const [confirmState, setConfirmState] = useState(null);
 
   const fetchEarningsData = async () => {
     try {
@@ -31,10 +35,19 @@ export default function Earnings() {
 
   const handleWithdraw = () => {
     if (!earnings || earnings.walletBalance <= 0) {
-      alert("Insufficient wallet balance for withdrawal.");
+      showToast({ type: "warning", message: "Insufficient wallet balance for withdrawal." });
       return;
     }
-    alert("Withdrawal Request Submitted Successfully! ₹" + earnings.walletBalance + " will be credited to your linked UPI/Bank Account within 24 hours.");
+    setConfirmState({
+      message: `Are you sure you want to withdraw ₹${earnings.walletBalance}?`,
+      onConfirm: () => {
+        setConfirmState(null);
+        showToast({
+          type: "success",
+          message: `Withdrawal Request Submitted Successfully! ₹${earnings.walletBalance} will be credited to your linked UPI/Bank Account within 24 hours.`
+        });
+      }
+    });
   };
 
   if (loading) {
@@ -165,6 +178,13 @@ export default function Earnings() {
         )}
       </div>
 
+      {confirmState && (
+        <ConfirmDialog
+          message={confirmState.message}
+          onConfirm={confirmState.onConfirm}
+          onCancel={() => setConfirmState(null)}
+        />
+      )}
     </div>
   );
 }

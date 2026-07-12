@@ -1,20 +1,3 @@
-// import express from "express";
-// import dotenv from "dotenv";
-// import connectDB from "./src/config/db.js";
-
-// dotenv.config();
-
-// connectDB();
-
-// const app = express();
-
-// app.use(express.json());
-
-// app.listen(5000, () => {
-//   console.log("Server running on port 5000");
-// });
-
-
 import dotenv from "dotenv";
 
 dotenv.config();
@@ -25,6 +8,9 @@ configureCloudinary();
 import connectDB from "./src/config/db.js";
 import app from "./src/app.js";
 import seedAttributes from "./src/admin/seed/seedAttributes.js";
+import { createServer } from "http";
+import { Server } from "socket.io";
+import { initSocket } from "./src/socket/socketManager.js";
 
 connectDB().then(() => {
   seedAttributes();
@@ -32,6 +18,20 @@ connectDB().then(() => {
 
 const PORT = process.env.PORT || 5000;
 
-app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
+// Create HTTP server and attach Socket.IO
+const httpServer = createServer(app);
+
+const io = new Server(httpServer, {
+  cors: {
+    origin: ["http://localhost:3000", "http://localhost:5000"],
+    methods: ["GET", "POST"],
+    credentials: true,
+  },
+});
+
+// Initialize the socket manager so controllers can emit events
+initSocket(io);
+
+httpServer.listen(PORT, () => {
+  console.log(`🚀 Server running on port ${PORT} (Socket.IO enabled)`);
 });

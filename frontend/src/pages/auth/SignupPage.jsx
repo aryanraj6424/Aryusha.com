@@ -235,10 +235,12 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { signupUser } from "../../services/authApi";
+import { useToast } from "../../components/Toast";
 
 export default function SignupPage() {
 
   const navigate = useNavigate();
+  const { showToast } = useToast();
 
   const [loading, setLoading] = useState(false);
 
@@ -268,11 +270,13 @@ export default function SignupPage() {
       !formData.password ||
       !formData.confirmPassword
     ) {
-      return alert("Please fill all fields");
+      showToast({ type: "warning", message: "Please fill all fields" });
+      return;
     }
 
     if (formData.password !== formData.confirmPassword) {
-      return alert("Passwords do not match");
+      showToast({ type: "warning", message: "Passwords do not match" });
+      return;
     }
 
     try {
@@ -288,10 +292,10 @@ export default function SignupPage() {
 
       console.log("Signup Success:", response);
 
-      alert(
-        response?.message ||
-        "Account created successfully"
-      );
+      showToast({
+        type: "success",
+        message: response?.message || "Account created successfully"
+      });
 
       setFormData({
         fullName: "",
@@ -307,11 +311,10 @@ export default function SignupPage() {
 
       console.error(error);
 
-      alert(
-        error?.response?.data?.message ||
-        error?.message ||
-        "Something went wrong"
-      );
+      showToast({
+        type: "error",
+        message: error?.response?.data?.message || error?.message || "Something went wrong"
+      });
 
     } finally {
 

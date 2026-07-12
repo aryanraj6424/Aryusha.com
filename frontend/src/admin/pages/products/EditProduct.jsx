@@ -3,6 +3,8 @@ import { useParams, useNavigate } from "react-router-dom";
 import { ChevronLeft, Save } from "lucide-react";
 import { getProduct, updateProduct } from "../../services/productApi";
 import { getCategories, getSubCategories, getProductFamilies } from "../../services/productApi";
+import ReactQuill from "react-quill-new";
+import "react-quill-new/dist/quill.snow.css";
 
 /**
  * EditProduct — full edit form for an existing product.
@@ -260,16 +262,23 @@ export default function EditProduct() {
           </div>
 
           {/* Description */}
-          <div>
+          <div className="space-y-1">
             <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-            <textarea
-              name="description"
-              value={form.description}
-              onChange={handleChange}
-              rows={4}
-              placeholder="Product description…"
-              className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none resize-none"
-            />
+            <div className="quill-editor-container bg-white rounded-lg border border-gray-300 overflow-hidden">
+              <ReactQuill
+                theme="snow"
+                value={form.description || ""}
+                onChange={(val) => setForm((prev) => ({ ...prev, description: val }))}
+                placeholder="Product description…"
+                modules={{
+                  toolbar: [
+                    ['bold', 'italic', 'underline'],
+                    [{ 'list': 'ordered' }, { 'list': 'bullet' }],
+                    ['clean']
+                  ]
+                }}
+              />
+            </div>
           </div>
 
           {/* Feedback */}

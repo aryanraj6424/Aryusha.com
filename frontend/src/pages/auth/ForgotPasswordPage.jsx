@@ -187,10 +187,12 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { forgotPassword } from "../../services/authApi";
+import { useToast } from "../../components/Toast";
 
 export default function ForgotPasswordPage() {
 
   const navigate = useNavigate();
+  const { showToast } = useToast();
 
   const [phoneNumber, setPhoneNumber] = useState("");
 
@@ -201,7 +203,8 @@ export default function ForgotPasswordPage() {
     e.preventDefault();
 
     if (!phoneNumber) {
-      return alert("Please enter phone number");
+      showToast({ type: "warning", message: "Please enter phone number" });
+      return;
     }
 
     try {
@@ -214,10 +217,10 @@ export default function ForgotPasswordPage() {
 
       console.log(response);
 
-      alert(
-        response.message ||
-        "OTP sent successfully"
-      );
+      showToast({
+        type: "success",
+        message: response.message || "OTP sent successfully"
+      });
 
       navigate("/verify-otp", {
         state: {
@@ -229,11 +232,10 @@ export default function ForgotPasswordPage() {
 
       console.error(error);
 
-      alert(
-        error.response?.data?.message ||
-        error.message ||
-        "Network Error"
-      );
+      showToast({
+        type: "error",
+        message: error.response?.data?.message || error.message || "Network Error"
+      });
 
     } finally {
 

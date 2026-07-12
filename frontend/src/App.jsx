@@ -1,4 +1,5 @@
 import { Routes, Route, Outlet } from "react-router-dom";
+import { ToastProvider, ToastContainer } from "./components/Toast";
 
 import HomePage from "./components/LandingPage";
 import LoginPage from "./pages/auth/LoginPage";
@@ -71,7 +72,9 @@ import Support from "./deliveryBoy/pages/support/Support";
 
 function App() {
   return (
-    <Routes>
+    <ToastProvider>
+      <ToastContainer />
+      <Routes>
       {/* Public routes */}
       <Route path="/" element={<HomePage />} />
       <Route path="/login" element={<LoginPage />} />
@@ -160,6 +163,7 @@ function App() {
         </Route>
       </Route>
     </Routes>
+    </ToastProvider>
   );
 }
 

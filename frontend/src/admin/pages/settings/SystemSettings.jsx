@@ -1,6 +1,8 @@
 import React, { useState } from "react";
+import { useToast } from "../../../components/Toast";
 
 export default function SystemSettings() {
+  const { showToast } = useToast();
   const [settings, setSettings] = useState({
     siteName: "QuickCart",
     siteEmail: "admin@quickcart.com",
@@ -23,7 +25,7 @@ export default function SystemSettings() {
 
   const handleSave = () => {
     console.log("Settings saved:", settings);
-    alert("Settings saved successfully!");
+    showToast({ type: "success", message: "Settings saved successfully!" });
   };
 
   return (

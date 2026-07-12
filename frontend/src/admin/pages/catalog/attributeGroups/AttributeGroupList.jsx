@@ -5,8 +5,10 @@ import { getAttributeGroups, deleteAttributeGroup } from "../../../services/attr
 //  CORRECT
 
 import { useNavigate } from "react-router-dom";
+import ConfirmDialog from "../../../../components/Toast/ConfirmDialog";
 
 export default function AttributeGroupList() {
+  const [confirmState, setConfirmState] = useState(null);
   const [groups, setGroups] = useState([]);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
@@ -28,9 +30,15 @@ export default function AttributeGroupList() {
   }, []);
 
   const handleDelete = async (id) => {
-    if (!window.confirm("Delete this group?")) return;
-    await deleteAttributeGroup(id);
-    fetchGroups();
+    setConfirmState({
+      message: "Are you sure you want to delete this attribute group?",
+      type: "danger",
+      onConfirm: async () => {
+        setConfirmState(null);
+        await deleteAttributeGroup(id);
+        fetchGroups();
+      }
+    });
   };
 
   return (
@@ -90,6 +98,14 @@ export default function AttributeGroupList() {
             </tbody>
           </table>
         </div>
+      )}
+      {confirmState && (
+        <ConfirmDialog
+          message={confirmState.message}
+          type={confirmState.type || "warning"}
+          onConfirm={confirmState.onConfirm}
+          onCancel={() => setConfirmState(null)}
+        />
       )}
     </div>
   );

@@ -436,6 +436,7 @@ import {
   Search,
   Home,
 } from "lucide-react";
+import { useToast } from "../../../components/Toast";
 
 import {
   getUserAddresses,
@@ -443,6 +444,7 @@ import {
 
 function LocationSelector() {
   const navigate = useNavigate();
+  const { showToast } = useToast();
 
   const [addresses, setAddresses] =
     useState([]);
@@ -612,13 +614,13 @@ function LocationSelector() {
 
   const handleUseAddress = (address) => {
     localStorage.setItem("selectedAddress", JSON.stringify(address));
-    alert("Address Selected Successfully");
+    showToast({ type: "success", message: "Address Selected Successfully" });
     navigate("/");
   };
 
   const handleCurrentLocation = () => {
     if (!navigator.geolocation) {
-      alert("Geolocation not supported");
+      showToast({ type: "warning", message: "Geolocation not supported" });
       return;
     }
 
@@ -642,18 +644,18 @@ function LocationSelector() {
 
           localStorage.setItem("selectedAddress", JSON.stringify(currentAddress));
           setLoading(false);
-          alert("Current Location Selected");
+          showToast({ type: "success", message: "Current Location Selected" });
           navigate("/");
         } catch (error) {
           console.error(error);
           setLoading(false);
-          alert("Failed to fetch address");
+          showToast({ type: "error", message: "Failed to fetch address" });
         }
       },
       (error) => {
         console.error(error);
         setLoading(false);
-        alert("Location Permission Denied");
+        showToast({ type: "error", message: "Location Permission Denied" });
       }
     );
   };

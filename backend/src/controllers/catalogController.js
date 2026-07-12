@@ -1056,12 +1056,22 @@ export const getCustomerProducts = async (req, res) => {
       }).select("productId");
       const searchVarProductIds = searchVariants.map((v) => v.productId);
 
+      // Also search ProductFamily.searchKeywords to match keyword-tagged families
+      const matchingFamilies = await ProductFamily.find({
+        searchKeywords: { $elemMatch: { $regex: search, $options: "i" } }
+      }).select("_id");
+      const familyMatchedProductIds = matchingFamilies.length > 0
+        ? (await Product.find({ familyId: { $in: matchingFamilies.map(f => f._id) } }).select("_id")).map(p => p._id)
+        : [];
+
       productQuery.$and = productQuery.$and || [];
       productQuery.$and.push({
         $or: [
           { name: { $regex: search, $options: "i" } },
           { brand: { $regex: search, $options: "i" } },
-          { _id: { $in: searchVarProductIds } }
+          { description: { $regex: search, $options: "i" } },
+          { _id: { $in: searchVarProductIds } },
+          { _id: { $in: familyMatchedProductIds } },
         ]
       });
     }
@@ -1235,6 +1245,7 @@ export const getCustomerProducts = async (req, res) => {
         categoryId: product.categoryId,
         subCategoryId: product.subCategoryId,
         familyId: product.familyId,
+        isReturnable: product.isReturnable,
         variants: filteredVariants,
         createdAt: product.createdAt,
         primaryPrice: primaryVariant.sellingPrice,

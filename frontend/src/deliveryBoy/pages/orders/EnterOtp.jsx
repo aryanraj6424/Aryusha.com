@@ -2,10 +2,12 @@ import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ShieldAlert, ArrowLeft, KeyRound, HelpCircle, PhoneCall } from "lucide-react";
 import axios from "axios";
+import { useToast } from "../../../components/Toast";
 
 export default function EnterOtp() {
   const navigate = useNavigate();
   const { id } = useParams();
+  const { showToast } = useToast();
   const [otp, setOtp] = useState("");
   const [timer, setTimer] = useState(30);
   const [loading, setLoading] = useState(false);
@@ -41,7 +43,7 @@ export default function EnterOtp() {
       }, { headers });
 
       if (res.data.success) {
-        alert("Delivery Confirmed!");
+        showToast({ type: "success", message: "Delivery Confirmed!" });
         navigate(`/delivery-boy/orders/${id}/success`);
       }
     } catch (err) {
@@ -54,7 +56,7 @@ export default function EnterOtp() {
 
   const handleResend = () => {
     setTimer(30);
-    alert("New OTP SMS request simulation: SMS resent successfully! Check Customer Order Details in customer panel to find it.");
+    showToast({ type: "success", message: "New OTP SMS request simulation: SMS resent successfully! Check Customer Order Details in customer panel to find it." });
   };
 
   return (

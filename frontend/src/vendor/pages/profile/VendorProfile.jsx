@@ -18,10 +18,12 @@ import axios from "axios";
 import { useVendor } from "../../context/VendorContext";
 import { calculateVendorProfileCompletion } from "../../utils/profileCompletion";
 import { uploadFile } from "../../../services/uploadService";
+import { useToast } from "../../../components/Toast";
 
 export default function VendorProfile() {
   const navigate = useNavigate();
   const { vendor, refresh } = useVendor();
+  const { showToast } = useToast();
 
   const [orders, setOrders] = useState([]);
   const [totalProducts, setTotalProducts] = useState(0);
@@ -44,7 +46,7 @@ export default function VendorProfile() {
       }));
     } catch (err) {
       console.error(err);
-      alert(err.response?.data?.message || "Failed to upload image");
+      showToast({ type: "error", message: err.response?.data?.message || "Failed to upload image" });
     } finally {
       setUploadingLogo(false);
     }
@@ -154,14 +156,14 @@ export default function VendorProfile() {
 
       const res = await axios.put(`${import.meta.env.VITE_API_URL}/vendor/profile`, profileData, { headers });
       if (res.data.success) {
-        alert("Profile details updated successfully!");
+        showToast({ type: "success", message: "Profile details updated successfully!" });
         setShowEditModal(false);
         await refresh();
         fetchDashboardData();
       }
     } catch (error) {
       console.error(error);
-      alert(error.response?.data?.message || "Failed to update profile details.");
+      showToast({ type: "error", message: error.response?.data?.message || "Failed to update profile details." });
     } finally {
       setSaving(false);
     }

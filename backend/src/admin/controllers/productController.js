@@ -141,7 +141,8 @@ export const createProduct = async (req, res) => {
       status,
       mrp,
       sellingPrice,
-      sku
+      sku,
+      isReturnable
     } = req.body;
 
     if (!categoryId || !subCategoryId || !familyId || !name || !unitType) {
@@ -189,6 +190,7 @@ export const createProduct = async (req, res) => {
       images: Array.isArray(images) ? images : [],
       unitType: normalizedUnitType,
       status: initialStatus,
+      isReturnable: isReturnable === true || isReturnable === "true",
       createdBy: creatorId,
       creatorModel,
       approvalHistory: [
@@ -263,7 +265,8 @@ export const updateProduct = async (req, res) => {
       unitType,
       description,
       images,
-      status
+      status,
+      isReturnable
     } = req.body;
 
     if (name) product.name = name;
@@ -279,6 +282,9 @@ export const updateProduct = async (req, res) => {
     }
     if (description !== undefined) product.description = description;
     if (images) product.images = images;
+    if (isReturnable !== undefined) {
+      product.isReturnable = isReturnable === true || isReturnable === "true";
+    }
     
     // Status update
     if (status) {
@@ -334,6 +340,15 @@ export const deleteProduct = async (req, res) => {
     // Vendor lock
     if (req.vendor && (product.creatorModel !== "Vendor" || product.createdBy.toString() !== req.vendor._id.toString())) {
       return res.status(403).json({ success: false, message: "Access Denied: You cannot delete this product" });
+    }
+
+    if (product.status === "draft") {
+      await ProductVariant.deleteMany({ productId: product._id });
+      await Product.deleteOne({ _id: product._id });
+      return res.status(200).json({
+        success: true,
+        message: "Draft product permanently deleted successfully",
+      });
     }
 
     product.isDeleted = true;
@@ -447,11 +462,25 @@ export const bulkDeleteProducts = async (req, res) => {
       return res.status(400).json({ success: false, message: "Product IDs array is required" });
     }
 
-    // Soft delete matching products
-    await Product.updateMany({ _id: { $in: productIds } }, { isDeleted: true, status: "inactive" });
-    await ProductVariant.updateMany({ productId: { $in: productIds } }, { status: "inactive" });
+    const products = await Product.find({ _id: { $in: productIds } });
+    const draftIds = products.filter(p => p.status === "draft").map(p => p._id);
+    const nonDraftIds = products.filter(p => p.status !== "draft").map(p => p._id);
 
-    res.json({ success: true, message: "Products soft-deleted in bulk successfully" });
+    let deletedCount = 0;
+
+    if (draftIds.length > 0) {
+      await ProductVariant.deleteMany({ productId: { $in: draftIds } });
+      const delResult = await Product.deleteMany({ _id: { $in: draftIds } });
+      deletedCount += delResult.deletedCount;
+    }
+
+    if (nonDraftIds.length > 0) {
+      const softResult = await Product.updateMany({ _id: { $in: nonDraftIds } }, { isDeleted: true, status: "inactive" });
+      await ProductVariant.updateMany({ productId: { $in: nonDraftIds } }, { status: "inactive" });
+      deletedCount += softResult.modifiedCount;
+    }
+
+    res.json({ success: true, message: `Successfully deleted ${deletedCount} products.` });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }

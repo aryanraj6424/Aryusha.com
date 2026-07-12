@@ -2,9 +2,11 @@ import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { Phone, ArrowLeft, ArrowRight, Shield } from "lucide-react";
 import axios from "axios";
+import { useToast } from "../../../components/Toast";
 
 export default function DeliveryBoyForgotPassword() {
   const navigate = useNavigate();
+  const { showToast } = useToast();
   const [phone, setPhone] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -22,7 +24,7 @@ export default function DeliveryBoyForgotPassword() {
     try {
       const res = await axios.post(`${import.meta.env.VITE_API_URL}/delivery-boy/auth/forgot-password`, { phone });
       if (res.data.success) {
-        alert("OTP Sent successfully. Check server/backend console logs!");
+        showToast({ type: "success", message: "OTP sent successfully! Check your registered number." });
         navigate("/delivery-boy/otp-verify", { state: { phone } });
       }
     } catch (err) {

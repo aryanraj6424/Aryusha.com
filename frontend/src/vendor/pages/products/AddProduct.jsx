@@ -9,6 +9,7 @@ import {
 import BasicInformation from "./BasicInformation";
 import Description from "./Description";
 import Images from "./Images";
+import { useToast } from "../../../components/Toast";
 
 const STEPS = ["Basic Information", "Description", "Images"];
 
@@ -35,6 +36,7 @@ const INITIAL_LINK_FORM = {
 
 export default function AddProduct() {
   const navigate = useNavigate();
+  const { showToast } = useToast();
 
   // Mode: "select" (options menu), "link" (search/link flow), "create" (wizard flow)
   const [mode, setMode] = useState("select");
@@ -51,6 +53,7 @@ export default function AddProduct() {
   const [searching, setSearching] = useState(false);
   const [selectedMasterProduct, setSelectedMasterProduct] = useState(null);
   const [linkForm, setLinkForm] = useState(INITIAL_LINK_FORM);
+  const [linkVariants, setLinkVariants] = useState([]);
   const [linking, setLinking] = useState(false);
 
   // ── Search Handlers ──────────────────────────────────────────────────────
@@ -80,6 +83,19 @@ export default function AddProduct() {
       ...INITIAL_LINK_FORM,
       sku: `${prefix}-${Date.now().toString().slice(-4)}`
     });
+
+    if (product.variants && product.variants.length > 0) {
+      setLinkVariants(product.variants.map(v => ({
+        variantId: v._id,
+        label: v.variantLabel,
+        isAvailable: true,
+        sellingPrice: "",
+        mrp: "",
+        stock: ""
+      })));
+    } else {
+      setLinkVariants([]);
+    }
   };
 
   const handleLinkSubmit = async (e) => {
@@ -111,10 +127,17 @@ export default function AddProduct() {
         stock: Number(linkForm.stock || 0),
         sku: linkForm.sku.trim(),
         condition: linkForm.condition,
-        vendorNotes: linkForm.vendorNotes.trim()
+        vendorNotes: linkForm.vendorNotes.trim(),
+        variants: linkVariants.filter(v => v.isAvailable).map(v => ({
+          variantId: v.variantId,
+          sellingPrice: v.sellingPrice ? Number(v.sellingPrice) : Number(linkForm.price),
+          mrp: v.mrp ? Number(v.mrp) : (linkForm.mrp ? Number(linkForm.mrp) : null),
+          stock: v.stock ? Number(v.stock) : Number(linkForm.stock || 0),
+          isAvailable: true
+        }))
       };
       await linkMasterProduct(payload);
-      alert("Product linked to your store successfully!");
+      showToast({ type: "success", message: "Product linked to your store successfully!" });
       navigate("/vendor/products");
     } catch (err) {
       setError(err?.response?.data?.message || "Failed to link product to your store.");
@@ -166,7 +189,7 @@ export default function AddProduct() {
 
       const res = await createVendorProduct(payload);
       if (res.success) {
-        alert(submitStatus === "draft" ? "Product draft created!" : "Product request submitted for admin approval!");
+        showToast({ type: "success", message: submitStatus === "draft" ? "Product draft created!" : "Product request submitted for admin approval!" });
         navigate(`/vendor/products/${res.product._id}/variants`);
       }
     } catch (err) {
@@ -395,6 +418,68 @@ export default function AddProduct() {
                   className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:outline-none font-medium resize-none"
                 />
               </div>
+
+              {selectedMasterProduct.variants && selectedMasterProduct.variants.length > 0 && (
+                <div className="space-y-4">
+                  <h3 className="font-bold text-slate-800 border-b pb-2">Available Variants</h3>
+                  <p className="text-xs text-slate-400 font-medium">Select the variants you want to sell. If you leave Price, MRP, or Stock blank, it will use the default values you set above.</p>
+                  {linkVariants.map((v, idx) => (
+                    <div key={v.variantId} className="flex flex-col md:flex-row gap-4 p-4 border rounded-xl bg-slate-50 items-center shadow-sm">
+                      <div className="flex-1 flex items-center gap-3">
+                        <input 
+                          type="checkbox" 
+                          checked={v.isAvailable} 
+                          onChange={(e) => {
+                            const newV = [...linkVariants];
+                            newV[idx].isAvailable = e.target.checked;
+                            setLinkVariants(newV);
+                          }}
+                          className="w-5 h-5 accent-purple-600 rounded cursor-pointer"
+                        />
+                        <span className="font-bold text-slate-800">{v.label}</span>
+                      </div>
+                      {v.isAvailable && (
+                        <div className="flex-1 grid grid-cols-3 gap-2">
+                           <input 
+                             type="number" 
+                             placeholder="Price (₹)" 
+                             value={v.sellingPrice} 
+                             onChange={(e) => {
+                               const newV = [...linkVariants];
+                               newV[idx].sellingPrice = e.target.value;
+                               setLinkVariants(newV);
+                             }} 
+                             className="px-3 py-2 border rounded-lg text-sm w-full focus:ring-2 focus:ring-purple-500 focus:outline-none"
+                           />
+                           <input 
+                             type="number" 
+                             placeholder="MRP (₹)" 
+                             value={v.mrp} 
+                             onChange={(e) => {
+                               const newV = [...linkVariants];
+                               newV[idx].mrp = e.target.value;
+                               setLinkVariants(newV);
+                             }} 
+                             className="px-3 py-2 border rounded-lg text-sm w-full focus:ring-2 focus:ring-purple-500 focus:outline-none"
+                           />
+                           <input 
+                             type="number" 
+                             placeholder="Stock" 
+                             value={v.stock} 
+                             onChange={(e) => {
+                               const newV = [...linkVariants];
+                               newV[idx].stock = e.target.value;
+                               setLinkVariants(newV);
+                             }} 
+                             className="px-3 py-2 border rounded-lg text-sm w-full focus:ring-2 focus:ring-purple-500 focus:outline-none"
+                           />
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
 
               {error && (
                 <div className="bg-rose-50 border border-rose-100 text-rose-750 text-xs rounded-xl px-4 py-3 font-semibold">

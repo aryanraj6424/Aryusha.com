@@ -148,6 +148,7 @@ import {
   forgotPassword,
   verifyOtp,
   resetPassword,
+  firebaseLogin,
 } from "../controllers/authController.js";
 
 const router = express.Router();
@@ -195,12 +196,10 @@ router.post("/token-refresh", async (req, res) => {
 
 /*
 |--------------------------------------------------------------------------
-| Future Routes
+| Firebase Login — shared by Customer / Vendor / Delivery Boy / Admin
 |--------------------------------------------------------------------------
 */
 
-// router.post("/resend-otp", resendOtp);
-
-// router.post("/reset-password", resetPassword);
+router.post("/firebase-login", firebaseLogin);
 
 export default router;

@@ -2,9 +2,11 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Trash2, ShoppingCart, Plus, Minus, ArrowLeft, Ticket, Percent, Coins, Check, X, ShieldCheck } from "lucide-react";
 import axios from "axios";
+import { useToast } from "../../components/Toast";
 
 export default function CartPage() {
   const navigate = useNavigate();
+  const { showToast } = useToast();
   const [cart, setCart] = useState([]);
   
   // Server-side summary state
@@ -276,7 +278,7 @@ export default function CartPage() {
   const handleCheckout = () => {
     const user = localStorage.getItem("user");
     if (!user) {
-      alert("Please login to proceed to checkout.");
+      showToast({ type: "warning", message: "Please login to proceed to checkout." });
       navigate("/login");
       return;
     }

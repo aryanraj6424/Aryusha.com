@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import axios from "axios";
+import { useToast } from "../../components/Toast";
 
 const VendorContext = createContext(null);
 
@@ -9,6 +10,7 @@ export const useVendor = () => useContext(VendorContext);
 export const VendorProvider = ({ children }) => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { showToast } = useToast();
 
   const [vendor, setVendor] = useState(() => {
     const saved = localStorage.getItem("vendor");
@@ -42,11 +44,11 @@ export const VendorProvider = ({ children }) => {
           navigate("/vendor/pending-approval");
         }
       } else if (currentVendor.status === "rejected") {
-        alert("Your account verification was rejected.");
+        showToast({ type: "error", message: "Your account verification was rejected." });
         handleLogout();
         return;
       } else if (currentVendor.accountStatus !== "active") {
-        alert(`Your account has been ${currentVendor.accountStatus} by admin.`);
+        showToast({ type: "error", message: `Your account has been ${currentVendor.accountStatus} by admin.` });
         handleLogout();
         return;
       } else {

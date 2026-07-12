@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Search, Bell, User, ChevronDown, LogOut, Shield } from "lucide-react";
+import { Search, Bell, User, ChevronDown, LogOut, Shield, Menu } from "lucide-react";
 import { useVendor } from "../context/VendorContext";
 
-export default function VendorHeader() {
+export default function VendorHeader({ onMenuClick }) {
   const navigate = useNavigate();
   const { vendor, logout } = useVendor();
   const [showSearch, setShowSearch] = useState(false);
@@ -16,8 +16,14 @@ export default function VendorHeader() {
 
   return (
     <header className="bg-white border-b border-gray-200 px-4 lg:px-6 py-4 flex items-center justify-between sticky top-0 z-30 shadow-sm">
-      {/* Left - Logo and Title with margin to prevent hamburger overlap on mobile */}
-      <div className="flex items-center gap-4 pl-12 lg:pl-0">
+      {/* Left - Menu Button (mobile only) and Title */}
+      <div className="flex items-center gap-3">
+        <button
+          onClick={onMenuClick}
+          className="lg:hidden p-2 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer text-gray-600"
+        >
+          <Menu size={20} />
+        </button>
         <h1 className="text-lg lg:text-xl font-bold text-gray-800 tracking-wide">
           Vendor Panel
         </h1>

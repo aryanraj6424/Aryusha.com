@@ -3,10 +3,14 @@ import { useState, useEffect, useRef } from "react";
 import axios from "axios";
 import { ArrowLeft, Shield, FileText, CheckSquare, Settings, User, Building2, Check, X, ShieldAlert, MapPin, Plus, Trash2, Edit, Search } from "lucide-react";
 import CoverageMap from "../../../vendor/components/CoverageMap";
+import { useToast } from "../../../components/Toast";
+import ConfirmDialog from "../../../components/Toast/ConfirmDialog";
 
 export default function VendorDetails() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { showToast } = useToast();
+  const [confirmState, setConfirmState] = useState(null);
 
   const [vendor, setVendor] = useState(null);
   
@@ -49,7 +53,7 @@ export default function VendorDetails() {
       });
     } catch (error) {
       console.error(error);
-      alert("Failed to fetch vendor details.");
+      showToast({ type: "error", message: "Failed to fetch vendor details." });
     } finally {
       setLoading(false);
     }
@@ -113,11 +117,11 @@ export default function VendorDetails() {
   const handleStatusAction = async (action) => {
     try {
       await axios.put(`${import.meta.env.VITE_API_URL}/admin/vendors/${action}/${id}`);
-      alert(`Vendor account status changed to ${action} successfully.`);
+      showToast({ type: "success", message: `Vendor account status changed to ${action} successfully.` });
       fetchVendorDetails();
     } catch (error) {
       console.error(error);
-      alert(`Failed to perform action: ${action}`);
+      showToast({ type: "error", message: `Failed to perform action: ${action}` });
     }
   };
 
@@ -136,11 +140,11 @@ export default function VendorDetails() {
       await axios.put(`${import.meta.env.VITE_API_URL}/admin/vendors/permissions/${id}`, {
         permissions,
       });
-      alert("Permissions updated successfully.");
+      showToast({ type: "success", message: "Permissions updated successfully." });
       fetchVendorDetails();
     } catch (error) {
       console.error(error);
-      alert("Failed to update permissions.");
+      showToast({ type: "error", message: "Failed to update permissions." });
     }
   };
 
@@ -148,17 +152,17 @@ export default function VendorDetails() {
     try {
       const latVal = latInput === "" ? null : Number(latInput);
       if (latVal !== null && (isNaN(latVal) || latVal < -90 || latVal > 90)) {
-        alert("Invalid Latitude. Must be between -90 and 90.");
+        showToast({ type: "warning", message: "Invalid Latitude. Must be between -90 and 90." });
         return;
       }
       const lngVal = lngInput === "" ? null : Number(lngInput);
       if (lngVal !== null && (isNaN(lngVal) || lngVal < -180 || lngVal > 180)) {
-        alert("Invalid Longitude. Must be between -180 and 180.");
+        showToast({ type: "warning", message: "Invalid Longitude. Must be between -180 and 180." });
         return;
       }
       const radiusVal = radiusInput === "" ? null : Number(radiusInput);
       if (radiusVal !== null && (isNaN(radiusVal) || radiusVal <= 0)) {
-        alert("Invalid Radius. Must be a positive number greater than 0.");
+        showToast({ type: "warning", message: "Invalid Radius. Must be a positive number greater than 0." });
         return;
       }
 
@@ -168,19 +172,19 @@ export default function VendorDetails() {
         radiusKm: radiusVal
       });
 
-      alert("Vendor location settings updated successfully.");
+      showToast({ type: "success", message: "Vendor location settings updated successfully." });
       setIsEditingLocation(false);
       fetchVendorDetails();
     } catch (error) {
       console.error(error);
-      alert(error.response?.data?.message || "Failed to save location settings.");
+      showToast({ type: "error", message: error.response?.data?.message || "Failed to save location settings." });
     }
   };
 
   const handleAddOrUpdateServiceArea = async (e) => {
     e.preventDefault();
     if (!saPincode || !saAreaName || !saCity || !saState) {
-      alert("All service area fields are required.");
+      showToast({ type: "warning", message: "All service area fields are required." });
       return;
     }
 
@@ -189,7 +193,7 @@ export default function VendorDetails() {
       (sa, idx) => sa.pincode === saPincode.trim() && idx !== editingSaIndex
     );
     if (duplicateIndex !== -1) {
-      alert(`Pincode ${saPincode} is already assigned to this vendor.`);
+      showToast({ type: "warning", message: `Pincode ${saPincode} is already assigned to this vendor.` });
       return;
     }
 
@@ -211,7 +215,7 @@ export default function VendorDetails() {
         serviceAreas: currentAreas
       });
       
-      alert(editingSaIndex !== null ? "Service area updated successfully." : "Service area added successfully.");
+      showToast({ type: "success", message: editingSaIndex !== null ? "Service area updated successfully." : "Service area added successfully." });
       setSaPincode("");
       setSaAreaName("");
       setSaCity("");
@@ -220,25 +224,29 @@ export default function VendorDetails() {
       fetchVendorDetails();
     } catch (error) {
       console.error(error);
-      alert(error.response?.data?.message || "Failed to update service areas.");
+      showToast({ type: "error", message: error.response?.data?.message || "Failed to update service areas." });
     }
   };
 
   const handleDeleteServiceArea = async (indexToDelete) => {
-    if (!window.confirm("Are you sure you want to remove this service area?")) {
-      return;
-    }
-    const currentAreas = (vendor.serviceAreas || []).filter((_, idx) => idx !== indexToDelete);
-    try {
-      await axios.put(`${import.meta.env.VITE_API_URL}/admin/vendors/${id}`, {
-        serviceAreas: currentAreas
-      });
-      alert("Service area removed successfully.");
-      fetchVendorDetails();
-    } catch (error) {
-      console.error(error);
-      alert(error.response?.data?.message || "Failed to remove service area.");
-    }
+    setConfirmState({
+      message: "Are you sure you want to remove this service area?",
+      type: "danger",
+      onConfirm: async () => {
+        setConfirmState(null);
+        const currentAreas = (vendor.serviceAreas || []).filter((_, idx) => idx !== indexToDelete);
+        try {
+          await axios.put(`${import.meta.env.VITE_API_URL}/admin/vendors/${id}`, {
+            serviceAreas: currentAreas
+          });
+          showToast({ type: "success", message: "Service area removed successfully." });
+          fetchVendorDetails();
+        } catch (error) {
+          console.error(error);
+          showToast({ type: "error", message: error.response?.data?.message || "Failed to remove service area." });
+        }
+      }
+    });
   };
 
   const handleEditServiceAreaClick = (sa, index) => {
@@ -941,6 +949,14 @@ export default function VendorDetails() {
             </div>
         )}
       </div>
+      {confirmState && (
+        <ConfirmDialog
+          message={confirmState.message}
+          type={confirmState.type || "warning"}
+          onConfirm={confirmState.onConfirm}
+          onCancel={() => setConfirmState(null)}
+        />
+      )}
     </div>
   );
 }

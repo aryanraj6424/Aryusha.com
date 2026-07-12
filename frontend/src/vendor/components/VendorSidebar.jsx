@@ -23,10 +23,9 @@ import {
   Map
 } from "lucide-react";
 
-export default function VendorSidebar() {
+export default function VendorSidebar({ isOpen, setIsOpen }) {
   const navigate = useNavigate();
   const location = useLocation();
-  const [isOpen, setIsOpen] = useState(false);
   const { hasPermission, logout } = useVendor();
 
   const handleLogout = () => {
@@ -59,25 +58,25 @@ export default function VendorSidebar() {
 
   return (
     <>
-      {/* Mobile Menu Button */}
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="lg:hidden fixed top-4 left-4 z-50 bg-[#6d28d9] text-white p-3 rounded-lg shadow-lg"
-      >
-        {isOpen ? <X size={24} /> : <Menu size={24} />}
-      </button>
-
       {/* Sidebar */}
       <div className={`
-        fixed lg:static inset-0 z-40 lg:z-auto
+        fixed lg:static inset-y-0 left-0 z-40 lg:z-auto
         w-64 bg-[#6d28d9] text-white p-5 flex flex-col h-screen overflow-y-auto
         transform transition-transform duration-300 ease-in-out
         ${isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
       `}>
-        {/* Logo */}
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold text-purple-100 font-sans tracking-wide">Aryusha.com</h1>
-          <p className="text-xs text-purple-200 mt-1">Vendor Panel</p>
+        {/* Logo and close button on mobile */}
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h1 className="text-2xl font-bold text-purple-100 font-sans tracking-wide">Aryusha.com</h1>
+            <p className="text-xs text-purple-200 mt-1">Vendor Panel</p>
+          </div>
+          <button
+            onClick={() => setIsOpen(false)}
+            className="lg:hidden p-1.5 hover:bg-purple-800 rounded-lg text-purple-100 transition-colors cursor-pointer"
+          >
+            <X size={20} />
+          </button>
         </div>
 
         <nav className="flex flex-col gap-4 flex-1">

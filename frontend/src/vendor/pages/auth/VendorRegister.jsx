@@ -263,9 +263,11 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { registerVendor } from "../../services/vendorApi";
 import { uploadFile } from "../../../services/uploadService";
+import { useToast } from "../../../components/Toast";
 
 export default function VendorRegister() {
   const navigate = useNavigate();
+  const { showToast } = useToast();
 
   const [formData, setFormData] = useState({
     shopName: "",
@@ -307,7 +309,7 @@ export default function VendorRegister() {
       setFormData((prev) => ({ ...prev, storeFrontImage: data.url }));
     } catch (err) {
       console.error(err);
-      alert(err.response?.data?.message || "Failed to upload image");
+      showToast({ type: "error", message: err.response?.data?.message || "Failed to upload image" });
     } finally {
       setUploadingFront(false);
     }
@@ -322,7 +324,7 @@ export default function VendorRegister() {
       setFormData((prev) => ({ ...prev, storeBackImage: data.url }));
     } catch (err) {
       console.error(err);
-      alert(err.response?.data?.message || "Failed to upload image");
+      showToast({ type: "error", message: err.response?.data?.message || "Failed to upload image" });
     } finally {
       setUploadingBack(false);
     }
@@ -339,7 +341,7 @@ export default function VendorRegister() {
     e.preventDefault();
 
     if (formData.password !== formData.confirmPassword) {
-      alert("Passwords do not match");
+      showToast({ type: "warning", message: "Passwords do not match" });
       return;
     }
 
@@ -348,8 +350,7 @@ export default function VendorRegister() {
       navigate("/vendor/pending-approval");
     } catch (error) {
       console.log(error);
-
-      alert(error?.response?.data?.message || "Registration Failed");
+      showToast({ type: "error", message: error?.response?.data?.message || "Registration Failed" });
     }
   };
 

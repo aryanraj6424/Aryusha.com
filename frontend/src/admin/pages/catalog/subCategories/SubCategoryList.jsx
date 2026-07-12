@@ -2,9 +2,13 @@ import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import axios from "axios";
 import { Plus, Pencil, Trash2, Search, Filter } from "lucide-react";
+import { useToast } from "../../../../components/Toast";
+import ConfirmDialog from "../../../../components/Toast/ConfirmDialog";
 
 export default function SubCategoryList() {
   const navigate = useNavigate();
+  const { showToast } = useToast();
+  const [confirmState, setConfirmState] = useState(null);
   const [subCategories, setSubCategories] = useState([]);
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -39,19 +43,25 @@ export default function SubCategoryList() {
   };
 
   const handleDelete = async (id) => {
-    if (window.confirm("Are you sure you want to delete this sub-category?")) {
-      try {
-        const token = localStorage.getItem("adminToken");
-        await axios.delete(
-          `${import.meta.env.VITE_API_URL}/sub-categories/${id}`,
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
-        fetchData();
-      } catch (error) {
-        console.error("Error deleting sub-category:", error);
-        alert("Failed to delete sub-category");
+    setConfirmState({
+      message: "Are you sure you want to delete this sub-category?",
+      type: "danger",
+      onConfirm: async () => {
+        setConfirmState(null);
+        try {
+          const token = localStorage.getItem("adminToken");
+          await axios.delete(
+            `${import.meta.env.VITE_API_URL}/sub-categories/${id}`,
+            { headers: { Authorization: `Bearer ${token}` } }
+          );
+          showToast({ type: "success", message: "Sub-category deleted successfully." });
+          fetchData();
+        } catch (error) {
+          console.error("Error deleting sub-category:", error);
+          showToast({ type: "error", message: "Failed to delete sub-category" });
+        }
       }
-    }
+    });
   };
 
   const filteredSubCategories = subCategories.filter(sub => {
@@ -190,6 +200,14 @@ export default function SubCategoryList() {
           </div>
         )}
       </div>
+      {confirmState && (
+        <ConfirmDialog
+          message={confirmState.message}
+          type={confirmState.type || "warning"}
+          onConfirm={confirmState.onConfirm}
+          onCancel={() => setConfirmState(null)}
+        />
+      )}
     </div>
   );
 }

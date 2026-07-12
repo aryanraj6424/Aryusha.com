@@ -187,15 +187,20 @@ import SearchBar from "./SearchBar";
 function DesktopNavbar() {
   const navigate = useNavigate();
 
-  const user = JSON.parse(
-    localStorage.getItem("user") || "null"
+  const [user, setUser] = useState(() =>
+    JSON.parse(localStorage.getItem("user") || "null")
   );
 
-  const selectedAddress = JSON.parse(
-    localStorage.getItem("selectedAddress") || "null"
+  const [selectedAddress, setSelectedAddress] = useState(() =>
+    JSON.parse(localStorage.getItem("selectedAddress") || "null")
   );
 
   const [cartCount, setCartCount] = useState(0);
+
+  const syncUser = () => {
+    setUser(JSON.parse(localStorage.getItem("user") || "null"));
+    setSelectedAddress(JSON.parse(localStorage.getItem("selectedAddress") || "null"));
+  };
 
   const updateCartCount = () => {
     try {
@@ -208,20 +213,24 @@ function DesktopNavbar() {
   };
 
   useEffect(() => {
+    syncUser();
     updateCartCount();
     window.addEventListener("cart-updated", updateCartCount);
-    return () => window.removeEventListener("cart-updated", updateCartCount);
+    window.addEventListener("auth-updated", syncUser);
+    window.addEventListener("storage", syncUser);
+    return () => {
+      window.removeEventListener("cart-updated", updateCartCount);
+      window.removeEventListener("auth-updated", syncUser);
+      window.removeEventListener("storage", syncUser);
+    };
   }, []);
 
   const handleLogout = () => {
     localStorage.removeItem("user");
-    localStorage.removeItem(
-      "selectedAddress"
-    );
-
+    localStorage.removeItem("selectedAddress");
+    setUser(null);
+    window.dispatchEvent(new Event("auth-updated"));
     navigate("/");
-
-    window.location.reload();
   };
 
   const locationText =

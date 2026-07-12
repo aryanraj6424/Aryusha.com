@@ -1,113 +1,70 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
+import { useToast } from "../../../components/Toast";
 
 export default function VendorOtpVerification() {
   const navigate = useNavigate();
+  const { showToast } = useToast();
 
   const [otp, setOtp] = useState("");
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    const resetPhone =
-      localStorage.getItem(
-        "vendorResetPhone"
-      );
+    const resetPhone = localStorage.getItem("vendorResetPhone");
+    const loginPhone = localStorage.getItem("vendorLoginPhone");
 
-    const loginPhone =
-      localStorage.getItem(
-        "vendorLoginPhone"
-      );
-
-    if (
-      !resetPhone &&
-      !loginPhone
-    ) {
-      alert(
-        "Please request OTP first"
-      );
-
-      navigate(
-        "/vendor/login"
-      );
+    if (!resetPhone && !loginPhone) {
+      showToast({ type: "warning", message: "Please request OTP first" });
+      navigate("/vendor/login");
     }
   }, [navigate]);
 
   const handleVerify = async (e) => {
     e.preventDefault();
 
-    const resetPhone =
-      localStorage.getItem(
-        "vendorResetPhone"
-      );
-
-    const loginPhone =
-      localStorage.getItem(
-        "vendorLoginPhone"
-      );
-
-    const phone =
-      resetPhone || loginPhone;
+    const resetPhone = localStorage.getItem("vendorResetPhone");
+    const loginPhone = localStorage.getItem("vendorLoginPhone");
+    const phone = resetPhone || loginPhone;
 
     if (!phone) {
-      alert(
-        "Session expired. Please request OTP again."
-      );
-
-      navigate(
-        "/vendor/login"
-      );
-
+      showToast({ type: "warning", message: "Session expired. Please request OTP again." });
+      navigate("/vendor/login");
       return;
     }
 
     if (otp.length !== 6) {
-      return alert(
-        "Please Enter Valid OTP"
-      );
+      showToast({ type: "warning", message: "Please enter a valid 6-digit OTP" });
+      return;
     }
 
     try {
       setLoading(true);
 
-      const response =
-        await axios.post(
-          `${import.meta.env.VITE_API_URL}/vendor/auth/verify-otp`,
-          {
-            phone,
-            otp,
-          }
-        );
+      const response = await axios.post(
+        `${import.meta.env.VITE_API_URL}/vendor/auth/verify-otp`,
+        { phone, otp }
+      );
 
-      if (
-        response.data.success
-      ) {
-        alert(
-          "OTP Verified Successfully"
-        );
+      if (response.data.success) {
+        showToast({ type: "success", message: "OTP verified successfully!" });
 
         // Forgot Password Flow
         if (resetPhone) {
-          navigate(
-            "/vendor/reset-password"
-          );
+          navigate("/vendor/reset-password");
         }
 
         // Login OTP Flow
         if (loginPhone) {
-          navigate(
-            "/vendor/dashboard"
-          );
+          navigate("/vendor/dashboard");
         }
       }
     } catch (error) {
       console.error(error);
-
-      alert(
-        error.response?.data
-          ?.message ||
-          "OTP Verification Failed"
-      );
+      showToast({
+        type: "error",
+        message: error.response?.data?.message || "OTP Verification Failed",
+      });
     } finally {
       setLoading(false);
     }
@@ -125,20 +82,13 @@ export default function VendorOtpVerification() {
           Enter the 6-digit OTP
         </p>
 
-        <form
-          onSubmit={handleVerify}
-          className="space-y-4"
-        >
+        <form onSubmit={handleVerify} className="space-y-4">
           <input
             type="text"
             placeholder="Enter OTP"
             value={otp}
             maxLength={6}
-            onChange={(e) =>
-              setOtp(
-                e.target.value
-              )
-            }
+            onChange={(e) => setOtp(e.target.value)}
             className="w-full border p-3 rounded-xl outline-none focus:border-purple-500"
             required
           />
@@ -148,9 +98,7 @@ export default function VendorOtpVerification() {
             disabled={loading}
             className="w-full bg-purple-600 text-white p-3 rounded-xl hover:bg-purple-700 transition"
           >
-            {loading
-              ? "Verifying..."
-              : "Verify OTP"}
+            {loading ? "Verifying..." : "Verify OTP"}
           </button>
         </form>
 

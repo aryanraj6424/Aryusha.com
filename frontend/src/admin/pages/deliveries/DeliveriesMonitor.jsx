@@ -1,8 +1,10 @@
 import { useState, useEffect } from "react";
 import { Search, MapPin, User, Clock, CheckCircle2, ArrowRight, ShieldCheck, HelpCircle, Calendar, RefreshCw, X, FileSpreadsheet, Eye } from "lucide-react";
 import axios from "axios";
+import { useToast } from "../../../components/Toast";
 
 export default function DeliveriesMonitor() {
+  const { showToast } = useToast();
   const [deliveries, setDeliveries] = useState([]);
   const [riders, setRiders] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -125,7 +127,7 @@ export default function DeliveriesMonitor() {
         setSelectedDelivery(res.data.order);
       }
     } catch (err) {
-      alert("Failed to load delivery timeline details");
+      showToast({ type: "error", message: "Failed to load delivery timeline details" });
     }
   };
 

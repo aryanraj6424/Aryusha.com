@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import axios from "axios";
+import { useToast } from "../../../../components/Toast";
 
 export default function EditBrand() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { showToast } = useToast();
 
   const [formData, setFormData] = useState({
     name: "",
@@ -43,7 +45,7 @@ export default function EditBrand() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!formData.name) {
-      alert("Brand name is required");
+      showToast({ type: "warning", message: "Brand name is required" });
       return;
     }
 
@@ -63,7 +65,7 @@ export default function EditBrand() {
       navigate("/admin/brands");
     } catch (error) {
       console.error(error);
-      alert(error.response?.data?.message || "Failed to update brand");
+      showToast({ type: "error", message: error.response?.data?.message || "Failed to update brand" });
     } finally {
       setUpdating(false);
     }

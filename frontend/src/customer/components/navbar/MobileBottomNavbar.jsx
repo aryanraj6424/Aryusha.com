@@ -9,11 +9,31 @@ import {
   ShoppingCart,
 } from "lucide-react";
 
+import { useState, useEffect } from "react";
+
 function MobileBottomNavbar() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const cartCount = 0;
+  const [cartCount, setCartCount] = useState(0);
+
+  const updateCartCount = () => {
+    try {
+      const cart = JSON.parse(localStorage.getItem("cart") || "[]");
+      const count = Array.isArray(cart) ? cart.reduce((total, item) => total + item.qty, 0) : 0;
+      setCartCount(count);
+    } catch {
+      setCartCount(0);
+    }
+  };
+
+  useEffect(() => {
+    updateCartCount();
+    window.addEventListener("cart-updated", updateCartCount);
+    return () => {
+      window.removeEventListener("cart-updated", updateCartCount);
+    };
+  }, []);
 
   const navItems = [
     {

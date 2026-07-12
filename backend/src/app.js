@@ -18,12 +18,15 @@ import feeSettingsRoutes from "./admin/routes/feeSettingsRoutes.js";
 import couponRoutes from "./admin/routes/couponRoutes.js";
 import adminOrderRoutes from "./admin/routes/orderRoutes.js";
 import adminDeliveryRoutes from "./admin/routes/adminDeliveryRoutes.js";
+import adminCustomerRoutes from "./admin/routes/adminCustomerRoutes.js";
+import bannerRoutes from "./admin/routes/bannerRoutes.js";
 import categoryRoutes from "./routes/categoryRoutes.js";
 import catalogRoutes from "./routes/catalogRoutes.js";
 import brandRoutes from "./routes/brandRoutes.js";
 import uploadRoutes from "./routes/uploadRoutes.js";
 import customerOrderRoutes from "./customer/routes/orderRoutes.js";
 import customerCartRoutes from "./customer/routes/cartRoutes.js";
+import customerWishlistRoutes from "./customer/routes/wishlistRoutes.js";
 import deliveryBoyAuthRoutes from "./deliveryBoy/routes/deliveryBoyAuthRoutes.js";
 import deliveryBoyRoutes from "./deliveryBoy/routes/deliveryBoyRoutes.js";
 const app = express();
@@ -147,10 +150,15 @@ app.use("/api/brands", brandRoutes);
 app.use("/api/upload", uploadRoutes);
 app.use("/api/customer/orders", customerOrderRoutes);
 app.use("/api/customer/cart", customerCartRoutes);
+app.use("/api/customer/wishlist", customerWishlistRoutes);
 
 // Delivery Boy Routes
 app.use("/api/delivery-boy/auth", deliveryBoyAuthRoutes);
 app.use("/api/delivery-boy", deliveryBoyRoutes);
+
+// Admin Customers & Banners
+app.use("/api/admin/customers", adminCustomerRoutes);
+app.use("/api/admin/banners", bannerRoutes);
 
 // Admin Orders & Deliveries
 app.use("/api/admin/orders", adminOrderRoutes);

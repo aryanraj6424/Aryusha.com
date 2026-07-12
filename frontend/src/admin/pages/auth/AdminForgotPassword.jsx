@@ -1,9 +1,11 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
+import { useToast } from "../../../components/Toast";
 
 export default function AdminForgotPassword() {
   const navigate = useNavigate();
+  const { showToast } = useToast();
 
   const [phone, setPhone] = useState("");
   const [loading, setLoading] = useState(false);
@@ -27,17 +29,17 @@ export default function AdminForgotPassword() {
           phone
         );
 
-        alert("OTP Sent Successfully");
+        showToast({ type: "success", message: "OTP Sent Successfully" });
 
         navigate("/admin/verify-otp");
       }
     } catch (error) {
       console.error(error);
 
-      alert(
-        error.response?.data?.message ||
-          "Failed to send OTP"
-      );
+      showToast({
+        type: "error",
+        message: error.response?.data?.message || "Failed to send OTP"
+      });
     } finally {
       setLoading(false);
     }

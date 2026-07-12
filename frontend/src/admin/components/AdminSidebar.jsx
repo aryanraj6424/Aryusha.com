@@ -14,10 +14,9 @@ import {
   X
 } from "lucide-react";
 
-export default function AdminSidebar() {
+export default function AdminSidebar({ isOpen, setIsOpen }) {
   const navigate = useNavigate();
   const location = useLocation();
-  const [isOpen, setIsOpen] = useState(false);
 
   const handleLogout = () => {
     localStorage.removeItem("adminToken");
@@ -85,25 +84,25 @@ export default function AdminSidebar() {
 
   return (
     <>
-      {/* Mobile Menu Button */}
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="lg:hidden fixed top-4 left-4 z-50 bg-[#1a5d1a] text-white p-3 rounded-lg shadow-lg"
-      >
-        {isOpen ? <X size={24} /> : <Menu size={24} />}
-      </button>
-
       {/* Sidebar */}
       <div className={`
-        fixed lg:static inset-0 z-40 lg:z-auto
+        fixed lg:static inset-y-0 left-0 z-40 lg:z-auto
         w-64 bg-[#1a5d1a] text-white p-5 flex flex-col h-screen overflow-y-auto
         transform transition-transform duration-300 ease-in-out
         ${isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
       `}>
-        {/* Logo */}
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold text-green-100">Aryusha.com</h1>
-          <p className="text-xs text-green-200 mt-1">Super Admin Panel</p>
+        {/* Logo and Mobile Close Button */}
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h1 className="text-2xl font-bold text-green-100">Aryusha.com</h1>
+            <p className="text-xs text-green-200 mt-1">Super Admin Panel</p>
+          </div>
+          <button
+            onClick={() => setIsOpen(false)}
+            className="lg:hidden p-1.5 hover:bg-green-700 rounded-lg text-green-100 transition-colors cursor-pointer"
+          >
+            <X size={20} />
+          </button>
         </div>
 
         <nav className="flex flex-col gap-4 flex-1">
@@ -120,13 +119,13 @@ export default function AdminSidebar() {
             }`}
           >
             <LayoutDashboard size={18} />
-            <span className="hidden sm:inline">Dashboard</span>
+            <span>Dashboard</span>
           </button>
 
           {/* Menu Sections */}
           {menuItems.map((section) => (
             <div key={section.section}>
-              <h3 className="text-xs uppercase text-green-300 mb-2 px-3 font-semibold tracking-wider hidden sm:block">
+              <h3 className="text-xs uppercase text-green-300 mb-2 px-3 font-semibold tracking-wider">
                 {section.section}
               </h3>
               <div className="flex flex-col gap-1">
@@ -146,7 +145,7 @@ export default function AdminSidebar() {
                       }`}
                     >
                       <Icon size={16} />
-                      <span className="hidden sm:inline">{item.label}</span>
+                      <span>{item.label}</span>
                     </button>
                   );
                 })}
@@ -162,7 +161,7 @@ export default function AdminSidebar() {
             className="w-full bg-red-600 hover:bg-red-700 py-3 rounded-lg font-semibold transition-colors flex items-center justify-center gap-2"
           >
             <LogOut size={18} />
-            <span className="hidden sm:inline">Logout</span>
+            <span>Logout</span>
           </button>
         </div>
       </div>

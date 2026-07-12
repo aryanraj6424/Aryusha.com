@@ -2,10 +2,12 @@ import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { ArrowLeft, User, Phone, Truck, Wallet, Clock, CheckCircle2, ChevronRight } from "lucide-react";
 import axios from "axios";
+import { useToast } from "../../../components/Toast";
 
 export default function DeliveryBoyDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { showToast } = useToast();
   
   const [rider, setRider] = useState(null);
   const [earnings, setEarnings] = useState(null);
@@ -26,7 +28,7 @@ export default function DeliveryBoyDetail() {
       }
     } catch (err) {
       console.error(err);
-      alert("Failed to load rider details");
+      showToast({ type: "error", message: "Failed to load rider details" });
       navigate("/admin/delivery-boys");
     } finally {
       setLoading(false);

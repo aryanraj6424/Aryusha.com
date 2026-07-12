@@ -1,9 +1,11 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
+import { useToast } from "../../../../components/Toast";
 
 export default function AddBrand() {
   const navigate = useNavigate();
+  const { showToast } = useToast();
   const [formData, setFormData] = useState({
     name: "",
     status: "Active",
@@ -20,7 +22,7 @@ export default function AddBrand() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!formData.name) {
-      alert("Brand name is required");
+      showToast({ type: "warning", message: "Brand name is required" });
       return;
     }
 
@@ -40,7 +42,7 @@ export default function AddBrand() {
       navigate("/admin/brands");
     } catch (error) {
       console.error(error);
-      alert(error.response?.data?.message || "Failed to create brand");
+      showToast({ type: "error", message: error.response?.data?.message || "Failed to create brand" });
     } finally {
       setLoading(false);
     }

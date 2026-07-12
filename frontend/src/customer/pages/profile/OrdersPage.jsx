@@ -2,18 +2,20 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { ArrowLeft, Clock, ShoppingBag, CheckCircle, XCircle, Download, ChevronDown, ChevronUp } from "lucide-react";
+import { useToast } from "../../../components/Toast";
 
 export default function OrdersPage() {
   const navigate = useNavigate();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [expandedOrder, setExpandedOrder] = useState(null);
+  const { showToast } = useToast();
 
   const user = JSON.parse(localStorage.getItem("user") || "null");
 
   useEffect(() => {
     if (!user) {
-      alert("Please login first.");
+      showToast({ type: "warning", message: "Please login first." });
       navigate("/login");
       return;
     }
@@ -55,7 +57,7 @@ export default function OrdersPage() {
       link.click();
     } catch (err) {
       console.error(err);
-      alert("Failed to download invoice. Please make sure the order is Delivered.");
+      showToast({ type: "error", message: "Failed to download invoice. Please make sure the order is Delivered." });
     }
   };
 

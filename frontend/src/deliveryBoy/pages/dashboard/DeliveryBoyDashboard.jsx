@@ -2,13 +2,17 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { ShoppingBag, CheckCircle, Clock, MapPin, ArrowRight, Wallet, HelpCircle, Phone } from "lucide-react";
 import axios from "axios";
+import { useToast } from "../../../components/Toast";
+import { getSocket, joinRoom, leaveRoom } from "../../../services/socket";
 
 export default function DeliveryBoyDashboard() {
   const navigate = useNavigate();
   const [stats, setStats] = useState(null);
   const [earnings, setEarnings] = useState(null);
   const [activeDeliveries, setActiveDeliveries] = useState([]);
+  const [weeklyBreakdown, setWeeklyBreakdown] = useState([]);
   const [loading, setLoading] = useState(true);
+  const { showToast } = useToast();
 
   const fetchDashboardData = async () => {
     try {
@@ -20,6 +24,7 @@ export default function DeliveryBoyDashboard() {
         setStats(res.data.stats);
         setEarnings(res.data.earnings);
         setActiveDeliveries(res.data.activeDeliveries || []);
+        setWeeklyBreakdown(res.data.weeklyBreakdown || []);
       }
     } catch (error) {
       console.error("Error loading dashboard data:", error);
@@ -35,6 +40,30 @@ export default function DeliveryBoyDashboard() {
       fetchDashboardData();
     }, 6000);
 
+    // Socket real-time integration
+    const rider = JSON.parse(localStorage.getItem("deliveryBoy") || "{}");
+    const riderId = rider._id;
+    if (riderId) {
+      const socket = getSocket();
+      joinRoom(`deliveryBoy:${riderId}`);
+
+      const handleAssigned = (data) => {
+        showToast({
+          type: "info",
+          message: data.message || "A new order has been assigned to you!",
+        });
+        fetchDashboardData();
+      };
+
+      socket.on("order:assigned", handleAssigned);
+
+      return () => {
+        clearInterval(timer);
+        socket.off("order:assigned", handleAssigned);
+        leaveRoom(`deliveryBoy:${riderId}`);
+      };
+    }
+
     return () => clearInterval(timer);
   }, []);
 
@@ -46,18 +75,12 @@ export default function DeliveryBoyDashboard() {
     );
   }
 
-  // Earnings mock weekly trend for graph representation
-  const weeklyData = [
-    { day: "Mon", amount: 240 },
-    { day: "Tue", amount: 350 },
-    { day: "Wed", amount: 180 },
-    { day: "Thu", amount: 420 },
-    { day: "Fri", amount: 310 },
-    { day: "Sat", amount: 550 },
-    { day: "Sun", amount: earnings?.totalEarnings ? (earnings.totalEarnings % 300) + 100 : 290 },
-  ];
+  // Use real weekly breakdown from API; fall back to empty zeros if not yet loaded
+  const weeklyData = weeklyBreakdown.length > 0
+    ? weeklyBreakdown
+    : ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map(day => ({ day, amount: 0 }));
 
-  const maxAmount = Math.max(...weeklyData.map(d => d.amount));
+  const maxAmount = Math.max(...weeklyData.map(d => d.amount), 1); // avoid division by zero
 
   return (
     <div className="space-y-6">

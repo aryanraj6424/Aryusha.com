@@ -2,12 +2,15 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Clock, CheckCircle2, ChevronRight, MapPin, Inbox } from "lucide-react";
 import axios from "axios";
+import { useToast } from "../../../components/Toast";
+import { getSocket, joinRoom, leaveRoom } from "../../../services/socket";
 
 export default function AssignedOrders() {
   const navigate = useNavigate();
   const [orders, setOrders] = useState([]);
   const [activeTab, setActiveTab] = useState("all"); // 'all', 'pending', 'progress', 'completed'
   const [loading, setLoading] = useState(true);
+  const { showToast } = useToast();
 
   const fetchOrders = async () => {
     try {
@@ -44,6 +47,30 @@ export default function AssignedOrders() {
     const timer = setInterval(() => {
       fetchOrdersSilent();
     }, 6000);
+
+    // Socket real-time integration
+    const rider = JSON.parse(localStorage.getItem("deliveryBoy") || "{}");
+    const riderId = rider._id;
+    if (riderId) {
+      const socket = getSocket();
+      joinRoom(`deliveryBoy:${riderId}`);
+
+      const handleAssigned = (data) => {
+        showToast({
+          type: "info",
+          message: data.message || "A new order has been assigned to you!",
+        });
+        fetchOrdersSilent();
+      };
+
+      socket.on("order:assigned", handleAssigned);
+
+      return () => {
+        clearInterval(timer);
+        socket.off("order:assigned", handleAssigned);
+        leaveRoom(`deliveryBoy:${riderId}`);
+      };
+    }
 
     return () => clearInterval(timer);
   }, [activeTab]);

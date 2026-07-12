@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate, useParams, Link } from "react-router-dom";
 import { ArrowLeft, Phone, MapPin, Store, ShoppingCart, IndianRupee, AlertCircle, Play, Navigation, CheckCircle } from "lucide-react";
 import axios from "axios";
+import { useToast } from "../../../components/Toast";
 
 export default function OrderDetail() {
   const navigate = useNavigate();
@@ -9,6 +10,7 @@ export default function OrderDetail() {
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
+  const { showToast } = useToast();
 
   const fetchOrderDetails = async () => {
     try {
@@ -48,7 +50,7 @@ export default function OrderDetail() {
       
       if (res.data.success) {
         setOrder(res.data.order);
-        alert(`Order status updated to: ${nextStatus.replace(/_/g, " ")}`);
+        showToast({ type: "success", message: `Order status updated to: ${nextStatus.replace(/_/g, " ")}` });
         
         // Navigation shortcuts depending on transition
         if (nextStatus === "On_the_Way" || nextStatus === "Reached_Customer") {
@@ -57,7 +59,7 @@ export default function OrderDetail() {
       }
     } catch (err) {
       console.error(err);
-      alert(err.response?.data?.message || "Failed to update status");
+      showToast({ type: "error", message: err.response?.data?.message || "Failed to update status" });
     } finally {
       setUpdating(false);
     }

@@ -212,7 +212,7 @@ const productSchema = new Schema(
     name: { type: String, required: true, trim: true, maxlength: 200, index: 'text' },
     slug: { type: String, required: true, lowercase: true, trim: true },
     brand: { type: String, trim: true, maxlength: 120 },
-    description: { type: String, trim: true, maxlength: 2000 },
+    description: { type: String, trim: true, maxlength: 10000 },
     images: {
       type: [String], // array of image URLs, first image treated as primary
       validate: { validator: (arr) => arr.length <= 8, message: 'A product can have at most 8 images' },

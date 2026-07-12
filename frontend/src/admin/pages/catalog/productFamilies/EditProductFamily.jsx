@@ -2,10 +2,12 @@ import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import axios from "axios";
 import { uploadFile } from "../../../../services/uploadService";
+import { useToast } from "../../../../components/Toast";
 
 export default function EditProductFamily() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { showToast } = useToast();
 
   const [categories, setCategories] = useState([]);
   const [subCategories, setSubCategories] = useState([]);
@@ -52,7 +54,7 @@ export default function EditProductFamily() {
       setNewImage((prev) => ({ ...prev, url: data.url }));
     } catch (err) {
       console.error(err);
-      alert(err.response?.data?.message || "Failed to upload image");
+      showToast({ type: "error", message: err.response?.data?.message || "Failed to upload image" });
     } finally {
       setUploadingImage(false);
     }
@@ -67,7 +69,7 @@ export default function EditProductFamily() {
       setFormData((prev) => ({ ...prev, ogImage: data.url }));
     } catch (err) {
       console.error(err);
-      alert(err.response?.data?.message || "Failed to upload image");
+      showToast({ type: "error", message: err.response?.data?.message || "Failed to upload image" });
     } finally {
       setUploadingOgImage(false);
     }
@@ -136,7 +138,7 @@ export default function EditProductFamily() {
 
   const handleAddImage = () => {
     if (!newImage.url || !newImage.altText) {
-      alert("Both Image URL and SEO Alt Text are required for accessibility.");
+      showToast({ type: "warning", message: "Both Image URL and SEO Alt Text are required for accessibility." });
       return;
     }
     setFormData((prev) => ({
@@ -156,7 +158,7 @@ export default function EditProductFamily() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!formData.subCategoryId || !formData.familyName) {
-      alert("Subcategory and Product Family Name are required");
+      showToast({ type: "warning", message: "Subcategory and Product Family Name are required" });
       return;
     }
 
@@ -206,7 +208,7 @@ export default function EditProductFamily() {
       }
     } catch (error) {
       console.error(error);
-      alert(error.response?.data?.message || "Failed to update product family");
+      showToast({ type: "error", message: error.response?.data?.message || "Failed to update product family" });
     } finally {
       setUpdating(false);
     }

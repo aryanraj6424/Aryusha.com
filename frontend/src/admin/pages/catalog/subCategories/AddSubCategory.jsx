@@ -2,9 +2,11 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { uploadFile } from "../../../../services/uploadService";
+import { useToast } from "../../../../components/Toast";
 
 export default function AddSubCategory() {
   const navigate = useNavigate();
+  const { showToast } = useToast();
   const [categories, setCategories] = useState([]);
   const [formData, setFormData] = useState({
     categoryId: "",
@@ -32,7 +34,7 @@ export default function AddSubCategory() {
       setFormData((prev) => ({ ...prev, ogImage: data.url }));
     } catch (err) {
       console.error(err);
-      alert(err.response?.data?.message || "Failed to upload image");
+      showToast({ type: "error", message: err.response?.data?.message || "Failed to upload image" });
     } finally {
       setUploadingOgImage(false);
     }
@@ -63,7 +65,7 @@ export default function AddSubCategory() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!formData.categoryId || !formData.name) {
-      alert("Category and Subcategory Name are required");
+      showToast({ type: "warning", message: "Category and Subcategory Name are required" });
       return;
     }
 
@@ -88,7 +90,7 @@ export default function AddSubCategory() {
       navigate("/admin/sub-categories");
     } catch (error) {
       console.error(error);
-      alert(error.response?.data?.message || "Failed to create subcategory");
+      showToast({ type: "error", message: error.response?.data?.message || "Failed to create subcategory" });
     } finally {
       setSaving(false);
     }

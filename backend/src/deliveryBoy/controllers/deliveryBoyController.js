@@ -3,6 +3,7 @@ import DeliveryBoyEarnings from "../models/DeliveryBoyEarnings.js";
 import CustomerOrder from "../../customer/models/CustomerOrder.js";
 import Vendor from "../../vendor/models/Vendor.js";
 import User from "../../customer/models/User.js";
+import { emitToRoom } from "../../socket/socketManager.js";
 
 // Seeding helper to ensure delivery boy has orders for UI demonstration
 const ensureMockAssignments = async (deliveryBoyId) => {
@@ -65,6 +66,36 @@ export const getDashboard = async (req, res) => {
       deliveryStatus: { $in: ["Assigned", "Picked_Up", "On_the_Way", "Reached_Customer"] }
     }).populate("vendorId", "shopName phone address latitude longitude");
 
+    // Compute weekly earnings breakdown (last 7 days)
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
+    sevenDaysAgo.setHours(0, 0, 0, 0);
+
+    const weeklyOrders = await CustomerOrder.find({
+      deliveryBoyId,
+      deliveryStatus: "Delivered",
+      updatedAt: { $gte: sevenDaysAgo }
+    }).select("deliveryCharge updatedAt");
+
+    // Build day-keyed map
+    const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    const dayMap = {};
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const key = d.toISOString().slice(0, 10); // YYYY-MM-DD
+      dayMap[key] = { day: dayNames[d.getDay()], amount: 0 };
+    }
+
+    weeklyOrders.forEach(order => {
+      const key = new Date(order.updatedAt).toISOString().slice(0, 10);
+      if (dayMap[key]) {
+        dayMap[key].amount += (order.deliveryCharge || 35);
+      }
+    });
+
+    const weeklyBreakdown = Object.values(dayMap);
+
     res.status(200).json({
       success: true,
       stats: {
@@ -74,7 +105,8 @@ export const getDashboard = async (req, res) => {
         inProgressOrders: inProgressCount,
       },
       earnings,
-      activeDeliveries
+      activeDeliveries,
+      weeklyBreakdown
     });
   } catch (error) {
     console.error("Get Delivery Boy Dashboard Error:", error);
@@ -184,6 +216,23 @@ export const updateOrderStatus = async (req, res) => {
 
     await order.save();
 
+    // Map status to socket event name
+    const eventMap = {
+      Picked_Up: "order:pickedUp",
+      On_the_Way: "order:onTheWay",
+      Reached_Customer: "order:reachedCustomer",
+    };
+    const eventName = eventMap[status];
+    if (eventName) {
+      const payload = { orderId: order._id, orderId: order.orderId, status };
+      // Notify customer
+      if (order.customerId) emitToRoom(`customer:${order.customerId}`, eventName, payload);
+      // Notify vendor
+      if (order.vendorId) emitToRoom(`vendor:${order.vendorId}`, eventName, payload);
+      // Notify admin dashboard
+      emitToRoom("admin:global", eventName, payload);
+    }
+
     res.status(200).json({
       success: true,
       message: `Status updated to ${status}`,
@@ -232,6 +281,12 @@ export const verifyOtp = async (req, res) => {
     });
 
     await order.save();
+
+    // Emit real-time "delivered" event to customer, vendor, and admin
+    const deliveredPayload = { orderId: order._id, orderId: order.orderId, status: "Delivered" };
+    if (order.customerId) emitToRoom(`customer:${order.customerId}`, "order:delivered", deliveredPayload);
+    if (order.vendorId) emitToRoom(`vendor:${order.vendorId}`, "order:delivered", deliveredPayload);
+    emitToRoom("admin:global", "order:delivered", deliveredPayload);
 
     // Credit earnings to rider
     const fee = order.deliveryCharge || 35;

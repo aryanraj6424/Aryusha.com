@@ -4,11 +4,13 @@ import {
   verifyOtp,
   resendOtp,
 } from "../../services/authApi";
+import { useToast } from "../../components/Toast";
 
 export default function OTPVerificationPage() {
 
   const navigate = useNavigate();
   const location = useLocation();
+  const { showToast } = useToast();
 
   const phoneNumber =
     location.state?.phoneNumber || "";
@@ -101,9 +103,8 @@ export default function OTPVerificationPage() {
       if (
         otpValue.length !== 6
       ) {
-        return alert(
-          "Please enter 6 digit OTP"
-        );
+        showToast({ type: "warning", message: "Please enter 6 digit OTP" });
+        return;
       }
 
       try {
@@ -118,10 +119,10 @@ export default function OTPVerificationPage() {
 
         console.log(response);
 
-        alert(
-          response.message ||
-          "OTP Verified Successfully"
-        );
+        showToast({
+          type: "success",
+          message: response.message || "OTP Verified Successfully"
+        });
 
         navigate(
           "/reset-password",
@@ -136,11 +137,10 @@ export default function OTPVerificationPage() {
 
         console.error(error);
 
-        alert(
-          error.response?.data?.message ||
-          error.message ||
-          "Network Error"
-        );
+        showToast({
+          type: "error",
+          message: error.response?.data?.message || error.message || "Network Error"
+        });
 
       } finally {
 
@@ -164,20 +164,19 @@ export default function OTPVerificationPage() {
 
         setTimer(30);
 
-        alert(
-          response.message ||
-          "OTP Resent Successfully"
-        );
+        showToast({
+          type: "success",
+          message: response.message || "OTP Resent Successfully"
+        });
 
       } catch (error) {
 
         console.error(error);
 
-        alert(
-          error.response?.data?.message ||
-          error.message ||
-          "Network Error"
-        );
+        showToast({
+          type: "error",
+          message: error.response?.data?.message || error.message || "Network Error"
+        });
 
       }
 

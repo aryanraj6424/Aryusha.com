@@ -5,9 +5,13 @@ import axios from "axios";
 import Button from "../../components/common/Button";
 import Dropdown from "../../components/common/Dropdown";
 import StatusBadge from "../../components/common/StatusBadge";
+import { useToast } from "../../../components/Toast";
+import ConfirmDialog from "../../../components/Toast/ConfirmDialog";
 
 export default function ProductList() {
   const navigate = useNavigate();
+  const { showToast } = useToast();
+  const [confirmState, setConfirmState] = useState(null);
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [subCategories, setSubCategories] = useState([]);
@@ -103,18 +107,25 @@ export default function ProductList() {
   };
 
   const handleDelete = async (productId) => {
-    if (window.confirm("Are you sure you want to delete this product?")) {
-      try {
-        const token = localStorage.getItem("adminToken");
-        await axios.delete(
-          `${import.meta.env.VITE_API_URL}/admin/product/delete/${productId}`,
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
-        fetchProducts();
-      } catch (error) {
-        console.error("Error deleting product:", error);
+    setConfirmState({
+      message: "Are you sure you want to delete this product?",
+      type: "danger",
+      onConfirm: async () => {
+        setConfirmState(null);
+        try {
+          const token = localStorage.getItem("adminToken");
+          await axios.delete(
+            `${import.meta.env.VITE_API_URL}/admin/product/delete/${productId}`,
+            { headers: { Authorization: `Bearer ${token}` } }
+          );
+          showToast({ type: "success", message: "Product deleted successfully." });
+          fetchProducts();
+        } catch (error) {
+          console.error("Error deleting product:", error);
+          showToast({ type: "error", message: "Failed to delete product." });
+        }
       }
-    }
+    });
   };
 
   const handleApprove = async (productId) => {
@@ -128,7 +139,7 @@ export default function ProductList() {
       fetchProducts();
     } catch (error) {
       console.error(error);
-      alert("Failed to approve product");
+      showToast({ type: "error", message: "Failed to approve product" });
     }
   };
 
@@ -145,7 +156,7 @@ export default function ProductList() {
       fetchProducts();
     } catch (error) {
       console.error(error);
-      alert("Failed to reject product");
+      showToast({ type: "error", message: "Failed to reject product" });
     }
   };
 
@@ -167,20 +178,26 @@ export default function ProductList() {
   // Bulk Operations
   const handleBulkDelete = async () => {
     if (selectedProducts.length === 0) return;
-    if (window.confirm(`Are you sure you want to delete ${selectedProducts.length} products?`)) {
-      try {
-        const token = localStorage.getItem("adminToken");
-        await axios.post(
-          `${import.meta.env.VITE_API_URL}/admin/product/bulk-delete`,
-          { productIds: selectedProducts },
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
-        setSelectedProducts([]);
-        fetchProducts();
-      } catch (error) {
-        console.error(error);
+    setConfirmState({
+      message: `Are you sure you want to delete ${selectedProducts.length} products?`,
+      type: "danger",
+      onConfirm: async () => {
+        setConfirmState(null);
+        try {
+          const token = localStorage.getItem("adminToken");
+          await axios.post(
+            `${import.meta.env.VITE_API_URL}/admin/product/bulk-delete`,
+            { productIds: selectedProducts },
+            { headers: { Authorization: `Bearer ${token}` } }
+          );
+          showToast({ type: "success", message: "Selected products deleted successfully." });
+          setSelectedProducts([]);
+          fetchProducts();
+        } catch (error) {
+          console.error(error);
+        }
       }
-    }
+    });
   };
 
   const handleBulkStatusChange = async (status) => {
@@ -216,7 +233,7 @@ export default function ProductList() {
       downloadAnchor.remove();
     } catch (error) {
       console.error(error);
-      alert("Export failed");
+      showToast({ type: "error", message: "Export failed" });
     }
   };
 
@@ -236,10 +253,10 @@ export default function ProductList() {
             { products: productsArray },
             { headers: { Authorization: `Bearer ${token}` } }
           );
-          alert(res.data.message || "Import completed!");
+          showToast({ type: "success", message: res.data.message || "Import completed!" });
           fetchProducts();
         } catch (err) {
-          alert("Import failed. Make sure the JSON follows the catalog import format.");
+          showToast({ type: "error", message: "Import failed. Make sure the JSON follows the catalog import format." });
         }
       };
       reader.readAsText(file);
@@ -609,6 +626,14 @@ export default function ProductList() {
             </div>
           </div>
         </div>
+      )}
+      {confirmState && (
+        <ConfirmDialog
+          message={confirmState.message}
+          type={confirmState.type || "warning"}
+          onConfirm={confirmState.onConfirm}
+          onCancel={() => setConfirmState(null)}
+        />
       )}
     </div>
   );

@@ -2,9 +2,13 @@ import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import axios from "axios";
 import { Plus, Pencil, Trash2, Search, Check, X } from "lucide-react";
+import { useToast } from "../../../../components/Toast";
+import ConfirmDialog from "../../../../components/Toast/ConfirmDialog";
 
 export default function ProductFamilyList() {
   const navigate = useNavigate();
+  const { showToast } = useToast();
+  const [confirmState, setConfirmState] = useState(null);
   const [productFamilies, setProductFamilies] = useState([]);
   const [subCategories, setSubCategories] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -42,19 +46,25 @@ export default function ProductFamilyList() {
   };
 
   const handleDelete = async (id) => {
-    if (window.confirm("Are you sure you want to delete this product family?")) {
-      try {
-        const token = localStorage.getItem("adminToken");
-        await axios.delete(
-          `${import.meta.env.VITE_API_URL}/product-families/${id}`,
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
-        fetchData();
-      } catch (error) {
-        console.error("Error deleting product family:", error);
-        alert("Failed to delete product family");
+    setConfirmState({
+      message: "Are you sure you want to delete this product family?",
+      type: "danger",
+      onConfirm: async () => {
+        setConfirmState(null);
+        try {
+          const token = localStorage.getItem("adminToken");
+          await axios.delete(
+            `${import.meta.env.VITE_API_URL}/product-families/${id}`,
+            { headers: { Authorization: `Bearer ${token}` } }
+          );
+          showToast({ type: "success", message: "Product family deleted successfully." });
+          fetchData();
+        } catch (error) {
+          console.error("Error deleting product family:", error);
+          showToast({ type: "error", message: "Failed to delete product family" });
+        }
       }
-    }
+    });
   };
 
   const handleApprove = async (id) => {
@@ -68,7 +78,7 @@ export default function ProductFamilyList() {
       fetchData();
     } catch (error) {
       console.error(error);
-      alert("Failed to approve product family");
+      showToast({ type: "error", message: "Failed to approve product family" });
     }
   };
 
@@ -85,7 +95,7 @@ export default function ProductFamilyList() {
       fetchData();
     } catch (error) {
       console.error(error);
-      alert("Failed to reject product family");
+      showToast({ type: "error", message: "Failed to reject product family" });
     }
   };
 
@@ -266,6 +276,14 @@ export default function ProductFamilyList() {
           </div>
         )}
       </div>
+      {confirmState && (
+        <ConfirmDialog
+          message={confirmState.message}
+          type={confirmState.type || "warning"}
+          onConfirm={confirmState.onConfirm}
+          onCancel={() => setConfirmState(null)}
+        />
+      )}
     </div>
   );
 }

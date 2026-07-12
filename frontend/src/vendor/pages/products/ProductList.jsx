@@ -22,11 +22,16 @@ import {
 } from "lucide-react";
 import axios from "axios";
 import { updateLinkedProduct, unlinkProduct } from "../../services/vendorApi";
+import { useToast } from "../../../components/Toast";
+import ConfirmDialog from "../../../components/Toast/ConfirmDialog";
 
 export default function ProductList() {
   const navigate = useNavigate();
   const { hasPermission } = useVendor();
   const fileInputRef = useRef(null);
+  const { showToast } = useToast();
+  // Confirm dialog state — holds { message, onConfirm } when a destructive action is pending
+  const [confirmState, setConfirmState] = useState(null);
 
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -52,12 +57,13 @@ export default function ProductList() {
     stock: "",
     sku: "",
     condition: "New",
-    vendorNotes: ""
+    vendorNotes: "",
+    variants: []
   });
 
-  const fetchData = async () => {
+  const fetchData = async (silent = false) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       const token = localStorage.getItem("vendorToken");
       const headers = { Authorization: `Bearer ${token}` };
 
@@ -83,14 +89,24 @@ export default function ProductList() {
           sku: link.sku,
           condition: link.condition,
           vendorNotes: link.vendorNotes,
-          variants: [
-            {
-              basePrice: link.price,
-              mrp: link.mrp,
-              stock: link.stock,
-              sku: link.sku
-            }
-          ],
+          originalVariants: link.masterProductId.variants || [],
+          variants: link.masterProductId.variants && link.masterProductId.variants.length > 0
+            ? link.masterProductId.variants.map(v => {
+                const vl = v.vendorListings?.[0];
+                return {
+                  variantLabel: v.variantLabel,
+                  basePrice: vl?.sellingPrice || link.price,
+                  mrp: v.mrp || link.mrp,
+                  stock: vl?.stock?.quantity || link.stock || 0,
+                  sku: link.sku
+                };
+              })
+            : [{
+                basePrice: link.price,
+                mrp: link.mrp,
+                stock: link.stock,
+                sku: link.sku
+              }],
           status: link.status === "active" ? "approved" : "inactive"
         };
       }).filter(Boolean);
@@ -102,12 +118,26 @@ export default function ProductList() {
     } catch (error) {
       console.error("Failed to load vendor products catalog:", error);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
   useEffect(() => {
     fetchData();
+
+    const handleFocus = () => {
+      fetchData(true);
+    };
+    window.addEventListener("focus", handleFocus);
+
+    const interval = setInterval(() => {
+      fetchData(true);
+    }, 7000);
+
+    return () => {
+      window.removeEventListener("focus", handleFocus);
+      clearInterval(interval);
+    };
   }, []);
 
   const handleOpenAdd = () => {
@@ -124,7 +154,18 @@ export default function ProductList() {
         stock: p.stock,
         sku: p.sku,
         condition: p.condition || "New",
-        vendorNotes: p.vendorNotes || ""
+        vendorNotes: p.vendorNotes || "",
+        variants: (p.originalVariants || []).map(v => {
+          const vl = v.vendorListings?.[0];
+          return {
+            variantId: v._id,
+            label: v.variantLabel,
+            isAvailable: vl ? !!vl.isAvailable : true,
+            sellingPrice: vl?.sellingPrice || "",
+            mrp: vl?.mrp || "",
+            stock: vl ? (vl.stock?.quantity || 0) : ""
+          };
+        })
       });
       setShowLinkEditModal(true);
     } else {
@@ -135,117 +176,136 @@ export default function ProductList() {
   const handleOpenDuplicate = async (p, e) => {
     if (e) e.stopPropagation();
     if (p.isLinked) return; // cannot duplicate linked master products
-    if (!window.confirm(`Are you sure you want to duplicate "${p.name}"?`)) return;
-    try {
-      const token = localStorage.getItem("vendorToken");
-      const headers = { Authorization: `Bearer ${token}` };
-
-      const payload = {
-        familyId: p.familyId?._id || p.familyId || "",
-        categoryId: p.categoryId?._id || p.categoryId || "",
-        subCategoryId: p.subCategoryId?._id || p.subCategoryId || "",
-        name: `${p.name} (Copy)`,
-        brand: p.brand || "",
-        description: p.description || "",
-        unitType: p.unitType || "weight",
-        mrp: p.variants?.[0]?.mrp || "",
-        sellingPrice: p.variants?.[0]?.basePrice || "",
-        sku: p.variants?.[0]?.sku ? `${p.variants[0].sku}-COPY` : "",
-        stock: p.variants?.[0]?.stock || 0,
-        images: p.images || [],
-        attributes: p.attributes || [],
-        status: "draft"
-      };
-
-      const res = await axios.post(`${import.meta.env.VITE_API_URL}/vendor/product/create`, payload, { headers });
-      if (res.data.success) {
-        alert("Product duplicated successfully as Draft!");
-        fetchData();
+    setConfirmState({
+      message: `Are you sure you want to duplicate "${p.name}"?`,
+      onConfirm: async () => {
+        setConfirmState(null);
+        try {
+          const token = localStorage.getItem("vendorToken");
+          const headers = { Authorization: `Bearer ${token}` };
+          const payload = {
+            familyId: p.familyId?._id || p.familyId || "",
+            categoryId: p.categoryId?._id || p.categoryId || "",
+            subCategoryId: p.subCategoryId?._id || p.subCategoryId || "",
+            name: `${p.name} (Copy)`,
+            brand: p.brand || "",
+            description: p.description || "",
+            unitType: p.unitType || "weight",
+            mrp: p.variants?.[0]?.mrp || "",
+            sellingPrice: p.variants?.[0]?.basePrice || "",
+            sku: p.variants?.[0]?.sku ? `${p.variants[0].sku}-COPY` : "",
+            stock: p.variants?.[0]?.stock || 0,
+            images: p.images || [],
+            attributes: p.attributes || [],
+            status: "draft"
+          };
+          const res = await axios.post(`${import.meta.env.VITE_API_URL}/vendor/product/create`, payload, { headers });
+          if (res.data.success) {
+            showToast({ type: "success", message: "Product duplicated successfully as Draft!" });
+            fetchData();
+          }
+        } catch (error) {
+          console.error(error);
+          showToast({ type: "error", message: "Failed to duplicate product." });
+        }
       }
-    } catch (error) {
-      console.error(error);
-      alert("Failed to duplicate product.");
-    }
+    });
   };
 
   const handleDelete = async (p, e) => {
     if (e) e.stopPropagation();
     if (p.isLinked) {
-      if (!window.confirm(`Are you sure you want to unlink "${p.name}" from your store?`)) return;
-      try {
-        setLoading(true);
-        await unlinkProduct(p.linkId);
-        alert("Product unlinked successfully.");
-        fetchData();
-      } catch (err) {
-        console.error(err);
-        alert("Failed to unlink product.");
-        setLoading(false);
-      }
-    } else {
-      if (!window.confirm(`Are you sure you want to delete the draft "${p.name}"?`)) return;
-      try {
-        const token = localStorage.getItem("vendorToken");
-        const headers = { Authorization: `Bearer ${token}` };
-
-        const res = await axios.delete(`${import.meta.env.VITE_API_URL}/vendor/product/delete/${p._id}`, { headers });
-        if (res.data.success) {
-          alert("Product draft deleted successfully.");
-          fetchData();
+      setConfirmState({
+        message: `Are you sure you want to unlink "${p.name}" from your store?`,
+        type: "danger",
+        onConfirm: async () => {
+          setConfirmState(null);
+          try {
+            setLoading(true);
+            await unlinkProduct(p.linkId);
+            showToast({ type: "success", message: "Product unlinked successfully." });
+            fetchData();
+          } catch (err) {
+            console.error(err);
+            showToast({ type: "error", message: "Failed to unlink product." });
+            setLoading(false);
+          }
         }
-      } catch (error) {
-        console.error(error);
-        alert("Failed to delete draft product.");
-      }
+      });
+    } else {
+      setConfirmState({
+        message: `Are you sure you want to delete the draft "${p.name}"?`,
+        type: "danger",
+        onConfirm: async () => {
+          setConfirmState(null);
+          try {
+            const token = localStorage.getItem("vendorToken");
+            const headers = { Authorization: `Bearer ${token}` };
+            const res = await axios.delete(`${import.meta.env.VITE_API_URL}/vendor/product/delete/${p._id}`, { headers });
+            if (res.data.success) {
+              showToast({ type: "success", message: "Product draft deleted successfully." });
+              fetchData();
+            }
+          } catch (error) {
+            console.error(error);
+            showToast({ type: "error", message: "Failed to delete draft product." });
+          }
+        }
+      });
     }
   };
 
   // Bulk status updates
   const handleBulkStatusChange = async (newStatus) => {
     if (selectedProducts.length === 0) return;
-    if (!window.confirm(`Apply bulk update [Status: ${newStatus}] to ${selectedProducts.length} items?`)) return;
-
-    try {
-      const token = localStorage.getItem("vendorToken");
-      const headers = { Authorization: `Bearer ${token}` };
-
-      const res = await axios.post(`${import.meta.env.VITE_API_URL}/vendor/product/bulk-update`, {
-        productIds: selectedProducts,
-        status: newStatus
-      }, { headers });
-
-      if (res.data.success) {
-        alert("Bulk products updated successfully.");
-        setSelectedProducts([]);
-        fetchData();
+    setConfirmState({
+      message: `Apply bulk update [Status: ${newStatus}] to ${selectedProducts.length} items?`,
+      onConfirm: async () => {
+        setConfirmState(null);
+        try {
+          const token = localStorage.getItem("vendorToken");
+          const headers = { Authorization: `Bearer ${token}` };
+          const res = await axios.post(`${import.meta.env.VITE_API_URL}/vendor/product/bulk-update`, {
+            productIds: selectedProducts,
+            status: newStatus
+          }, { headers });
+          if (res.data.success) {
+            showToast({ type: "success", message: "Bulk products updated successfully." });
+            setSelectedProducts([]);
+            fetchData();
+          }
+        } catch (error) {
+          console.error(error);
+          showToast({ type: "error", message: "Failed to perform bulk update." });
+        }
       }
-    } catch (error) {
-      console.error(error);
-      alert("Failed to perform bulk update.");
-    }
+    });
   };
 
   const handleBulkDelete = async () => {
     if (selectedProducts.length === 0) return;
-    if (!window.confirm(`Permanently delete ${selectedProducts.length} selected drafts?`)) return;
-
-    try {
-      const token = localStorage.getItem("vendorToken");
-      const headers = { Authorization: `Bearer ${token}` };
-
-      const res = await axios.post(`${import.meta.env.VITE_API_URL}/vendor/product/bulk-delete`, {
-        productIds: selectedProducts
-      }, { headers });
-
-      if (res.data.success) {
-        alert("Bulk drafts deleted successfully.");
-        setSelectedProducts([]);
-        fetchData();
+    setConfirmState({
+      message: `Permanently delete ${selectedProducts.length} selected drafts?`,
+      type: "danger",
+      onConfirm: async () => {
+        setConfirmState(null);
+        try {
+          const token = localStorage.getItem("vendorToken");
+          const headers = { Authorization: `Bearer ${token}` };
+          const res = await axios.post(`${import.meta.env.VITE_API_URL}/vendor/product/bulk-delete`, {
+            productIds: selectedProducts
+          }, { headers });
+          if (res.data.success) {
+            showToast({ type: "success", message: "Bulk drafts deleted successfully." });
+            setSelectedProducts([]);
+            fetchData();
+          }
+        } catch (error) {
+          console.error(error);
+          showToast({ type: "error", message: "Failed to execute bulk delete." });
+        }
       }
-    } catch (error) {
-      console.error(error);
-      alert("Failed to execute bulk delete.");
-    }
+    });
   };
 
   // Selection handlers
@@ -290,12 +350,12 @@ export default function ProductList() {
 
       const res = await axios.post(`${import.meta.env.VITE_API_URL}/vendor/product/import`, formData, { headers });
       if (res.data.success) {
-        alert("Products catalog imported successfully!");
+        showToast({ type: "success", message: "Products catalog imported successfully!" });
         fetchData();
       }
     } catch (err) {
       console.error(err);
-      alert(err.response?.data?.message || "Failed to import products catalog.");
+      showToast({ type: "error", message: err.response?.data?.message || "Failed to import products catalog." });
     } finally {
       setLoading(false);
     }
@@ -902,6 +962,68 @@ export default function ProductList() {
                 />
               </div>
 
+              {linkEditForm.variants && linkEditForm.variants.length > 0 && (
+                <div className="space-y-4 pt-4 border-t border-slate-100">
+                  <h3 className="font-bold text-slate-800 text-sm">Available Variants</h3>
+                  <div className="max-h-60 overflow-y-auto space-y-3">
+                    {linkEditForm.variants.map((v, idx) => (
+                      <div key={v.variantId} className="flex flex-col gap-2 p-3 border rounded-xl bg-slate-50 items-start shadow-sm">
+                        <div className="flex items-center gap-2 w-full">
+                          <input 
+                            type="checkbox" 
+                            checked={v.isAvailable} 
+                            onChange={(e) => {
+                              const newV = [...linkEditForm.variants];
+                              newV[idx].isAvailable = e.target.checked;
+                              setLinkEditForm({ ...linkEditForm, variants: newV });
+                            }}
+                            className="w-4 h-4 accent-purple-600 rounded cursor-pointer"
+                          />
+                          <span className="font-bold text-slate-800 text-sm">{v.label}</span>
+                        </div>
+                        {v.isAvailable && (
+                          <div className="grid grid-cols-3 gap-2 w-full pl-6">
+                            <input 
+                              type="number" 
+                              placeholder="Price" 
+                              value={v.sellingPrice} 
+                              onChange={(e) => {
+                                const newV = [...linkEditForm.variants];
+                                newV[idx].sellingPrice = e.target.value;
+                                setLinkEditForm({ ...linkEditForm, variants: newV });
+                              }} 
+                              className="px-2 py-1.5 border rounded-lg text-xs w-full focus:ring-2 focus:ring-purple-500 focus:outline-none"
+                            />
+                            <input 
+                              type="number" 
+                              placeholder="MRP" 
+                              value={v.mrp} 
+                              onChange={(e) => {
+                                const newV = [...linkEditForm.variants];
+                                newV[idx].mrp = e.target.value;
+                                setLinkEditForm({ ...linkEditForm, variants: newV });
+                              }} 
+                              className="px-2 py-1.5 border rounded-lg text-xs w-full focus:ring-2 focus:ring-purple-500 focus:outline-none"
+                            />
+                            <input 
+                              type="number" 
+                              placeholder="Stock" 
+                              value={v.stock} 
+                              onChange={(e) => {
+                                const newV = [...linkEditForm.variants];
+                                newV[idx].stock = e.target.value;
+                                setLinkEditForm({ ...linkEditForm, variants: newV });
+                              }} 
+                              className="px-2 py-1.5 border rounded-lg text-xs w-full focus:ring-2 focus:ring-purple-500 focus:outline-none"
+                            />
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div className="flex gap-3 pt-4 border-t border-slate-100 font-bold">
                 <button
                   type="button"
@@ -914,15 +1036,15 @@ export default function ProductList() {
                   type="button"
                   onClick={async () => {
                     if (!linkEditForm.price || Number(linkEditForm.price) <= 0) {
-                      alert("Please enter a valid price.");
+                      showToast({ type: "warning", message: "Please enter a valid price." });
                       return;
                     }
                     if (linkEditForm.mrp && Number(linkEditForm.mrp) <= 0) {
-                      alert("MRP must be greater than 0 if specified.");
+                      showToast({ type: "warning", message: "MRP must be greater than 0 if specified." });
                       return;
                     }
                     if (linkEditForm.mrp && Number(linkEditForm.price) > Number(linkEditForm.mrp)) {
-                      alert("Selling price cannot exceed MRP.");
+                      showToast({ type: "warning", message: "Selling price cannot exceed MRP." });
                       return;
                     }
                     try {
@@ -933,15 +1055,22 @@ export default function ProductList() {
                         stock: Number(linkEditForm.stock || 0),
                         sku: linkEditForm.sku.trim(),
                         condition: linkEditForm.condition,
-                        vendorNotes: linkEditForm.vendorNotes.trim()
+                        vendorNotes: linkEditForm.vendorNotes.trim(),
+                        variants: linkEditForm.variants.filter(v => v.isAvailable).map(v => ({
+                          variantId: v.variantId,
+                          sellingPrice: v.sellingPrice ? Number(v.sellingPrice) : Number(linkEditForm.price),
+                          mrp: v.mrp ? Number(v.mrp) : (linkEditForm.mrp ? Number(linkEditForm.mrp) : null),
+                          stock: v.stock ? Number(v.stock) : Number(linkEditForm.stock || 0),
+                          isAvailable: true
+                        }))
                       });
                       setShowLinkEditModal(false);
                       setEditingLink(null);
-                      alert("Listing updated successfully!");
+                      showToast({ type: "success", message: "Listing updated successfully!" });
                       fetchData();
                     } catch (err) {
                       console.error(err);
-                      alert("Failed to update listing.");
+                      showToast({ type: "error", message: "Failed to update listing." });
                       setLoading(false);
                     }
                   }}
@@ -953,6 +1082,16 @@ export default function ProductList() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* In-UI confirmation dialog for destructive actions */}
+      {confirmState && (
+        <ConfirmDialog
+          message={confirmState.message}
+          type={confirmState.type || "warning"}
+          onConfirm={confirmState.onConfirm}
+          onCancel={() => setConfirmState(null)}
+        />
       )}
     </div>
   );

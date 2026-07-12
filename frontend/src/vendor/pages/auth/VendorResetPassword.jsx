@@ -1,89 +1,55 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
+import { useToast } from "../../../components/Toast";
 
 export default function VendorResetPassword() {
   const navigate = useNavigate();
+  const { showToast } = useToast();
 
-  const [password, setPassword] =
-    useState("");
-
-  const [
-    confirmPassword,
-    setConfirmPassword,
-  ] = useState("");
-
-  const [loading, setLoading] =
-    useState(false);
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [loading, setLoading] = useState(false);
 
   const handleReset = async (e) => {
     e.preventDefault();
 
-    const email =
-      localStorage.getItem(
-        "vendorResetEmail"
-      );
+    const phone = localStorage.getItem("vendorResetPhone");
 
-    if (!email) {
-      alert(
-        "Session expired. Please try again."
-      );
-
-      return navigate(
-        "/vendor/forgot-password"
-      );
+    if (!phone) {
+      showToast({ type: "warning", message: "Session expired. Please try again." });
+      return navigate("/vendor/forgot-password");
     }
 
-    if (
-      password !== confirmPassword
-    ) {
-      return alert(
-        "Passwords do not match"
-      );
+    if (password !== confirmPassword) {
+      showToast({ type: "warning", message: "Passwords do not match" });
+      return;
     }
 
     if (password.length < 6) {
-      return alert(
-        "Password must be at least 6 characters"
-      );
+      showToast({ type: "warning", message: "Password must be at least 6 characters" });
+      return;
     }
 
     try {
       setLoading(true);
 
-      const response =
-        await axios.post(
-          `${import.meta.env.VITE_API_URL}/vendor/auth/reset-password`,
-          {
-            businessEmail: email,
-            newPassword:
-              password,
-          }
-        );
+      const response = await axios.post(
+        `${import.meta.env.VITE_API_URL}/vendor/auth/reset-password`,
+        { phone, newPassword: password }
+      );
 
-      if (
-        response.data.success
-      ) {
-        localStorage.removeItem(
-          "vendorResetEmail"
-        );
-
-        alert(
-          "Password Reset Successfully"
-        );
-
-        navigate(
-          "/vendor/login"
-        );
+      if (response.data.success) {
+        localStorage.removeItem("vendorResetPhone");
+        showToast({ type: "success", message: "Password reset successfully!" });
+        navigate("/vendor/login");
       }
     } catch (error) {
       console.error(error);
-
-      alert(
-        error.response?.data
-          ?.message ||
-          "Password reset failed"
-      );
+      showToast({
+        type: "error",
+        message: error.response?.data?.message || "Password reset failed",
+      });
     } finally {
       setLoading(false);
     }
@@ -102,20 +68,13 @@ export default function VendorResetPassword() {
           Create a new password
         </p>
 
-        <form
-          onSubmit={handleReset}
-          className="space-y-4"
-        >
+        <form onSubmit={handleReset} className="space-y-4">
 
           <input
             type="password"
             placeholder="New Password"
             value={password}
-            onChange={(e) =>
-              setPassword(
-                e.target.value
-              )
-            }
+            onChange={(e) => setPassword(e.target.value)}
             className="w-full border p-3 rounded-xl outline-none focus:border-purple-500"
             required
           />
@@ -124,11 +83,7 @@ export default function VendorResetPassword() {
             type="password"
             placeholder="Confirm Password"
             value={confirmPassword}
-            onChange={(e) =>
-              setConfirmPassword(
-                e.target.value
-              )
-            }
+            onChange={(e) => setConfirmPassword(e.target.value)}
             className="w-full border p-3 rounded-xl outline-none focus:border-purple-500"
             required
           />
@@ -138,9 +93,7 @@ export default function VendorResetPassword() {
             disabled={loading}
             className="w-full bg-purple-600 text-white p-3 rounded-xl hover:bg-purple-700 transition"
           >
-            {loading
-              ? "Resetting..."
-              : "Reset Password"}
+            {loading ? "Resetting..." : "Reset Password"}
           </button>
 
         </form>

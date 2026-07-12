@@ -3,9 +3,11 @@ import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { getUserAddresses } from "../../services/addressApi";
 import { ArrowLeft, MapPin, Truck, Check, Loader2, Calendar, Clock, CreditCard, Sparkles, Plus, Minus, ShoppingBag, Trash2 } from "lucide-react";
+import { useToast } from "../../components/Toast";
 
 export default function CheckoutPage() {
   const navigate = useNavigate();
+  const { showToast } = useToast();
   const [cart, setCart] = useState([]);
   const [addresses, setAddresses] = useState([]);
   const [selectedAddress, setSelectedAddress] = useState(null);
@@ -32,7 +34,7 @@ export default function CheckoutPage() {
 
   useEffect(() => {
     if (!user) {
-      alert("Please login first.");
+      showToast({ type: "warning", message: "Please login first." });
       navigate("/login");
       return;
     }
@@ -55,7 +57,7 @@ export default function CheckoutPage() {
       const stored = localStorage.getItem("cart");
       const parsed = stored ? JSON.parse(stored) : [];
       if (!Array.isArray(parsed) || parsed.length === 0) {
-        alert("Your cart is empty.");
+        showToast({ type: "warning", message: "Your cart is empty." });
         navigate("/customer/dashboard");
         return;
       }
@@ -195,7 +197,7 @@ export default function CheckoutPage() {
     if (updated.length === 0) {
       setCheckoutSummary(null);
       localStorage.removeItem("appliedCouponCode");
-      alert("Your cart is empty.");
+      showToast({ type: "warning", message: "Your cart is empty." });
       navigate("/customer/dashboard");
     } else {
       fetchSummary(updated, checkoutSummary?.appliedCoupon?.code);
@@ -244,15 +246,15 @@ export default function CheckoutPage() {
 
   const handlePlaceOrder = async () => {
     if (!selectedAddress) {
-      alert("Please select a delivery address.");
+      showToast({ type: "warning", message: "Please select a delivery address." });
       return;
     }
     if (!isSlotConfirmed || !selectedSlot) {
-      alert("Please select and confirm a delivery slot.");
+      showToast({ type: "warning", message: "Please select and confirm a delivery slot." });
       return;
     }
     if (!paymentMethod) {
-      alert("Please choose a payment method.");
+      showToast({ type: "warning", message: "Please choose a payment method." });
       return;
     }
     if (cart.length === 0) return;
@@ -313,7 +315,7 @@ export default function CheckoutPage() {
       );
 
       if (res.data.success) {
-        alert(res.data.message || "Order placed successfully!");
+        showToast({ type: "success", message: res.data.message || "Order placed successfully!" });
         localStorage.removeItem("cart");
         localStorage.removeItem("checkoutSummary");
         localStorage.removeItem("appliedCouponCode");
@@ -323,7 +325,7 @@ export default function CheckoutPage() {
       }
     } catch (error) {
       console.error("Order placement error:", error);
-      alert(error.response?.data?.message || "Failed to place order. Please try again.");
+      showToast({ type: "error", message: error.response?.data?.message || "Failed to place order. Please try again." });
     } finally {
       setLoading(false);
     }

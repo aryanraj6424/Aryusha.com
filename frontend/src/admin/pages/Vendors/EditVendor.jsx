@@ -1,10 +1,12 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { useState, useEffect } from "react";
 import axios from "axios";
+import { useToast } from "../../../components/Toast";
 
 export default function EditVendor() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { showToast } = useToast();
 
   const [formData, setFormData] = useState({
     businessName: "",
@@ -53,7 +55,7 @@ export default function EditVendor() {
         });
       } catch (error) {
         console.error(error);
-        alert("Failed to load vendor details.");
+        showToast({ type: "error", message: "Failed to load vendor details." });
       } finally {
         setLoading(false);
       }
@@ -102,11 +104,11 @@ export default function EditVendor() {
       };
 
       await axios.put(`${import.meta.env.VITE_API_URL}/admin/vendors/${id}`, payload);
-      alert("Vendor updated successfully.");
+      showToast({ type: "success", message: "Vendor updated successfully." });
       navigate("/admin/vendors");
     } catch (error) {
       console.error(error);
-      alert(error.response?.data?.message || "Failed to update vendor.");
+      showToast({ type: "error", message: error.response?.data?.message || "Failed to update vendor." });
     }
   };
 

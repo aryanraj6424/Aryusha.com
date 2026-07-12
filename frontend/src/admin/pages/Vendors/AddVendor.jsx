@@ -2,9 +2,11 @@ import { useState } from "react";
 import { ArrowLeft, Save } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import axios from "axios";
+import { useToast } from "../../../components/Toast";
 
 export default function AddVendor() {
   const navigate = useNavigate();
+  const { showToast } = useToast();
   const [formData, setFormData] = useState({
     // Vendor Info
     businessName: "",
@@ -41,7 +43,7 @@ export default function AddVendor() {
     e.preventDefault();
 
     if (!formData.businessName || !formData.phone || !formData.email) {
-      alert("Business Name, Phone, and Email are required.");
+      showToast({ type: "warning", message: "Business Name, Phone, and Email are required." });
       return;
     }
 
@@ -85,11 +87,11 @@ export default function AddVendor() {
       };
 
       await axios.post(`${import.meta.env.VITE_API_URL}/admin/vendors`, payload);
-      alert("Vendor added successfully.");
+      showToast({ type: "success", message: "Vendor added successfully." });
       navigate("/admin/vendors");
     } catch (error) {
       console.error(error);
-      alert(error.response?.data?.message || "Failed to add vendor.");
+      showToast({ type: "error", message: error.response?.data?.message || "Failed to add vendor." });
     }
   };
 

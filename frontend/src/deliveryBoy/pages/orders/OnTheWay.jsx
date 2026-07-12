@@ -4,6 +4,7 @@ import { ArrowLeft, Navigation, MapPin, Store, CheckCircle } from "lucide-react"
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import axios from "axios";
+import { useToast } from "../../../components/Toast";
 
 // Fix Leaflet icons
 delete L.Icon.Default.prototype._getIconUrl;
@@ -19,6 +20,7 @@ export default function OnTheWay() {
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
+  const { showToast } = useToast();
 
   const mapRef = useRef(null);
   const mapInstanceRef = useRef(null);
@@ -127,14 +129,14 @@ export default function OnTheWay() {
       
       if (res.data.success) {
         setOrder(res.data.order);
-        alert(`Status updated to: ${nextStatus.replace(/_/g, " ")}`);
+        showToast({ type: "success", message: `Status updated to: ${nextStatus.replace(/_/g, " ")}` });
         if (nextStatus === "Reached_Customer") {
           navigate(`/delivery-boy/orders/${id}/verify`);
         }
       }
     } catch (err) {
       console.error(err);
-      alert(err.response?.data?.message || "Failed to update status");
+      showToast({ type: "error", message: err.response?.data?.message || "Failed to update status" });
     } finally {
       setUpdating(false);
     }

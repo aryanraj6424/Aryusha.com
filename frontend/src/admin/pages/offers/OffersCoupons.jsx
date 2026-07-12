@@ -4,8 +4,10 @@ import {
   Tag, Plus, Edit, Trash2, Calendar, AlertCircle, CheckCircle, 
   Search, X, Loader2, RefreshCw, Layers 
 } from "lucide-react";
+import ConfirmDialog from "../../../components/Toast/ConfirmDialog";
 
 export default function OffersCoupons() {
+  const [confirmState, setConfirmState] = useState(null);
   const [coupons, setCoupons] = useState([]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
@@ -181,21 +183,24 @@ export default function OffersCoupons() {
   };
 
   const handleDelete = async (id, code) => {
-    if (!window.confirm(`Are you sure you want to delete coupon code "${code}"?`)) {
-      return;
-    }
-
-    try {
-      const res = await deleteCoupon(id);
-      if (res.success) {
-        setSuccessMsg(`Coupon "${code}" deleted successfully.`);
-        fetchCoupons();
-        setTimeout(() => setSuccessMsg(""), 3000);
+    setConfirmState({
+      message: `Are you sure you want to delete coupon code "${code}"?`,
+      type: "danger",
+      onConfirm: async () => {
+        setConfirmState(null);
+        try {
+          const res = await deleteCoupon(id);
+          if (res.success) {
+            setSuccessMsg(`Coupon "${code}" deleted successfully.`);
+            fetchCoupons();
+            setTimeout(() => setSuccessMsg(""), 3000);
+          }
+        } catch (err) {
+          console.error(err);
+          setErrorMsg("Failed to delete coupon.");
+        }
       }
-    } catch (err) {
-      console.error(err);
-      setErrorMsg("Failed to delete coupon.");
-    }
+    });
   };
 
   // Filtered List
@@ -620,6 +625,14 @@ export default function OffersCoupons() {
             </form>
           </div>
         </div>
+      )}
+      {confirmState && (
+        <ConfirmDialog
+          message={confirmState.message}
+          type={confirmState.type || "warning"}
+          onConfirm={confirmState.onConfirm}
+          onCancel={() => setConfirmState(null)}
+        />
       )}
     </div>
   );

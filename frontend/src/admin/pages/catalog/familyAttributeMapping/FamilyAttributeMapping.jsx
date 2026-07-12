@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from "react";
 import axios from "axios";
+import { useToast } from "../../../../components/Toast";
 
 export default function FamilyAttributeMapping() {
+  const { showToast } = useToast();
   const [families, setFamilies] = useState([]);
   const [attributes, setAttributes] = useState([]);
   const [selectedFamily, setSelectedFamily] = useState("");
@@ -45,7 +47,7 @@ export default function FamilyAttributeMapping() {
   // Save Mapping
   const handleSave = async () => {
     if (!selectedFamily) {
-      alert("Select a Product Family");
+      showToast({ type: "warning", message: "Select a Product Family" });
       return;
     }
 
@@ -57,10 +59,10 @@ export default function FamilyAttributeMapping() {
         attributes: selectedAttributes,
       });
 
-      alert("Mapping Saved Successfully");
+      showToast({ type: "success", message: "Mapping Saved Successfully" });
     } catch (err) {
       console.log(err);
-      alert("Error saving mapping");
+      showToast({ type: "error", message: "Error saving mapping" });
     } finally {
       setLoading(false);
     }

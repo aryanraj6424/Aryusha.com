@@ -1,14 +1,22 @@
 import { useState } from "react";
-import { Search, Bell, User, ChevronDown } from "lucide-react";
+import { Search, Bell, User, ChevronDown, Menu } from "lucide-react";
 
-export default function AdminHeader() {
+export default function AdminHeader({ onMenuClick }) {
   const [showSearch, setShowSearch] = useState(false);
 
   return (
-    <header className="bg-white border-b border-gray-200 px-4 lg:px-6 py-4 flex items-center justify-between">
-      {/* Left - Logo and Title */}
-      <div className="flex items-center gap-4">
-        <h1 className="text-lg lg:text-xl font-semibold text-gray-800">Super Admin Panel</h1>
+    <header className="bg-white border-b border-gray-200 px-4 lg:px-6 py-4 flex items-center justify-between sticky top-0 z-30 shadow-sm">
+      {/* Left - Menu Button (mobile only) and Title */}
+      <div className="flex items-center gap-3">
+        <button
+          onClick={onMenuClick}
+          className="lg:hidden p-2 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer text-gray-700"
+        >
+          <Menu size={20} />
+        </button>
+        <h1 className="text-lg lg:text-xl font-bold text-gray-800 tracking-wide">
+          Admin Panel
+        </h1>
       </div>
 
       {/* Right - Search, Notifications, Profile */}

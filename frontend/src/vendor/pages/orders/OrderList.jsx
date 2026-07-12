@@ -1,16 +1,20 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Search, MapPin, User, Clock, CheckCircle, ArrowRight, ShieldCheck, ChevronDown, Check, Phone, RefreshCw, ShoppingCart, Info, Lock } from "lucide-react";
 import axios from "axios";
+import { useToast } from "../../../components/Toast";
+import { getSocket, joinRoom, leaveRoom } from "../../../services/socket";
 
 export default function OrderList() {
   const [orders, setOrders] = useState([]);
   const [riders, setRiders] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState("all"); // 'all', 'pending', 'assigned', 'transit', 'completed'
-  const [selectedOrder, setSelectedOrder] = useState(null); // currently active selected order object
+  const [activeTab, setActiveTab] = useState("all");
+  const [selectedOrder, setSelectedOrder] = useState(null);
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [assigning, setAssigning] = useState(false);
   const [accepting, setAccepting] = useState(false);
+  const { showToast } = useToast();
+  const socketRef = useRef(null);
 
   const fetchOrders = async () => {
     try {
@@ -25,7 +29,7 @@ export default function OrderList() {
           if (selectedOrder) {
             const fresh = res.data.orders.find(o => o._id === selectedOrder._id);
             setSelectedOrder(fresh || res.data.orders[0]);
-          } else {
+          } else if (window.innerWidth >= 1024) {
             setSelectedOrder(res.data.orders[0]);
           }
         } else {
@@ -60,7 +64,42 @@ export default function OrderList() {
       fetchOrders();
     }, 7000);
 
-    return () => clearInterval(timer);
+    // Join vendor's socket room for real-time delivery status updates
+    const vendor = JSON.parse(localStorage.getItem("vendor") || "{}");
+    const vendorId = vendor._id;
+    if (vendorId) {
+      const socket = getSocket();
+      socketRef.current = socket;
+      joinRoom(`vendor:${vendorId}`);
+
+      const handleStatusUpdate = (data) => {
+        const statusMessages = {
+          "order:pickedUp": "Order picked up by delivery rider!",
+          "order:onTheWay": "Delivery rider is on the way!",
+          "order:reachedCustomer": "Delivery rider reached the customer!",
+          "order:delivered": "Order delivered successfully!",
+        };
+        const msg = statusMessages[data.event] || "Order status updated";
+        showToast({ type: "info", message: msg });
+        fetchOrders();
+      };
+
+      socket.on("order:pickedUp", (d) => { showToast({ type: "info", message: "Order picked up by delivery rider!" }); fetchOrders(); });
+      socket.on("order:onTheWay", (d) => { showToast({ type: "info", message: "Delivery rider is on the way!" }); fetchOrders(); });
+      socket.on("order:reachedCustomer", (d) => { showToast({ type: "info", message: "Delivery rider reached the customer!" }); fetchOrders(); });
+      socket.on("order:delivered", (d) => { showToast({ type: "success", message: "Order delivered successfully!" }); fetchOrders(); });
+    }
+
+    return () => {
+      clearInterval(timer);
+      if (vendorId && socketRef.current) {
+        socketRef.current.off("order:pickedUp");
+        socketRef.current.off("order:onTheWay");
+        socketRef.current.off("order:reachedCustomer");
+        socketRef.current.off("order:delivered");
+        leaveRoom(`vendor:${vendorId}`);
+      }
+    };
   }, []);
 
   useEffect(() => {
@@ -92,13 +131,13 @@ export default function OrderList() {
       const res = await axios[method](endpoint, { deliveryBoyId: riderId }, { headers });
 
       if (res.data.success) {
-        alert(isReassign ? "Delivery Rider reassigned successfully!" : "Delivery Rider assigned successfully!");
+        showToast({ type: "success", message: isReassign ? "Delivery Rider reassigned successfully!" : "Delivery Rider assigned successfully!" });
         setShowAssignModal(false);
         fetchOrders();
       }
     } catch (error) {
       console.error("Error assigning delivery boy:", error);
-      alert(error.response?.data?.message || "Failed to assign delivery boy.");
+      showToast({ type: "error", message: error.response?.data?.message || "Failed to assign delivery boy." });
     } finally {
       setAssigning(false);
     }
@@ -116,12 +155,12 @@ export default function OrderList() {
         { headers }
       );
       if (res.data.success) {
-        alert("Order accepted successfully!");
+        showToast({ type: "success", message: "Order accepted successfully!" });
         await fetchOrders();
       }
     } catch (error) {
       console.error("Failed to accept order:", error);
-      alert(error.response?.data?.message || "Failed to accept order.");
+      showToast({ type: "error", message: error.response?.data?.message || "Failed to accept order." });
     } finally {
       setAccepting(false);
     }
@@ -232,7 +271,7 @@ export default function OrderList() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
           
           {/* Left panel: Orders list */}
-          <div className="space-y-3 lg:col-span-1 max-h-[70vh] overflow-y-auto pr-1">
+          <div className={`space-y-3 lg:col-span-1 max-h-[70vh] overflow-y-auto pr-1 ${selectedOrder ? "hidden lg:block" : "block"}`}>
             {filteredOrders.length === 0 ? (
               <div className="bg-white border border-slate-100 rounded-3xl p-8 text-center text-slate-400 font-bold shadow-sm">
                 No orders match this status tab.
@@ -276,13 +315,21 @@ export default function OrderList() {
           </div>
 
           {/* Right panel: Details details card */}
-          <div className="lg:col-span-2">
+          <div className={`lg:col-span-2 ${selectedOrder ? "block" : "hidden lg:block"}`}>
             {!selectedOrder ? (
               <div className="bg-white border border-slate-100 rounded-3xl p-12 text-center text-slate-400 font-bold shadow-sm">
                 Select an order from the list to display dispatch controls and logs.
               </div>
             ) : (
               <div className="bg-white border border-slate-150 rounded-3xl p-6 shadow-sm space-y-6">
+                
+                {/* Back to list button on mobile */}
+                <button
+                  onClick={() => setSelectedOrder(null)}
+                  className="lg:hidden mb-4 flex items-center gap-2 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition cursor-pointer"
+                >
+                  &larr; Back to Orders List
+                </button>
                 
                 {/* Header card summary */}
                 <div className="flex justify-between items-start gap-4 pb-4 border-b border-slate-50">

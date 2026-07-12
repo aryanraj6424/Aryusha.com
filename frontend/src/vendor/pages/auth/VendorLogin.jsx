@@ -181,9 +181,11 @@
 import { Link, useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { loginVendor } from "../../services/vendorApi";
+import { useToast } from "../../../components/Toast";
 
 export default function VendorLogin() {
   const navigate = useNavigate();
+  const { showToast } = useToast();
 
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
@@ -219,7 +221,7 @@ export default function VendorLogin() {
         return;
       }
 
-      alert(message || "Login Failed");
+      showToast({ type: "error", message: message || "Login Failed" });
     } finally {
       setLoading(false);
     }

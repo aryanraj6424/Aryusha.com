@@ -1,9 +1,11 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
+import { useToast } from "../../../components/Toast";
 
 export default function AdminResetPassword() {
   const navigate = useNavigate();
+  const { showToast } = useToast();
 
   const [newPassword, setNewPassword] =
     useState("");
@@ -22,9 +24,8 @@ export default function AdminResetPassword() {
       newPassword !==
       confirmPassword
     ) {
-      return alert(
-        "Passwords do not match"
-      );
+      showToast({ type: "warning", message: "Passwords do not match" });
+      return;
     }
 
     const phone =
@@ -48,9 +49,7 @@ export default function AdminResetPassword() {
           "adminResetPhone"
         );
 
-        alert(
-          "Password Reset Successfully"
-        );
+        showToast({ type: "success", message: "Password Reset Successfully" });
 
         navigate(
           "/admin/login"
@@ -59,10 +58,10 @@ export default function AdminResetPassword() {
     } catch (error) {
       console.error(error);
 
-      alert(
-        error.response?.data?.message ||
-          "Reset Password Failed"
-      );
+      showToast({
+        type: "error",
+        message: error.response?.data?.message || "Reset Password Failed"
+      });
     } finally {
       setLoading(false);
     }

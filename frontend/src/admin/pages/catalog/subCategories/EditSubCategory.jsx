@@ -2,10 +2,12 @@ import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import axios from "axios";
 import { uploadFile } from "../../../../services/uploadService";
+import { useToast } from "../../../../components/Toast";
 
 export default function EditSubCategory() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { showToast } = useToast();
 
   const [categories, setCategories] = useState([]);
   const [formData, setFormData] = useState({
@@ -34,7 +36,7 @@ export default function EditSubCategory() {
       setFormData((prev) => ({ ...prev, ogImage: data.url }));
     } catch (err) {
       console.error(err);
-      alert(err.response?.data?.message || "Failed to upload image");
+      showToast({ type: "error", message: err.response?.data?.message || "Failed to upload image" });
     } finally {
       setUploadingOgImage(false);
     }
@@ -84,7 +86,7 @@ export default function EditSubCategory() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!formData.categoryId || !formData.name) {
-      alert("Category and Subcategory Name are required");
+      showToast({ type: "warning", message: "Category and Subcategory Name are required" });
       return;
     }
 
@@ -109,7 +111,7 @@ export default function EditSubCategory() {
       navigate("/admin/sub-categories");
     } catch (error) {
       console.error(error);
-      alert(error.response?.data?.message || "Failed to update subcategory");
+      showToast({ type: "error", message: error.response?.data?.message || "Failed to update subcategory" });
     } finally {
       setUpdating(false);
     }

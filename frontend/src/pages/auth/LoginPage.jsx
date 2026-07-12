@@ -1,10 +1,16 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { loginUser,forgotPassword } from "../../services/authApi";
+import { loginUser } from "../../services/authApi";
+import { useToast } from "../../components/Toast";
+import { auth } from "../../services/firebase";
+import { RecaptchaVerifier, signInWithPhoneNumber } from "firebase/auth";
 
 
 export default function LoginPage() {
   const navigate = useNavigate();
+  const { showToast } = useToast();
+  const recaptchaVerifierRef = useRef(null);
+  const [otpLoading, setOtpLoading] = useState(false);
 
   const [formData, setFormData] = useState({
     phoneNumber: "",
@@ -38,27 +44,27 @@ export default function LoginPage() {
     if (response.token) {
       localStorage.setItem("userToken", response.token);
     }
+    // Notify header components to re-read auth state
+    window.dispatchEvent(new Event("auth-updated"));
     navigate("/");
 
-    alert(
-      response.message || "Login Successful"
-    );
+    showToast({ type: "success", message: response.message || "Login Successful" });
 
     console.log("Before Navigate");
 
-    navigate("/");
+    navigate("/customer/dashboard");
 
     console.log("After Navigate");
+
 
   } catch (error) {
 
     console.error("Login Error:", error);
 
-    alert(
-      error.response?.data?.message ||
-      error.message ||
-      "Network Error"
-    );
+    showToast({
+      type: "error",
+      message: error.response?.data?.message || error.message || "Network Error"
+    });
 
   } finally {
     setLoading(false);
@@ -67,30 +73,59 @@ export default function LoginPage() {
 
 
 const handleOtpLogin = async () => {
+  const rawPhone = formData.phoneNumber.trim();
+  if (!rawPhone) {
+    showToast({ type: "warning", message: "Enter your phone number first" });
+    return;
+  }
+
+  // Build E.164 format — prefix +91 when 10 digits given
+  const e164Phone = rawPhone.startsWith("+")
+    ? rawPhone
+    : `+91${rawPhone.replace(/\D/g, "").slice(-10)}`;
+
   try {
-    if (!formData.phoneNumber) {
-      alert("Enter Phone Number");
-      return;
+    setOtpLoading(true);
+
+    // Re-create reCAPTCHA verifier on each attempt (needed after errors)
+    if (recaptchaVerifierRef.current) {
+      recaptchaVerifierRef.current.clear();
+      recaptchaVerifierRef.current = null;
     }
+    recaptchaVerifierRef.current = new RecaptchaVerifier(
+      auth,
+      "recaptcha-container-customer",
+      { size: "invisible" }
+    );
 
-    const response = await forgotPassword({
-      phoneNumber: formData.phoneNumber,
-    });
+    const confirmationResult = await signInWithPhoneNumber(
+      auth,
+      e164Phone,
+      recaptchaVerifierRef.current
+    );
 
-    alert(response.message);
+    showToast({ type: "success", message: "OTP sent to " + e164Phone });
 
     navigate("/verify-otp", {
       state: {
-        phoneNumber: formData.phoneNumber,
+        phoneNumber: rawPhone,
+        e164Phone,
+        confirmationResult,
         isLogin: true,
+        role: "customer",
       },
     });
-
   } catch (error) {
-    alert(
-      error.response?.data?.message ||
-      "Failed to send OTP"
-    );
+    console.error("Firebase OTP error:", error);
+    const msg =
+      error.code === "auth/too-many-requests"
+        ? "Too many requests. Please try again later."
+        : error.code === "auth/invalid-phone-number"
+        ? "Invalid phone number format."
+        : error.message || "Failed to send OTP";
+    showToast({ type: "error", message: msg });
+  } finally {
+    setOtpLoading(false);
   }
 };
 
@@ -210,9 +245,10 @@ const handleOtpLogin = async () => {
                <button
   type="button"
   onClick={handleOtpLogin}
-  className="w-full py-4 border-2 border-purple-600 rounded-2xl text-purple-700 font-semibold hover:bg-purple-50 duration-300"
+  disabled={otpLoading}
+  className="w-full py-4 border-2 border-purple-600 rounded-2xl text-purple-700 font-semibold hover:bg-purple-50 duration-300 disabled:opacity-60"
 >
-  Login with OTP
+  {otpLoading ? "Sending OTP..." : "Login with OTP"}
 </button>
 
               </form>
@@ -289,6 +325,9 @@ const handleOtpLogin = async () => {
         </div>
 
       </div>
+
+      {/* Invisible reCAPTCHA mount point for Firebase Phone Auth */}
+      <div id="recaptcha-container-customer" />
 
     </div>
   );

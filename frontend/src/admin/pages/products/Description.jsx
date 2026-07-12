@@ -8,12 +8,16 @@
  *   formData    – shared form state object
  *   setFormData – setter
  */
+import ReactQuill from "react-quill-new";
+import "react-quill-new/dist/quill.snow.css";
+
 export default function Description({ formData, setFormData }) {
-  const handleChange = (e) => {
-    setFormData({ ...formData, description: e.target.value });
+  const handleEditorChange = (val) => {
+    setFormData({ ...formData, description: val });
   };
 
-  const charCount = (formData.description || "").length;
+  const rawText = (formData.description || "").replace(/<[^>]*>/g, '');
+  const charCount = rawText.length;
 
   return (
     <div className="space-y-4">
@@ -22,15 +26,21 @@ export default function Description({ formData, setFormData }) {
           Product Description
           <span className="text-gray-400 font-normal ml-1">(optional but recommended)</span>
         </label>
-        <textarea
-          name="description"
-          value={formData.description || ""}
-          onChange={handleChange}
-          rows={8}
-          maxLength={2000}
-          placeholder="Describe the product — ingredients, highlights, usage instructions, etc."
-          className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
-        />
+        <div className="quill-editor-container bg-white rounded-lg border border-gray-300 overflow-hidden">
+          <ReactQuill
+            theme="snow"
+            value={formData.description || ""}
+            onChange={handleEditorChange}
+            placeholder="Describe the product — ingredients, highlights, usage instructions, etc."
+            modules={{
+              toolbar: [
+                ['bold', 'italic', 'underline'],
+                [{ 'list': 'ordered' }, { 'list': 'bullet' }],
+                ['clean']
+              ]
+            }}
+          />
+        </div>
         <p className="text-xs text-gray-400 mt-1 text-right">{charCount} / 2000 characters</p>
       </div>
 

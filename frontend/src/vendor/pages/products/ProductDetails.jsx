@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { Pencil, Tag, Package, ChevronLeft, ExternalLink, Link2 } from "lucide-react";
 import { getProductById, getVariants, getMyLinkedProducts } from "../../services/vendorApi";
+import DOMPurify from "dompurify";
 
 export default function ProductDetails() {
   const { id } = useParams();
@@ -11,29 +12,45 @@ export default function ProductDetails() {
   const [linkedInfo, setLinkedInfo] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const load = async () => {
-      try {
-        const [prod, vars, linked] = await Promise.all([
-          getProductById(id),
-          getVariants(id),
-          getMyLinkedProducts()
-        ]);
-        setProduct(prod);
-        setVariants(vars || []);
-        
-        // Check if this master product is linked to this vendor's store
-        const match = (linked || []).find(l => l.masterProductId?._id === id || l.masterProductId === id);
-        if (match) {
-          setLinkedInfo(match);
-        }
-      } catch (err) {
-        console.error("Failed to load product details:", err);
-      } finally {
-        setLoading(false);
+  const load = async (silent = false) => {
+    try {
+      if (!silent) setLoading(true);
+      const [prod, vars, linked] = await Promise.all([
+        getProductById(id),
+        getVariants(id),
+        getMyLinkedProducts()
+      ]);
+      setProduct(prod);
+      setVariants(vars || []);
+      
+      // Check if this master product is linked to this vendor's store
+      const match = (linked || []).find(l => l.masterProductId?._id === id || l.masterProductId === id);
+      if (match) {
+        setLinkedInfo(match);
       }
-    };
+    } catch (err) {
+      console.error("Failed to load product details:", err);
+    } finally {
+      if (!silent) setLoading(false);
+    }
+  };
+
+  useEffect(() => {
     load();
+
+    const handleFocus = () => {
+      load(true);
+    };
+    window.addEventListener("focus", handleFocus);
+
+    const interval = setInterval(() => {
+      load(true);
+    }, 7000);
+
+    return () => {
+      window.removeEventListener("focus", handleFocus);
+      clearInterval(interval);
+    };
   }, [id]);
 
   if (loading) {
@@ -151,6 +168,11 @@ export default function ProductDetails() {
             <span className="inline-flex items-center gap-1 text-xs bg-purple-50 text-purple-700 px-3 py-1 rounded-full">
               <Package className="w-3 h-3" /> {product.unitType}
             </span>
+            <span className={`text-xs px-3 py-1 rounded-full ${
+              product.isReturnable ? "bg-emerald-50 text-emerald-700 border border-emerald-100 font-semibold" : "bg-slate-55 text-slate-600 border border-slate-200"
+            }`}>
+              {product.isReturnable ? "✓ Returnable" : "✕ Non-Returnable"}
+            </span>
           </div>
 
           {/* Linked Product Banner */}
@@ -201,9 +223,10 @@ export default function ProductDetails() {
           {product.description && (
             <div>
               <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-1 font-bold">Description</p>
-              <p className="text-slate-650 text-sm leading-relaxed font-medium bg-white border border-slate-150 p-4 rounded-2xl">
-                {product.description}
-              </p>
+              <div 
+                className="text-slate-650 text-sm leading-relaxed font-medium bg-white border border-slate-150 p-4 rounded-2xl whitespace-pre-wrap"
+                dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(product.description) }}
+              />
             </div>
           )}
 

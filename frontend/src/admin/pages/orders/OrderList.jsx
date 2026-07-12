@@ -1,8 +1,12 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 import { Search, Eye, Pencil, Trash2 } from "lucide-react";
+import { useToast } from "../../../components/Toast";
+import ConfirmDialog from "../../../components/Toast/ConfirmDialog";
 
 export default function OrderList() {
+  const { showToast } = useToast();
+  const [confirmState, setConfirmState] = useState(null);
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
@@ -29,19 +33,25 @@ export default function OrderList() {
   };
 
   const handleDelete = async (orderId) => {
-    if (window.confirm("Are you sure you want to delete this order?")) {
-      try {
-        const token = localStorage.getItem("adminToken");
-        await axios.delete(
-          `${import.meta.env.VITE_API_URL}/admin/orders/${orderId}`,
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
-        fetchOrders();
-      } catch (error) {
-        console.error("Error deleting order:", error);
-        alert("Failed to delete order");
+    setConfirmState({
+      message: "Are you sure you want to delete this order?",
+      type: "danger",
+      onConfirm: async () => {
+        setConfirmState(null);
+        try {
+          const token = localStorage.getItem("adminToken");
+          await axios.delete(
+            `${import.meta.env.VITE_API_URL}/admin/orders/${orderId}`,
+            { headers: { Authorization: `Bearer ${token}` } }
+          );
+          showToast({ type: "success", message: "Order deleted successfully" });
+          fetchOrders();
+        } catch (error) {
+          console.error("Error deleting order:", error);
+          showToast({ type: "error", message: "Failed to delete order" });
+        }
       }
-    }
+    });
   };
 
   const handleStatusUpdate = async (orderId, newStatus) => {
@@ -55,7 +65,7 @@ export default function OrderList() {
       fetchOrders();
     } catch (error) {
       console.error("Error updating order status:", error);
-      alert("Failed to update order status");
+      showToast({ type: "error", message: "Failed to update order status" });
     }
   };
 
@@ -209,6 +219,14 @@ export default function OrderList() {
           </div>
         )}
       </div>
+      {confirmState && (
+        <ConfirmDialog
+          message={confirmState.message}
+          type={confirmState.type || "warning"}
+          onConfirm={confirmState.onConfirm}
+          onCancel={() => setConfirmState(null)}
+        />
+      )}
     </div>
   );
 }

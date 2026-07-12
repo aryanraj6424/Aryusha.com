@@ -2,8 +2,12 @@ import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import axios from "axios";
 import { Plus, Pencil, Trash2, Search } from "lucide-react";
+import { useToast } from "../../../../components/Toast";
+import ConfirmDialog from "../../../../components/Toast/ConfirmDialog";
 
 export default function UnitList() {
+  const { showToast } = useToast();
+  const [confirmState, setConfirmState] = useState(null);
   const [units, setUnits] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
@@ -29,19 +33,25 @@ export default function UnitList() {
   };
 
   const handleDelete = async (id) => {
-    if (window.confirm("Are you sure you want to delete this unit?")) {
-      try {
-        const token = localStorage.getItem("adminToken");
-        await axios.delete(
-          `${import.meta.env.VITE_API_URL}/admin/units/${id}`,
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
-        fetchUnits();
-      } catch (error) {
-        console.error("Error deleting unit:", error);
-        alert("Failed to delete unit");
+    setConfirmState({
+      message: "Are you sure you want to delete this unit?",
+      type: "danger",
+      onConfirm: async () => {
+        setConfirmState(null);
+        try {
+          const token = localStorage.getItem("adminToken");
+          await axios.delete(
+            `${import.meta.env.VITE_API_URL}/admin/units/${id}`,
+            { headers: { Authorization: `Bearer ${token}` } }
+          );
+          showToast({ type: "success", message: "Unit deleted successfully." });
+          fetchUnits();
+        } catch (error) {
+          console.error("Error deleting unit:", error);
+          showToast({ type: "error", message: "Failed to delete unit" });
+        }
       }
-    }
+    });
   };
 
   const filteredUnits = units.filter(unit =>
@@ -136,6 +146,14 @@ export default function UnitList() {
           </div>
         )}
       </div>
+      {confirmState && (
+        <ConfirmDialog
+          message={confirmState.message}
+          type={confirmState.type || "warning"}
+          onConfirm={confirmState.onConfirm}
+          onCancel={() => setConfirmState(null)}
+        />
+      )}
     </div>
   );
 }

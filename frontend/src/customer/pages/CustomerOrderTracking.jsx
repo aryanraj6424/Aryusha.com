@@ -4,10 +4,13 @@ import axios from "axios";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { ArrowLeft, User, Phone, CheckCircle2, Clock, MapPin, KeyRound, Copy, Star } from "lucide-react";
+import { useToast } from "../../components/Toast";
+import { getSocket, joinRoom, leaveRoom } from "../../services/socket";
 
 export default function CustomerOrderTracking() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { showToast } = useToast();
   
   const [tracking, setTracking] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -52,7 +55,30 @@ export default function CustomerOrderTracking() {
       fetchTracking();
     }, 6000);
 
-    return () => clearInterval(timer);
+    // Socket real-time integration
+    const socket = getSocket();
+    joinRoom(`customer:${user._id}`);
+
+    const handleEvent = (eventName, toastMessage) => {
+      showToast({ type: "info", message: toastMessage });
+      fetchTracking();
+    };
+
+    socket.on("order:accepted", (data) => handleEvent("order:accepted", "Your order has been accepted by the store!"));
+    socket.on("order:pickedUp", (data) => handleEvent("order:pickedUp", "Rider picked up your order and is checking details."));
+    socket.on("order:onTheWay", (data) => handleEvent("order:onTheWay", "Your rider is on the way!"));
+    socket.on("order:reachedCustomer", (data) => handleEvent("order:reachedCustomer", "Your rider has arrived at your location!"));
+    socket.on("order:delivered", (data) => handleEvent("order:delivered", "Your order was successfully delivered!"));
+
+    return () => {
+      clearInterval(timer);
+      socket.off("order:accepted");
+      socket.off("order:pickedUp");
+      socket.off("order:onTheWay");
+      socket.off("order:reachedCustomer");
+      socket.off("order:delivered");
+      leaveRoom(`customer:${user._id}`);
+    };
   }, [id]);
 
   // Leaflet Map Initialization and Updates
@@ -154,13 +180,13 @@ export default function CustomerOrderTracking() {
   const handleCopyOtp = () => {
     if (!tracking?.deliveryOtp) return;
     navigator.clipboard.writeText(tracking.deliveryOtp);
-    alert("OTP copied to clipboard!");
+    showToast({ type: "success", message: "OTP copied to clipboard!" });
   };
 
   const submitFeedbackRating = () => {
     if (rating === 0) return;
     setRatingSubmitted(true);
-    alert(`Thank you for rating your delivery experience: ${rating} Stars!`);
+    showToast({ type: "success", message: `Thank you for rating your delivery experience: ${rating} Stars!` });
   };
 
   if (loading && !tracking) {

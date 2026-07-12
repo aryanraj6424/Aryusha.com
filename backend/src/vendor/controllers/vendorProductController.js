@@ -19,6 +19,7 @@ export const getVendorProducts = async (req, res) => {
       .populate("categoryId", "name")
       .populate("subCategoryId", "name")
       .populate("familyId", "name")
+      .populate("variants")
       .sort({ createdAt: -1 });
 
     res.json({ success: true, products });
@@ -199,9 +200,18 @@ export const deleteVendorProduct = async (req, res) => {
       return res.status(403).json({ success: false, message: "Access Denied: You cannot delete this product" });
     }
 
+    if (product.status === "draft") {
+      await ProductVariant.deleteMany({ productId: product._id });
+      await Product.deleteOne({ _id: product._id });
+      return res.json({ success: true, message: "Draft product permanently deleted successfully" });
+    }
+
     product.isDeleted = true;
     product.status = "inactive";
     await product.save();
+
+    // Mark variants as inactive
+    await ProductVariant.updateMany({ productId: product._id }, { status: "inactive" });
 
     res.json({ success: true, message: "Product request deleted successfully" });
   } catch (error) {
@@ -336,18 +346,37 @@ export const bulkDeleteVendorProducts = async (req, res) => {
       return res.status(400).json({ success: false, message: "productIds array is required" });
     }
 
-    const matchCriteria = {
+    const products = await Product.find({
       _id: { $in: productIds },
       createdBy: req.vendor._id,
       creatorModel: "Vendor",
       isDeleted: { $ne: true }
-    };
-
-    const result = await Product.updateMany(matchCriteria, {
-      $set: { isDeleted: true, status: "inactive" }
     });
 
-    res.json({ success: true, message: `Successfully deleted ${result.modifiedCount} products.` });
+    const draftIds = products.filter(p => p.status === "draft").map(p => p._id);
+    const nonDraftIds = products.filter(p => p.status !== "draft").map(p => p._id);
+
+    let deletedCount = 0;
+
+    if (draftIds.length > 0) {
+      await ProductVariant.deleteMany({ productId: { $in: draftIds } });
+      const delResult = await Product.deleteMany({ _id: { $in: draftIds } });
+      deletedCount += delResult.deletedCount;
+    }
+
+    if (nonDraftIds.length > 0) {
+      const softResult = await Product.updateMany(
+        { _id: { $in: nonDraftIds } },
+        { $set: { isDeleted: true, status: "inactive" } }
+      );
+      await ProductVariant.updateMany(
+        { productId: { $in: nonDraftIds } },
+        { $set: { status: "inactive" } }
+      );
+      deletedCount += softResult.modifiedCount;
+    }
+
+    res.json({ success: true, message: `Successfully deleted ${deletedCount} products.` });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }

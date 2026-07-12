@@ -2,11 +2,13 @@ import { useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Eye, EyeOff } from "lucide-react";
 import { resetPassword } from "../../services/authApi";
+import { useToast } from "../../components/Toast";
 
 export default function ResetPasswordPage() {
 
   const navigate = useNavigate();
   const location = useLocation();
+  const { showToast } = useToast();
 
   const phoneNumber =
     location.state?.phoneNumber || "";
@@ -72,9 +74,8 @@ export default function ResetPasswordPage() {
         formData.password !==
         formData.confirmPassword
       ) {
-        return alert(
-          "Passwords do not match"
-        );
+        showToast({ type: "warning", message: "Passwords do not match" });
+        return;
       }
 
       try {
@@ -90,19 +91,16 @@ export default function ResetPasswordPage() {
 
         console.log(response);
 
-        alert(
-          "Password Updated Successfully"
-        );
+        showToast({ type: "success", message: "Password Updated Successfully" });
 
         navigate("/login");
 
       } catch (error) {
 
-        alert(
-          error.response?.data
-            ?.message ||
-            "Something went wrong"
-        );
+        showToast({
+          type: "error",
+          message: error.response?.data?.message || "Something went wrong"
+        });
 
       } finally {
 

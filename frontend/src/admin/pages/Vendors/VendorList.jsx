@@ -4,11 +4,13 @@ import axios from "axios";
 import { Eye, Plus, Edit2, Trash2 } from "lucide-react";
 import SearchBox from "../../components/SearchBox";
 import DeleteModal from "../../components/DeleteModal";
+import { useToast } from "../../../components/Toast";
 
 const API = `${import.meta.env.VITE_API_URL}/admin/vendors`;
 
 export default function VendorList() {
   const navigate = useNavigate();
+  const { showToast } = useToast();
   const [vendors, setVendors] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -25,7 +27,7 @@ export default function VendorList() {
       setVendors(response.data.vendors || []);
     } catch (error) {
       console.log(error);
-      alert("Failed to fetch vendors.");
+      showToast({ type: "error", message: "Failed to fetch vendors." });
     } finally {
       setLoading(false);
     }
@@ -38,22 +40,22 @@ export default function VendorList() {
   const handleApprove = async (id) => {
     try {
       await axios.put(`${API}/approve/${id}`);
-      alert("Vendor approved successfully.");
+      showToast({ type: "success", message: "Vendor approved successfully." });
       fetchVendors();
     } catch (error) {
       console.log(error);
-      alert("Failed to approve vendor.");
+      showToast({ type: "error", message: "Failed to approve vendor." });
     }
   };
 
   const handleReject = async (id) => {
     try {
       await axios.put(`${API}/reject/${id}`);
-      alert("Vendor rejected successfully.");
+      showToast({ type: "success", message: "Vendor rejected successfully." });
       fetchVendors();
     } catch (error) {
       console.log(error);
-      alert("Failed to reject vendor.");
+      showToast({ type: "error", message: "Failed to reject vendor." });
     }
   };
 
@@ -65,7 +67,7 @@ export default function VendorList() {
       fetchVendors();
     } catch (error) {
       console.log(error);
-      alert("Failed to update account status.");
+      showToast({ type: "error", message: "Failed to update account status." });
     }
   };
 
@@ -83,7 +85,7 @@ export default function VendorList() {
         assignedArea: assignArea,
         assignedRadius: Number(assignRadius),
       });
-      alert("Vendor area assigned successfully.");
+      showToast({ type: "success", message: "Vendor area assigned successfully." });
       setShowAreaModal(false);
       setSelectedVendor(null);
       setAssignArea("");
@@ -91,7 +93,7 @@ export default function VendorList() {
       fetchVendors();
     } catch (error) {
       console.log(error);
-      alert("Failed to assign vendor area.");
+      showToast({ type: "error", message: "Failed to assign vendor area." });
     }
   };
 
@@ -99,13 +101,13 @@ export default function VendorList() {
     if (!selectedVendor) return;
     try {
       await axios.delete(`${API}/${selectedVendor._id}`);
-      alert("Vendor deleted successfully.");
+      showToast({ type: "success", message: "Vendor deleted successfully." });
       setDeleteModal(false);
       setSelectedVendor(null);
       fetchVendors();
     } catch (error) {
       console.log(error);
-      alert("Failed to delete vendor.");
+      showToast({ type: "error", message: "Failed to delete vendor." });
     }
   };
 

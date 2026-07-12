@@ -2,9 +2,11 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { uploadFile } from "../../../../services/uploadService";
+import { useToast } from "../../../../components/Toast";
 
 export default function AddCategory() {
   const navigate = useNavigate();
+  const { showToast } = useToast();
   const [form, setForm] = useState({
     name: "",
     description: "",
@@ -34,7 +36,7 @@ export default function AddCategory() {
       setForm((prev) => ({ ...prev, icon: data.url }));
     } catch (err) {
       console.error(err);
-      alert(err.response?.data?.message || "Failed to upload image");
+      showToast({ type: "error", message: err.response?.data?.message || "Failed to upload image" });
     } finally {
       setUploadingIcon(false);
     }
@@ -49,7 +51,7 @@ export default function AddCategory() {
       setForm((prev) => ({ ...prev, ogImage: data.url }));
     } catch (err) {
       console.error(err);
-      alert(err.response?.data?.message || "Failed to upload image");
+      showToast({ type: "error", message: err.response?.data?.message || "Failed to upload image" });
     } finally {
       setUploadingOgImage(false);
     }
@@ -78,7 +80,7 @@ export default function AddCategory() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!form.name) {
-      alert("Category name is required");
+      showToast({ type: "warning", message: "Category name is required" });
       return;
     }
 
@@ -107,7 +109,7 @@ export default function AddCategory() {
       navigate("/admin/categories");
     } catch (error) {
       console.error(error);
-      alert(error.response?.data?.message || "Failed to create category");
+      showToast({ type: "error", message: error.response?.data?.message || "Failed to create category" });
     } finally {
       setLoading(false);
     }

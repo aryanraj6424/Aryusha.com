@@ -70,6 +70,7 @@
 // export default MobileTopNavbar;
 
 
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { User, MapPin } from "lucide-react";
 
@@ -78,13 +79,28 @@ import SearchBar from "./SearchBar";
 function MobileTopNavbar() {
   const navigate = useNavigate();
 
-  const user = JSON.parse(
-    localStorage.getItem("user") || "{}"
+  const [user, setUser] = useState(() =>
+    JSON.parse(localStorage.getItem("user") || "null")
   );
 
-  const selectedAddress = JSON.parse(
-    localStorage.getItem("selectedAddress") || "null"
+  const [selectedAddress, setSelectedAddress] = useState(() =>
+    JSON.parse(localStorage.getItem("selectedAddress") || "null")
   );
+
+  const syncUser = () => {
+    setUser(JSON.parse(localStorage.getItem("user") || "null"));
+    setSelectedAddress(JSON.parse(localStorage.getItem("selectedAddress") || "null"));
+  };
+
+  useEffect(() => {
+    syncUser();
+    window.addEventListener("auth-updated", syncUser);
+    window.addEventListener("storage", syncUser);
+    return () => {
+      window.removeEventListener("auth-updated", syncUser);
+      window.removeEventListener("storage", syncUser);
+    };
+  }, []);
 
   return (
     <div className="sticky top-0 z-50 bg-white border-b border-purple-100 shadow-sm">

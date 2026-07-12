@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { Pencil, Tag, Package, ChevronLeft, ExternalLink } from "lucide-react";
 import { getProduct, getVariants } from "../../services/productApi";
+import DOMPurify from "dompurify";
 
 /**
  * ProductDetails — read-only, production-quality view of a Product and its variants.
@@ -158,7 +159,10 @@ export default function ProductDetails() {
           {product.description && (
             <div>
               <p className="text-sm font-medium text-gray-700 mb-1">Description</p>
-              <p className="text-gray-600 text-sm leading-relaxed">{product.description}</p>
+              <div 
+                className="text-gray-600 text-sm leading-relaxed whitespace-pre-wrap"
+                dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(product.description) }}
+              />
             </div>
           )}
 

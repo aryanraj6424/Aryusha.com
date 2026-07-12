@@ -108,15 +108,16 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
+import { useToast } from "../../../components/Toast";
 
 export default function VendorForgotPassword() {
   const navigate = useNavigate();
+  const { showToast } = useToast();
 
   const [phone, setPhone] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const API =
-    "https://animated-guacamole-7v94r5qxvpvrfpr5w-5000.app.github.dev/api/vendor/auth";
+  const API = `${import.meta.env.VITE_API_URL}/vendor/auth`;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -137,9 +138,10 @@ export default function VendorForgotPassword() {
           phone
         );
 
-        alert(
-          "OTP Sent Successfully. Check backend terminal for OTP."
-        );
+        showToast({
+          type: "success",
+          message: "OTP Sent Successfully. Check backend terminal for OTP."
+        });
 
         navigate(
           "/vendor/verify-otp"
@@ -148,11 +150,10 @@ export default function VendorForgotPassword() {
     } catch (error) {
       console.error(error);
 
-      alert(
-        error?.response?.data
-          ?.message ||
-          "Failed to send OTP"
-      );
+      showToast({
+        type: "error",
+        message: error?.response?.data?.message || "Failed to send OTP"
+      });
     } finally {
       setLoading(false);
     }

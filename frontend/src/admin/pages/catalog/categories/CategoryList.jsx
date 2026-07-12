@@ -7,9 +7,13 @@ import StatusBadge from "../../../components/common/StatusBadge";
 import Button from "../../../components/common/Button";
 import Dropdown from "../../../components/common/Dropdown";
 import Pagination from "../../../components/common/Pagination";
+import { useToast } from "../../../../components/Toast";
+import ConfirmDialog from "../../../../components/Toast/ConfirmDialog";
 
 export default function CategoryList() {
   const navigate = useNavigate();
+  const { showToast } = useToast();
+  const [confirmState, setConfirmState] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -64,19 +68,25 @@ export default function CategoryList() {
   };
 
   const handleDelete = async (categoryId) => {
-    if (window.confirm("Are you sure you want to delete this category?")) {
-      try {
-        const token = localStorage.getItem("adminToken");
-        await axios.delete(
-          `${import.meta.env.VITE_API_URL}/categories/${categoryId}`,
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
-        fetchCategories();
-      } catch (error) {
-        console.error("Error deleting category:", error);
-        alert(error.response?.data?.message || "Failed to delete category. Please try again.");
+    setConfirmState({
+      message: "Are you sure you want to delete this category?",
+      type: "danger",
+      onConfirm: async () => {
+        setConfirmState(null);
+        try {
+          const token = localStorage.getItem("adminToken");
+          await axios.delete(
+            `${import.meta.env.VITE_API_URL}/categories/${categoryId}`,
+            { headers: { Authorization: `Bearer ${token}` } }
+          );
+          showToast({ type: "success", message: "Category deleted successfully." });
+          fetchCategories();
+        } catch (error) {
+          console.error("Error deleting category:", error);
+          showToast({ type: "error", message: error.response?.data?.message || "Failed to delete category. Please try again." });
+        }
       }
-    }
+    });
   };
 
   const tabs = [
@@ -114,6 +124,14 @@ export default function CategoryList() {
 
   return (
     <div className="p-4 lg:p-6">
+      {confirmState && (
+        <ConfirmDialog
+          message={confirmState.message}
+          type={confirmState.type || "warning"}
+          onConfirm={confirmState.onConfirm}
+          onCancel={() => setConfirmState(null)}
+        />
+      )}
       {/* Breadcrumbs */}
       <div className="flex items-center gap-2 text-xs sm:text-sm text-gray-600 mb-4 lg:mb-6">
         <span className="hover:text-green-600 cursor-pointer" onClick={() => navigate("/admin/dashboard")}>Home</span>
@@ -370,9 +388,24 @@ export default function CategoryList() {
 
       </div>
 
+      {confirmState && (
+
+        <ConfirmDialog
+
+          message={confirmState.message}
+
+          type={confirmState.type || "warning"}
+
+          onConfirm={confirmState.onConfirm}
+
+          onCancel={() => setConfirmState(null)}
+
+        />
+
+      )}
+
     </div>
 
   );
 
 }
-

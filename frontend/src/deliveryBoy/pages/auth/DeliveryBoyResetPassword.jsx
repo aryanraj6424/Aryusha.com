@@ -2,11 +2,13 @@ import { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { Shield, Lock, CheckSquare } from "lucide-react";
 import axios from "axios";
+import { useToast } from "../../../components/Toast";
 
 export default function DeliveryBoyResetPassword() {
   const navigate = useNavigate();
   const location = useLocation();
   const phone = location.state?.phone || "";
+  const { showToast } = useToast();
 
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -15,7 +17,7 @@ export default function DeliveryBoyResetPassword() {
 
   useEffect(() => {
     if (!phone) {
-      alert("Invalid context. Redirecting to login.");
+      showToast({ type: "warning", message: "Invalid session. Redirecting to login." });
       navigate("/delivery-boy/login");
     }
   }, [phone, navigate]);
@@ -42,7 +44,7 @@ export default function DeliveryBoyResetPassword() {
       });
 
       if (res.data.success) {
-        alert("Password updated successfully! Please login with your new credentials.");
+        showToast({ type: "success", message: "Password updated successfully! Please log in with your new credentials." });
         navigate("/delivery-boy/login");
       }
     } catch (err) {

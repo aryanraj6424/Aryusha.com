@@ -7,6 +7,7 @@ import Order from "../models/Order.js";
 import { Product } from "../../models/catalog.js";
 import CustomerOrder from "../../customer/models/CustomerOrder.js";
 import DeliveryBoy from "../../deliveryBoy/models/DeliveryBoy.js";
+import { emitToRoom } from "../../socket/socketManager.js";
 
 const ensureMockOrders = async (vendorId) => {
   // Disabled mock seeder to use real live data only
@@ -514,6 +515,15 @@ export const assignDeliveryBoy = async (req, res) => {
 
     await order.save();
 
+    // Notify the assigned delivery boy in real-time
+    emitToRoom(`deliveryBoy:${deliveryBoyId}`, "order:assigned", {
+      orderId: order._id,
+      orderRef: order.orderId,
+      message: "A new order has been assigned to you."
+    });
+    // Notify admin
+    emitToRoom("admin:global", "order:assigned", { orderId: order._id, orderRef: order.orderId });
+
     res.status(200).json({
       success: true,
       message: "Delivery boy assigned successfully",
@@ -566,6 +576,14 @@ export const reassignDeliveryBoy = async (req, res) => {
     });
 
     await order.save();
+
+    // Notify newly assigned delivery boy and admin
+    emitToRoom(`deliveryBoy:${deliveryBoyId}`, "order:assigned", {
+      orderId: order._id,
+      orderRef: order.orderId,
+      message: "An order has been reassigned to you."
+    });
+    emitToRoom("admin:global", "order:assigned", { orderId: order._id, orderRef: order.orderId });
 
     res.status(200).json({
       success: true,
@@ -653,6 +671,15 @@ export const acceptOrder = async (req, res) => {
 
     order.orderStatus = "Accepted";
     await order.save();
+
+    // Notify customer that their order was accepted
+    if (order.customerId) {
+      emitToRoom(`customer:${order.customerId._id || order.customerId}`, "order:accepted", {
+        orderId: order._id,
+        orderRef: order.orderId,
+        message: "Your order has been accepted by the vendor!"
+      });
+    }
 
     res.status(200).json({
       success: true,

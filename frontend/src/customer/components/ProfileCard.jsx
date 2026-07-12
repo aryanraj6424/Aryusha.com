@@ -1,6 +1,8 @@
 import { useState } from "react";
+import { useToast } from "../../components/Toast";
 
 export default function ProfileCard() {
+  const { showToast } = useToast();
   const [profile, setProfile] = useState({
     fullName: "Aryan Raj",
     email: "aryan@gmail.com",
@@ -19,7 +21,7 @@ export default function ProfileCard() {
   const handleSave = () => {
     console.log("Updated Profile:", profile);
 
-    alert("Profile Updated Successfully ✅");
+    showToast({ type: "success", message: "Profile Updated Successfully ✅" });
   };
 
   return (

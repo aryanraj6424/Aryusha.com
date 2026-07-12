@@ -1,4 +1,4 @@
-import { Product, VendorProduct } from "../../models/catalog.js";
+import { Product, VendorProduct, VendorListing } from "../../models/catalog.js";
 
 /**
  * ============================================================================
@@ -65,7 +65,7 @@ export const searchMasterProducts = async (req, res) => {
 // @access  Private/Vendor
 export const createVendorProductReference = async (req, res) => {
   try {
-    const { masterProductId, price, mrp, stock, sku, condition, vendorNotes } = req.body;
+    const { masterProductId, price, mrp, stock, sku, condition, vendorNotes, variants } = req.body;
     const vendorId = req.vendor._id;
 
     if (!masterProductId || !price || !sku) {
@@ -100,13 +100,26 @@ export const createVendorProductReference = async (req, res) => {
       vendorNotes: vendorNotes || ""
     });
 
+    if (variants && Array.isArray(variants) && variants.length > 0) {
+      const listings = variants.map(v => ({
+        vendorId,
+        variantId: v.variantId,
+        sellingPrice: Number(v.sellingPrice),
+        stock: { quantity: Number(v.stock || 0) },
+        isAvailable: v.isAvailable !== false,
+        createdBy: vendorId
+      }));
+      await VendorListing.insertMany(listings);
+    }
+
     const populated = await VendorProduct.findById(link._id)
       .populate({
         path: "masterProductId",
         populate: [
           { path: "categoryId", select: "name" },
           { path: "subCategoryId", select: "name" },
-          { path: "familyId", select: "name" }
+          { path: "familyId", select: "name" },
+          { path: "variants" }
         ]
       });
 
@@ -128,7 +141,11 @@ export const getMyLinkedProducts = async (req, res) => {
         populate: [
           { path: "categoryId", select: "name" },
           { path: "subCategoryId", select: "name" },
-          { path: "familyId", select: "name" }
+          { path: "familyId", select: "name" },
+          {
+            path: "variants",
+            populate: { path: "vendorListings", match: { vendorId } }
+          }
         ]
       })
       .sort({ createdAt: -1 });
@@ -144,7 +161,7 @@ export const getMyLinkedProducts = async (req, res) => {
 // @access  Private/Vendor
 export const updateLinkedProductDetails = async (req, res) => {
   try {
-    const { price, mrp, stock, sku, condition, vendorNotes } = req.body;
+    const { price, mrp, stock, sku, condition, vendorNotes, variants } = req.body;
     const vendorId = req.vendor._id;
 
     const link = await VendorProduct.findOne({ _id: req.params.id, vendorId });
@@ -167,6 +184,23 @@ export const updateLinkedProductDetails = async (req, res) => {
     if (vendorNotes !== undefined) link.vendorNotes = vendorNotes;
 
     await link.save();
+
+    if (variants && Array.isArray(variants)) {
+      for (const v of variants) {
+        await VendorListing.findOneAndUpdate(
+          { vendorId, variantId: v.variantId },
+          { 
+            $set: { 
+              sellingPrice: Number(v.sellingPrice), 
+              "stock.quantity": Number(v.stock || 0), 
+              isAvailable: v.isAvailable !== false 
+            } 
+          },
+          { upsert: true }
+        );
+      }
+    }
+
     res.json({ success: true, message: "Linked product updated successfully", vendorProduct: link });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -182,6 +216,12 @@ export const unlinkProductFromStore = async (req, res) => {
     const link = await VendorProduct.findOne({ _id: req.params.id, vendorId });
     if (!link) {
       return res.status(404).json({ success: false, message: "Linked product reference not found" });
+    }
+
+    const product = await Product.findById(link.masterProductId).populate("variants");
+    if (product && product.variants) {
+      const variantIds = product.variants.map(v => v._id);
+      await VendorListing.deleteMany({ vendorId, variantId: { $in: variantIds } });
     }
 
     await VendorProduct.deleteOne({ _id: req.params.id });
