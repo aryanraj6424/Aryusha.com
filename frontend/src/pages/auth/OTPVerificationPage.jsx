@@ -662,6 +662,8 @@ export default function OTPVerificationPage() {
   const e164Phone = location.state?.e164Phone || "";
   const isLogin = location.state?.isLogin || false;
   const role = location.state?.role || "customer";
+  // Redirect destination after successful login (e.g., checkout)
+  const redirectTo = location.state?.redirectTo || "/customer/dashboard";
 
   // confirmationResult is passed via location.state from LoginPage
   const confirmationResultRef = useRef(location.state?.confirmationResult || null);
@@ -733,7 +735,8 @@ export default function OTPVerificationPage() {
           localStorage.setItem("user", JSON.stringify(response.data.user));
           if (response.data.token) localStorage.setItem("userToken", response.data.token);
           window.dispatchEvent(new Event("auth-updated"));
-          navigate("/customer/dashboard");
+          window.dispatchEvent(new Event("cart-updated"));
+          navigate(redirectTo);
         } else {
           // Fallback — navigate back to login
           navigate("/login");

@@ -1,5 +1,7 @@
 import express from "express";
+import jwt from "jsonwebtoken";
 import protect from "../../middleware/authMiddleware.js";
+import User from "../models/User.js";
 import {
   getCartSummary,
   getActiveCoupons,
@@ -10,14 +12,25 @@ import {
 
 const router = express.Router();
 
-// All customer cart endpoints are protected
-router.use(protect);
+// Optional authentication middleware to resolve req.user if a token is present
+const optionalProtect = async (req, res, next) => {
+  try {
+    const token = req.headers.authorization?.split(" ")[1];
+    if (token) {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      req.user = await User.findById(decoded.id);
+    }
+  } catch (error) {
+    // Proceed as guest if token is invalid or expired
+  }
+  next();
+};
 
-router.post("/summary", getCartSummary); // Allow POST for easy passing of cart items
-router.get("/summary", getCartSummary);  // Also support GET with query parameter for spec alignment
-router.get("/coupons", getActiveCoupons); // Eligible coupons route for customers
-router.post("/apply-coupon", applyCoupon);
-router.post("/remove-coupon", removeCoupon);
-router.get("/slots", getDeliverySlots);
+router.post("/summary", optionalProtect, getCartSummary); // Allow POST for easy passing of cart items
+router.get("/summary", optionalProtect, getCartSummary);  // Also support GET with query parameter for spec alignment
+router.get("/coupons", protect, getActiveCoupons); // Eligible coupons route for customers
+router.post("/apply-coupon", protect, applyCoupon);
+router.post("/remove-coupon", protect, removeCoupon);
+router.get("/slots", protect, getDeliverySlots);
 
 export default router;

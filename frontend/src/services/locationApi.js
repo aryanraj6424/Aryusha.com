@@ -1,30 +1,60 @@
-// import axios from "axios";
+// services/locationApi.js
 
-// export const searchAddress = async (text) => {
-//   const response = await axios.get(
-//     `${import.meta.env.VITE_API_URL}/location/search`,
-//     {
-//       params: { text },
-//     }
-//   );
-
-//   return response.data;
-// };
-
-
-export const searchLocation = async (text) => {
-  const response = await fetch(
-    `https://geoapify-platform.p.rapidapi.com/v1/geocode/autocomplete?text=${encodeURIComponent(text)}&limit=5`,
-    {
-      method: "GET",
-      headers: {
-        "x-rapidapi-key":
-          import.meta.env.VITE_RAPIDAPI_KEY,
-        "x-rapidapi-host":
-          "geoapify-platform.p.rapidapi.com",
-      },
+/**
+ * Reverse-geocode a coordinate pair to a human-readable address.
+ * Queries the backend location proxy endpoint.
+ * @returns {{ formatted: string, postcode: string, city: string }}
+ */
+export const getAddressFromCoords = async (lat, lng) => {
+  try {
+    const res = await fetch(
+      `${import.meta.env.VITE_API_URL}/location/reverse?lat=${lat}&lon=${lng}`
+    );
+    const data = await res.json();
+    if (data.success && data.result) {
+      const item = data.result;
+      return {
+        formatted: item.display_name || "Current Location",
+        postcode: item.address?.postcode || "",
+        city:
+          item.address?.city ||
+          item.address?.town ||
+          item.address?.village ||
+          item.address?.county ||
+          "",
+      };
     }
-  );
+    return { formatted: "Current Location", postcode: "", city: "" };
+  } catch (err) {
+    console.error("Reverse geocoding failed via proxy:", err);
+    return { formatted: "Current Location", postcode: "", city: "" };
+  }
+};
 
-  return response.json();
+/**
+ * Autocomplete location search using the backend location proxy endpoint.
+ * @returns {Array} Array of GeoJSON feature-like objects with a `properties` key.
+ */
+export const searchLocation = async (text) => {
+  try {
+    const res = await fetch(
+      `${import.meta.env.VITE_API_URL}/location/search?text=${encodeURIComponent(text)}`
+    );
+    const data = await res.json();
+    if (data.success && Array.isArray(data.results)) {
+      return data.results.map((item) => ({
+        properties: {
+          place_id: item.place_id,
+          formatted: item.display_name,
+          lat: parseFloat(item.lat),
+          lon: parseFloat(item.lon),
+          postcode: item.address?.postcode || "",
+        },
+      }));
+    }
+    return [];
+  } catch (err) {
+    console.error("Location search failed via proxy:", err);
+    return [];
+  }
 };

@@ -22,7 +22,9 @@ export default function CartPage() {
 
   useEffect(() => {
     loadCart();
-    fetchAllCoupons();
+    // Only fetch coupons for authenticated users
+    const token = localStorage.getItem("userToken");
+    if (token) fetchAllCoupons();
   }, []);
 
   const fetchAllCoupons = async () => {
@@ -65,10 +67,8 @@ export default function CartPage() {
     try {
       setLoadingSummary(true);
       const token = localStorage.getItem("userToken");
-      const headers = {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`
-      };
+      const headers = { "Content-Type": "application/json" };
+      if (token) headers.Authorization = `Bearer ${token}`;
 
       const payload = {
         items: currentCart.map(item => ({
@@ -279,7 +279,7 @@ export default function CartPage() {
     const user = localStorage.getItem("user");
     if (!user) {
       showToast({ type: "warning", message: "Please login to proceed to checkout." });
-      navigate("/login");
+      navigate("/login", { state: { redirectTo: "/customer/checkout" } });
       return;
     }
 
@@ -469,43 +469,7 @@ export default function CartPage() {
             </div>
           </div>
 
-          {/* Coupon applying section */}
-          <div className="bg-white border border-slate-100 rounded-2xl p-5 shadow-sm space-y-4">
-            <h2 className="text-sm uppercase tracking-wider text-slate-400 font-bold flex items-center gap-2">
-              <Ticket size={16} className="text-purple-600" /> Apply Coupon
-            </h2>
-            
-            {summary?.appliedCoupon ? (
-              <div className="flex justify-between items-center bg-emerald-50/50 border border-emerald-100 rounded-xl px-4 py-3 text-emerald-850">
-                <div className="flex items-center gap-2 text-xs">
-                  <Percent size={14} className="text-emerald-600 font-bold" />
-                  <span>
-                    Coupon <strong>{summary.appliedCoupon.code}</strong> applied! 
-                    Saved ₹{summary.appliedCoupon.discountAmount}
-                  </span>
-                </div>
-                <button
-                  onClick={handleRemoveCoupon}
-                  className="text-xs font-bold text-rose-600 hover:text-rose-800 transition cursor-pointer flex items-center gap-0.5"
-                >
-                  <X size={14} /> Remove
-                </button>
-              </div>
-            ) : (
-              <div
-                onClick={handleOpenCouponSelector}
-                className="flex justify-between items-center bg-purple-50/30 border border-dashed border-purple-200 rounded-xl px-4 py-3.5 cursor-pointer hover:bg-purple-50/60 transition group"
-              >
-                <div className="flex items-center gap-2.5 text-xs text-purple-750">
-                  <Percent size={15} />
-                  <span>Select store coupons</span>
-                </div>
-                <span className="text-[10px] uppercase font-extrabold text-purple-700 bg-purple-100 group-hover:bg-purple-200 px-2 py-1 rounded transition">
-                  View Eligible
-                </span>
-              </div>
-            )}
-          </div>
+
 
           {/* "Did You Forget?" suggestions */}
           {summary?.suggestions && summary.suggestions.length > 0 && (
@@ -633,7 +597,7 @@ export default function CartPage() {
             <button
               onClick={handleCheckout}
               disabled={loadingSummary || !summary}
-              className="w-full py-4 bg-purple-650 hover:bg-purple-700 disabled:opacity-50 text-white rounded-2xl font-black text-sm transition flex items-center justify-center gap-2 shadow cursor-pointer"
+              className="w-full py-4 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white rounded-2xl font-black text-sm transition flex items-center justify-center gap-2 shadow cursor-pointer"
             >
               Proceed to checkout - ₹{(summary?.toPay || 0).toFixed(2)}
             </button>

@@ -1,4 +1,5 @@
 import { useNavigate } from "react-router-dom";
+import { Plus, Minus } from "lucide-react";
 import ComingSoon from "../location/ComingSoon";
 import { useToast } from "../../../components/Toast";
 import useProductVariant from "../../hooks/useProductVariant";
@@ -11,6 +12,8 @@ function ProductCard({ product }) {
     handleVariantChange,
     selectedImage,
     handleAddToCart,
+    handleDecrementCart,
+    cartQty,
     displayPrice,
     displayMrp,
     displayDiscount,
@@ -107,18 +110,40 @@ function ProductCard({ product }) {
           </div>
         )}
 
-        {/* Action button */}
-        <button
-          onClick={() => handleAddToCart(1)}
-          disabled={isOutOfStock}
-          className={`w-full py-2.5 rounded-xl font-bold transition flex items-center justify-center gap-1.5 text-sm ${
-            isOutOfStock
-              ? "bg-slate-100 text-slate-400 cursor-not-allowed"
-              : "bg-purple-600 hover:bg-purple-700 text-white shadow-sm"
-          }`}
-        >
-          {isOutOfStock ? "Out of Stock" : "Add to Cart"}
-        </button>
+        {/* Action button / Stepper */}
+        {isOutOfStock ? (
+          <button
+            disabled
+            className="w-full py-2.5 rounded-xl font-bold bg-slate-100 text-slate-400 cursor-not-allowed flex items-center justify-center text-sm h-[44px]"
+          >
+            Out of Stock
+          </button>
+        ) : cartQty > 0 ? (
+          <div className="flex items-center justify-between bg-purple-50 border border-purple-200 rounded-xl overflow-hidden shadow-sm h-[44px] w-full">
+            <button
+              onClick={() => handleDecrementCart()}
+              className="h-full hover:bg-purple-100 text-purple-700 font-bold transition flex items-center justify-center flex-1"
+              title="Decrease quantity"
+            >
+              <Minus size={14} />
+            </button>
+            <span className="text-sm font-black text-purple-800 w-10 text-center select-none">{cartQty}</span>
+            <button
+              onClick={() => handleAddToCart(1)}
+              className="h-full hover:bg-purple-100 text-purple-700 font-bold transition flex items-center justify-center flex-1"
+              title="Increase quantity"
+            >
+              <Plus size={14} />
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={() => handleAddToCart(1)}
+            className="w-full py-2.5 rounded-xl font-bold bg-purple-600 hover:bg-purple-700 text-white shadow-sm transition flex items-center justify-center gap-1.5 text-sm h-[44px]"
+          >
+            Add to Cart
+          </button>
+        )}
       </div>
     </div>
   );

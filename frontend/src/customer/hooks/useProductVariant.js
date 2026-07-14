@@ -11,22 +11,16 @@ export default function useProductVariant(product) {
     // Ignore
   }
   
-  const [selectedVariant, setSelectedVariant] = useState(
-    product?.variants?.[0] || null
-  );
+  const [prevProductId, setPrevProductId] = useState(null);
+  const [selectedVariant, setSelectedVariant] = useState(null);
+  const [selectedImage, setSelectedImage] = useState("");
 
-  const [selectedImage, setSelectedImage] = useState(
-    product?.variants?.[0]?.images?.[0] || product?.images?.[0] || ""
-  );
-
-  useEffect(() => {
-    if (product && !selectedVariant && product.variants?.length > 0) {
-      setSelectedVariant(product.variants[0]);
-      if (!selectedImage) {
-        setSelectedImage(product.variants[0].images?.[0] || product.images?.[0] || "");
-      }
-    }
-  }, [product]);
+  // Sync state synchronously during render when the product changes or loads
+  if (product && product._id !== prevProductId) {
+    setPrevProductId(product._id);
+    setSelectedVariant(product.variants?.[0] || null);
+    setSelectedImage(product.variants?.[0]?.images?.[0] || product.images?.[0] || "");
+  }
 
   const handleVariantChange = (variant) => {
     setSelectedVariant(variant);
@@ -69,6 +63,7 @@ export default function useProductVariant(product) {
         }
       }
     }
+
 
     return {
       displayPrice,
@@ -120,12 +115,73 @@ export default function useProductVariant(product) {
     showToast({ type: "success", message: `${qty} x ${computed.cleanName || product.name} added to cart!` });
   };
 
+  const handleDecrementCart = () => {
+    if (!product) return;
+    const variant = selectedVariant || product.variants?.[0];
+    if (!variant) return;
+
+    const cartStr = localStorage.getItem("cart");
+    let cart = [];
+    try {
+      cart = cartStr ? JSON.parse(cartStr) : [];
+      if (!Array.isArray(cart)) cart = [];
+    } catch {
+      cart = [];
+    }
+
+    const existingIndex = cart.findIndex((item) => item.variantId === variant._id);
+    if (existingIndex > -1) {
+      const currentQty = cart[existingIndex].qty;
+      if (currentQty <= 1) {
+        cart.splice(existingIndex, 1);
+        showToast({ type: "info", message: `${computed.cleanName || product.name} removed from cart.` });
+      } else {
+        cart[existingIndex].qty -= 1;
+        showToast({ type: "success", message: `Removed 1 x ${computed.cleanName || product.name} from cart.` });
+      }
+    }
+
+    localStorage.setItem("cart", JSON.stringify(cart));
+    window.dispatchEvent(new Event("cart-updated"));
+  };
+
+  const [cartQty, setCartQty] = useState(0);
+
+  const syncCartQty = () => {
+    if (!product) {
+      setCartQty(0);
+      return;
+    }
+    const variant = selectedVariant || product.variants?.[0];
+    if (!variant) {
+      setCartQty(0);
+      return;
+    }
+    try {
+      const cart = JSON.parse(localStorage.getItem("cart") || "[]");
+      const item = cart.find((i) => i.variantId === variant._id);
+      setCartQty(item ? item.qty : 0);
+    } catch {
+      setCartQty(0);
+    }
+  };
+
+  useEffect(() => {
+    syncCartQty();
+    window.addEventListener("cart-updated", syncCartQty);
+    return () => {
+      window.removeEventListener("cart-updated", syncCartQty);
+    };
+  }, [product, selectedVariant]);
+
   return {
     selectedVariant,
     handleVariantChange,
     selectedImage,
     setSelectedImage,
     handleAddToCart,
+    handleDecrementCart,
+    cartQty,
     ...computed
   };
 }

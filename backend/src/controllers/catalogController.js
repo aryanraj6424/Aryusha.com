@@ -1140,7 +1140,14 @@ export const getCustomerProducts = async (req, res) => {
         // Map variants of the master product
         if (product.variants && product.variants.length > 0) {
           for (const variant of product.variants) {
-            const mrp = variant.mrp || linkPrice;
+            // Check if there is a specific variant-level vendor listing first
+            const listings = variant.vendorListings || [];
+            const matchingListing = listings.find((l) => l.vendorId.toString() === nearestVendor._id.toString());
+
+            let sellingPrice = matchingListing ? matchingListing.sellingPrice : linkPrice;
+            let mrp = matchingListing ? (matchingListing.mrp || variant.mrp) : (variant.mrp || linkPrice);
+            let stockQty = matchingListing ? (matchingListing.stock?.quantity ?? 0) : linkStock;
+
             variantsList.push({
               _id: variant._id,
               variantLabel: variant.variantLabel,
@@ -1149,10 +1156,10 @@ export const getCustomerProducts = async (req, res) => {
               barcode: variant.barcode,
               images: variant.images && variant.images.length > 0 ? variant.images : product.images,
               mrp,
-              sellingPrice: linkPrice,
-              discount: mrp > linkPrice ? Math.round(((mrp - linkPrice) / mrp) * 100) : 0,
-              stockQty: linkStock,
-              stockStatus: "in_stock",
+              sellingPrice,
+              discount: mrp > sellingPrice ? Math.round(((mrp - sellingPrice) / mrp) * 100) : 0,
+              stockQty,
+              stockStatus: stockQty > 0 ? "in_stock" : "out_of_stock",
               vendorId: nearestVendor._id,
               vendorName: nearestVendor.shopName
             });

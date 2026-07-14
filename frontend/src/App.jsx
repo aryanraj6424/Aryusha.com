@@ -1,7 +1,6 @@
 import { Routes, Route, Outlet } from "react-router-dom";
 import { ToastProvider, ToastContainer } from "./components/Toast";
 
-import HomePage from "./components/LandingPage";
 import LoginPage from "./pages/auth/LoginPage";
 import SignupPage from "./pages/auth/SignupPage";
 import ForgotPasswordPage from "./pages/auth/ForgotPasswordPage";
@@ -76,16 +75,22 @@ function App() {
       <ToastContainer />
       <Routes>
       {/* Public routes */}
-      <Route path="/" element={<HomePage />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/signup" element={<SignupPage />} />
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       <Route path="/verify-otp" element={<OTPVerificationPage />} />
       <Route path="/reset-password" element={<ResetPasswordPage />} />
 
+      {/* Homepage — CustomerLayout wraps the root route so guests get the full store navbar */}
+      <Route path="/" element={<CustomerLayout />}>
+        <Route index element={<CustomerDashboard />} />
+      </Route>
+
       {/* Customer routes */}
       <Route path="/customer" element={<CustomerLayout />}>
         <Route path="dashboard" element={<CustomerDashboard />} />
+        <Route path="categories" element={<CustomerDashboard />} />
+        <Route path="trending" element={<CustomerDashboard />} />
         <Route path="product/:id" element={<ProductDetailsPage />} />
         <Route path="location" element={<LocationPage />} />
         <Route path="cart" element={<CartPage />} />

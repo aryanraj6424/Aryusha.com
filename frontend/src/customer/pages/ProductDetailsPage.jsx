@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import axios from "axios";
-import { ShoppingBag, Heart, Info, CheckCircle, AlertTriangle, Truck, RotateCcw, ShieldCheck, ChevronDown, ChevronRight, Share2 } from "lucide-react";
+import { ShoppingBag, Heart, Info, CheckCircle, AlertTriangle, Truck, RotateCcw, ShieldCheck, ChevronDown, ChevronRight, Share2, Plus, Minus } from "lucide-react";
 import { useToast } from "../../components/Toast";
 import DOMPurify from "dompurify";
 import useProductVariant from "../hooks/useProductVariant";
@@ -106,6 +106,8 @@ export default function ProductDetailsPage() {
     selectedImage,
     setSelectedImage,
     handleAddToCart,
+    handleDecrementCart,
+    cartQty,
     displayPrice,
     displayMrp,
     displayDiscount,
@@ -363,7 +365,7 @@ export default function ProductDetailsPage() {
                       className={`px-4 py-2 rounded-xl border text-sm font-bold transition ${
                         selectedVariant?._id === v._id
                           ? "border-purple-600 bg-purple-50 text-purple-700 shadow-sm"
-                          : "border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50"
+                          : "border-slate-200 text-slate-650 hover:border-slate-300 hover:bg-slate-50"
                       }`}
                     >
                       {v.variantLabel}
@@ -372,6 +374,8 @@ export default function ProductDetailsPage() {
                 </div>
               </div>
             )}
+
+
 
             {/* Availability */}
             <div className="flex items-center gap-2">
@@ -392,36 +396,65 @@ export default function ProductDetailsPage() {
             {!isOutOfStock && (
               <div className="flex items-center gap-4">
                 <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Quantity</span>
-                <div className="flex items-center border border-slate-200 rounded-xl overflow-hidden shadow-sm bg-white">
-                  <button
-                    onClick={() => setQty(Math.max(1, qty - 1))}
-                    className="px-4 py-2 hover:bg-slate-50 text-slate-650 font-bold text-base transition"
-                  >
-                    -
-                  </button>
-                  <span className="px-4 text-sm font-black text-slate-800">{qty}</span>
-                  <button
-                    onClick={() => setQty(qty + 1)}
-                    className="px-4 py-2 hover:bg-slate-50 text-slate-650 font-bold text-base transition"
-                  >
-                    +
-                  </button>
-                </div>
+                {cartQty > 0 ? (
+                  <div className="flex items-center border border-purple-200 bg-purple-50 rounded-xl overflow-hidden shadow-sm">
+                    <button
+                      onClick={() => handleDecrementCart()}
+                      className="px-4 py-2 hover:bg-purple-100 text-purple-700 font-extrabold text-base transition flex items-center justify-center"
+                      title="Decrease quantity"
+                    >
+                      <Minus size={14} />
+                    </button>
+                    <span className="px-4 text-sm font-black text-purple-800 w-10 text-center select-none">{cartQty}</span>
+                    <button
+                      onClick={() => handleAddToCart(1)}
+                      className="px-4 py-2 hover:bg-purple-100 text-purple-700 font-extrabold text-base transition flex items-center justify-center"
+                      title="Increase quantity"
+                    >
+                      <Plus size={14} />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex items-center border border-slate-200 rounded-xl overflow-hidden shadow-sm bg-white">
+                    <button
+                      onClick={() => setQty(Math.max(1, qty - 1))}
+                      className="px-4 py-2 hover:bg-slate-50 text-slate-650 font-bold text-base transition flex items-center justify-center"
+                    >
+                      -
+                    </button>
+                    <span className="px-4 text-sm font-black text-slate-800">{qty}</span>
+                    <button
+                      onClick={() => setQty(qty + 1)}
+                      className="px-4 py-2 hover:bg-slate-50 text-slate-650 font-bold text-base transition flex items-center justify-center"
+                    >
+                      +
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 
             <div className="flex gap-3">
-              <button
-                onClick={() => handleAddToCart(qty)}
-                disabled={isOutOfStock}
-                className={`flex-1 py-4 rounded-2xl font-black text-sm transition flex items-center justify-center gap-2 shadow ${
-                  isOutOfStock
-                    ? "bg-slate-100 text-slate-400 cursor-not-allowed"
-                    : "bg-purple-600 hover:bg-purple-700 text-white"
-                }`}
-              >
-                <ShoppingBag size={18} /> {isOutOfStock ? "Out of Stock" : "Add to Cart"}
-              </button>
+              {cartQty > 0 ? (
+                <button
+                  onClick={() => navigate("/customer/cart")}
+                  className="flex-1 py-4 rounded-2xl font-black text-sm bg-purple-700 hover:bg-purple-800 text-white shadow transition flex items-center justify-center gap-2"
+                >
+                  <ShoppingBag size={18} /> View in Cart
+                </button>
+              ) : (
+                <button
+                  onClick={() => handleAddToCart(qty)}
+                  disabled={isOutOfStock}
+                  className={`flex-1 py-4 rounded-2xl font-black text-sm transition flex items-center justify-center gap-2 shadow ${
+                    isOutOfStock
+                      ? "bg-slate-100 text-slate-400 cursor-not-allowed"
+                      : "bg-purple-600 hover:bg-purple-700 text-white"
+                  }`}
+                >
+                  <ShoppingBag size={18} /> {isOutOfStock ? "Out of Stock" : "Add to Cart"}
+                </button>
+              )}
               <button
                 onClick={handleWishlistToggle}
                 className={`p-4 border rounded-2xl transition shadow-sm ${

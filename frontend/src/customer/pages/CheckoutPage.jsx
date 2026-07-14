@@ -813,7 +813,7 @@ export default function CheckoutPage() {
               disabled={!isPlaceOrderEnabled}
               className={`w-full py-4 rounded-2xl font-black text-sm transition flex items-center justify-center gap-2 shadow ${
                 isPlaceOrderEnabled
-                  ? "bg-purple-650 hover:bg-purple-700 text-white cursor-pointer"
+                  ? "bg-purple-600 hover:bg-purple-700 text-white cursor-pointer"
                   : "bg-slate-100 text-slate-400 cursor-not-allowed"
               }`}
             >
@@ -856,7 +856,7 @@ export default function CheckoutPage() {
             disabled={!isPlaceOrderEnabled}
             className={`px-8 py-3 rounded-xl font-black text-xs transition flex items-center gap-2 ${
               isPlaceOrderEnabled
-                ? "bg-purple-650 hover:bg-purple-700 text-white cursor-pointer"
+                ? "bg-purple-600 hover:bg-purple-700 text-white cursor-pointer"
                 : "bg-slate-100 text-slate-400 cursor-not-allowed"
             }`}
           >

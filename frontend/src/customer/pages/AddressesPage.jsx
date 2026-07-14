@@ -353,6 +353,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "../../components/Toast";
 import ConfirmDialog from "../../components/Toast/ConfirmDialog";
+import { getAddressFromCoords } from "../../services/locationApi";
 
 import {
   createAddress,
@@ -400,24 +401,15 @@ function AddressesPage() {
         setLng(longitude);
         setLocLoading(false);
 
-        // Autofill address details using OSM Nominatim reverse geocode
+        // Autofill address details using the backend-proxied getAddressFromCoords
         try {
-          const res = await fetch(
-            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&addressdetails=1`,
-            {
-              headers: {
-                "User-Agent": "QuickCart",
-              },
-            }
-          );
-          const data = await res.json();
-          const addr = data.address || {};
+          const result = await getAddressFromCoords(latitude, longitude);
           setFormData((prev) => ({
             ...prev,
-            pincode: addr.postcode || prev.pincode,
-            city: addr.city || addr.town || addr.village || prev.city,
-            state: addr.state || prev.state,
-            area: addr.suburb || addr.neighbourhood || addr.road || prev.area || "",
+            pincode: result.postcode || prev.pincode,
+            city: result.city || prev.city,
+            state: prev.state || "",
+            area: result.formatted.split(",")[0] || prev.area || "",
           }));
           showToast({ type: "success", message: "Location coordinates and address resolved successfully!" });
         } catch (err) {
@@ -509,6 +501,32 @@ function AddressesPage() {
       const user = JSON.parse(
         localStorage.getItem("user")
       );
+
+      if (!user) {
+        // Guest mode address selection
+        const guestAddress = {
+          _id: "guest-temp-address",
+          fullName: formData.fullName || "Guest Customer",
+          phoneNumber: formData.phoneNumber || "",
+          houseNo: formData.houseNo,
+          area: formData.area,
+          city: formData.city,
+          state: formData.state,
+          pincode: formData.pincode,
+          addressType: formData.addressType,
+          latitude: lat,
+          longitude: lng,
+          fullAddress: `${formData.houseNo}, ${formData.area}, ${formData.city}, ${formData.state} - ${formData.pincode}`,
+        };
+        localStorage.setItem("selectedAddress", JSON.stringify(guestAddress));
+        setSuccess("✅ Delivery Address Set Successfully!");
+        showToast({ type: "success", message: "Delivery Address set successfully!" });
+        
+        setTimeout(() => {
+          navigate("/");
+        }, 1000);
+        return;
+      }
 
       const response =
         await createAddress({

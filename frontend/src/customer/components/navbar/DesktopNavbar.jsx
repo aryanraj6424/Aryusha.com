@@ -302,44 +302,34 @@ function DesktopNavbar() {
 
           <div className="flex items-center gap-3">
 
+            {/* Cart — always visible for guests and authenticated users */}
+            <button
+              onClick={() => navigate("/customer/cart")}
+              className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white px-5 py-3 rounded-xl font-medium transition"
+            >
+              <ShoppingCart size={18} />
+              <span>Cart</span>
+              {cartCount > 0 && (
+                <span className="bg-white text-purple-700 text-xs font-bold px-2 py-1 rounded-full">
+                  {cartCount}
+                </span>
+              )}
+            </button>
+
             {user ? (
               <>
                 {/* Profile */}
-
                 <button
-                  onClick={() =>
-                    navigate("/customer/profile")
-                  }
+                  onClick={() => navigate("/customer/profile")}
                   className="flex items-center gap-2 px-4 py-2 rounded-xl hover:bg-purple-50 transition"
                 >
                   <User size={18} />
-
                   <span className="font-medium">
-                    {user?.fullName ||
-                      user?.name ||
-                      "Customer"}
-                  </span>
-                </button>
-
-                {/* Cart */}
-
-                <button
-                  onClick={() =>
-                    navigate("/customer/cart")
-                  }
-                  className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white px-5 py-3 rounded-xl font-medium transition"
-                >
-                  <ShoppingCart size={18} />
-
-                  <span>Cart</span>
-
-                  <span className="bg-white text-purple-700 text-xs font-bold px-2 py-1 rounded-full">
-                    {cartCount}
+                    {user?.fullName || user?.name || "Customer"}
                   </span>
                 </button>
 
                 {/* Logout */}
-
                 <button
                   onClick={handleLogout}
                   className="flex items-center gap-2 bg-red-500 hover:bg-red-600 text-white px-4 py-3 rounded-xl"
@@ -351,18 +341,14 @@ function DesktopNavbar() {
             ) : (
               <>
                 <button
-                  onClick={() =>
-                    navigate("/login")
-                  }
+                  onClick={() => navigate("/login")}
                   className="px-5 py-2 border border-purple-600 text-purple-600 rounded-xl hover:bg-purple-50"
                 >
                   Login
                 </button>
 
                 <button
-                  onClick={() =>
-                    navigate("/signup")
-                  }
+                  onClick={() => navigate("/signup")}
                   className="px-5 py-2 bg-purple-600 text-white rounded-xl hover:bg-purple-700"
                 >
                   Sign Up

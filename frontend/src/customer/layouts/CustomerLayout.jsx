@@ -74,6 +74,7 @@ export default function CustomerLayout() {
     );
 
     const allowedRoutes = [
+      "/",
       "/customer/location",
       "/customer/addresses",
     ];
