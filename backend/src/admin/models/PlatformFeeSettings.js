@@ -37,6 +37,18 @@ const platformFeeSettingsSchema = new mongoose.Schema(
       default: 5,
       min: 0,
       max: 100
+    },
+    // Global marketplace commission defaults
+    defaultCommissionType: {
+      type: String,
+      enum: ["percentage", "flat"],
+      default: "percentage"
+    },
+    defaultCommissionValue: {
+      type: Number,
+      required: true,
+      default: 8,
+      min: 0
     }
   },
   {

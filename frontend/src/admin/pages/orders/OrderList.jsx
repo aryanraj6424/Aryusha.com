@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { Search, Eye, Pencil, Trash2 } from "lucide-react";
 import { useToast } from "../../../components/Toast";
 import ConfirmDialog from "../../../components/Toast/ConfirmDialog";
 
 export default function OrderList() {
+  const navigate = useNavigate();
   const { showToast } = useToast();
   const [confirmState, setConfirmState] = useState(null);
   const [orders, setOrders] = useState([]);
@@ -192,7 +194,10 @@ export default function OrderList() {
                   {new Date(order.createdAt || order.date).toLocaleDateString()}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
-                  <button className="text-blue-600 hover:text-blue-800 mr-3 flex items-center gap-1">
+                  <button
+                    onClick={() => navigate(`/admin/orders/${order._id}`)}
+                    className="text-blue-600 hover:text-blue-800 mr-3 flex items-center gap-1 cursor-pointer"
+                  >
                     <Eye size={16} />
                     View
                   </button>

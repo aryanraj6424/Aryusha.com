@@ -8,6 +8,8 @@ import { Product } from "../../models/catalog.js";
 import CustomerOrder from "../../customer/models/CustomerOrder.js";
 import DeliveryBoy from "../../deliveryBoy/models/DeliveryBoy.js";
 import { emitToRoom } from "../../socket/socketManager.js";
+import PlatformFeeSettings from "../../admin/models/PlatformFeeSettings.js";
+import { calculateCommissionSync } from "../../utils/commissionCalculator.js";
 
 const ensureMockOrders = async (vendorId) => {
   // Disabled mock seeder to use real live data only
@@ -21,13 +23,26 @@ export const getVendorDashboard = async (req, res) => {
 
     const vendor = await Vendor.findById(vendorId);
     
+    const platformSettings = await PlatformFeeSettings.findOne() || {
+      defaultCommissionType: "percentage",
+      defaultCommissionValue: 8
+    };
+
+    const commType = vendor?.commissionValue !== null && vendor?.commissionValue !== undefined && vendor?.commissionValue !== ""
+      ? vendor.commissionType 
+      : platformSettings.defaultCommissionType || "percentage";
+      
+    const commVal = vendor?.commissionValue !== null && vendor?.commissionValue !== undefined && vendor?.commissionValue !== ""
+      ? vendor.commissionValue 
+      : platformSettings.defaultCommissionValue ?? 8;
+
     // Fetch all real customer orders for this vendor
     const realOrders = await CustomerOrder.find({ vendorId })
       .populate("customerId", "fullName email phoneNumber")
       .sort({ createdAt: -1 });
 
     const mappedOrders = realOrders.map(order => {
-      const commission = order.grandTotal * 0.1;
+      const commission = calculateCommissionSync(order, commType, commVal);
       const netAmount = order.grandTotal - commission;
       
       let status = "pending";
@@ -53,7 +68,7 @@ export const getVendorDashboard = async (req, res) => {
     // Dynamic calculations from database
     const completedOrders = realOrders.filter(o => o.orderStatus === "Delivered");
     const totalSales = completedOrders.reduce((sum, o) => sum + o.grandTotal, 0);
-    const commissionPaid = completedOrders.reduce((sum, o) => sum + (o.grandTotal * 0.1), 0);
+    const commissionPaid = completedOrders.reduce((sum, o) => sum + calculateCommissionSync(o, commType, commVal), 0);
     const netRevenue = totalSales - commissionPaid;
 
     let earnings = await VendorEarnings.findOne({ vendor: vendorId });
@@ -149,10 +164,24 @@ export const getVendorEarningsSelf = async (req, res) => {
   try {
     const vendorId = req.vendor._id;
 
+    const vendor = await Vendor.findById(vendorId);
+    const platformSettings = await PlatformFeeSettings.findOne() || {
+      defaultCommissionType: "percentage",
+      defaultCommissionValue: 8
+    };
+
+    const commType = vendor?.commissionValue !== null && vendor?.commissionValue !== undefined && vendor?.commissionValue !== ""
+      ? vendor.commissionType 
+      : platformSettings.defaultCommissionType || "percentage";
+      
+    const commVal = vendor?.commissionValue !== null && vendor?.commissionValue !== undefined && vendor?.commissionValue !== ""
+      ? vendor.commissionValue 
+      : platformSettings.defaultCommissionValue ?? 8;
+
     // Dynamic calculations from database
     const completedOrders = await CustomerOrder.find({ vendorId, orderStatus: "Delivered" });
     const totalSales = completedOrders.reduce((sum, o) => sum + o.grandTotal, 0);
-    const commissionPaid = completedOrders.reduce((sum, o) => sum + (o.grandTotal * 0.1), 0);
+    const commissionPaid = completedOrders.reduce((sum, o) => sum + calculateCommissionSync(o, commType, commVal), 0);
     const netRevenue = totalSales - commissionPaid;
 
     // Get current earnings config
@@ -249,14 +278,31 @@ export const getVendorCommissionSelf = async (req, res) => {
   try {
     const vendorId = req.vendor._id;
 
+    const vendor = await Vendor.findById(vendorId);
+    const platformSettings = await PlatformFeeSettings.findOne() || {
+      defaultCommissionType: "percentage",
+      defaultCommissionValue: 8
+    };
+
+    const commType = vendor?.commissionValue !== null && vendor?.commissionValue !== undefined && vendor?.commissionValue !== ""
+      ? vendor.commissionType 
+      : platformSettings.defaultCommissionType || "percentage";
+      
+    const commVal = vendor?.commissionValue !== null && vendor?.commissionValue !== undefined && vendor?.commissionValue !== ""
+      ? vendor.commissionValue 
+      : platformSettings.defaultCommissionValue ?? 8;
+
     let commission = await Commission.findOne({ vendor: vendorId });
     if (!commission) {
-      commission = await Commission.create({ vendor: vendorId, rate: 10 });
+      commission = await Commission.create({ vendor: vendorId, rate: commVal });
+    } else {
+      commission.rate = commVal;
+      await commission.save();
     }
 
     // Recalculate based on orders
     const completedOrders = await CustomerOrder.find({ vendorId, orderStatus: "Delivered" });
-    const calculatedCommission = completedOrders.reduce((sum, o) => sum + (o.grandTotal * 0.1), 0);
+    const calculatedCommission = completedOrders.reduce((sum, o) => sum + calculateCommissionSync(o, commType, commVal), 0);
 
     commission.calculatedCommission = calculatedCommission;
     await commission.save();
@@ -273,13 +319,27 @@ export const getVendorSalesReportSelf = async (req, res) => {
   try {
     const vendorId = req.vendor._id;
 
+    const vendor = await Vendor.findById(vendorId);
+    const platformSettings = await PlatformFeeSettings.findOne() || {
+      defaultCommissionType: "percentage",
+      defaultCommissionValue: 8
+    };
+
+    const commType = vendor?.commissionValue !== null && vendor?.commissionValue !== undefined && vendor?.commissionValue !== ""
+      ? vendor.commissionType 
+      : platformSettings.defaultCommissionType || "percentage";
+      
+    const commVal = vendor?.commissionValue !== null && vendor?.commissionValue !== undefined && vendor?.commissionValue !== ""
+      ? vendor.commissionValue 
+      : platformSettings.defaultCommissionValue ?? 8;
+
     // Fetch all real customer orders for this vendor
     const realOrders = await CustomerOrder.find({ vendorId })
       .populate("customerId", "fullName email phoneNumber")
       .sort({ createdAt: -1 });
 
     const mappedOrders = realOrders.map(order => {
-      const commission = order.grandTotal * 0.1;
+      const commission = calculateCommissionSync(order, commType, commVal);
       const netAmount = order.grandTotal - commission;
       
       let status = "pending";

@@ -116,13 +116,13 @@ export default function CustomerLayout() {
     <div className="min-h-screen bg-gray-50">
 
       {/* Desktop Navbar */}
-      <div className="hidden lg:block">
+      <div className="hidden md:block sticky top-0 z-50">
         <DesktopNavbar />
       </div>
 
       {/* Mobile Navbar */}
       {!hideMobileTopNavbar && (
-        <div className="lg:hidden">
+        <div className="md:hidden sticky top-0 z-50">
           <MobileTopNavbar />
         </div>
       )}
@@ -132,9 +132,9 @@ export default function CustomerLayout() {
         className={`
           mx-auto
           px-4
-          lg:px-6
+          md:px-6
           pb-20
-          lg:pb-6
+          md:pb-6
           ${
             hideMobileTopNavbar
               ? "max-w-md"
@@ -146,7 +146,7 @@ export default function CustomerLayout() {
       </main>
 
       {/* Mobile Bottom Navigation */}
-      <div className="lg:hidden">
+      <div className="md:hidden">
         <MobileBottomNavbar />
       </div>
 

@@ -90,16 +90,14 @@ function HeroBanner({ vendorId }) {
     <div className="relative w-full overflow-hidden rounded-3xl shadow-md group select-none">
       {/* Banner Image */}
       <div
-        className="relative w-full cursor-pointer"
+        className="relative w-full cursor-pointer h-[140px] sm:h-[200px] md:h-[260px]"
         onClick={() => handleBannerClick(activeBanner)}
-        style={{ minHeight: "160px" }}
       >
         <img
           key={activeBanner._id}
           src={activeBanner.image}
           alt={activeBanner.productId?.name || "Promo Banner"}
-          className="w-full object-cover rounded-3xl transition-opacity duration-500"
-          style={{ maxHeight: "260px", minHeight: "140px", objectPosition: "center" }}
+          className="w-full h-full object-cover rounded-3xl transition-opacity duration-500 object-center"
         />
         {/* Subtle dark gradient at the bottom for visual depth */}
         <div className="absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-transparent rounded-3xl pointer-events-none" />

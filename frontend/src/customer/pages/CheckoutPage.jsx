@@ -1,9 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { getUserAddresses } from "../../services/addressApi";
 import { ArrowLeft, MapPin, Truck, Check, Loader2, Calendar, Clock, CreditCard, Sparkles, Plus, Minus, ShoppingBag, Trash2 } from "lucide-react";
 import { useToast } from "../../components/Toast";
+import { getSocket, joinRoom, leaveRoom } from "../../services/socket";
 
 export default function CheckoutPage() {
   const navigate = useNavigate();
@@ -29,6 +30,8 @@ export default function CheckoutPage() {
   const [pageLoading, setPageLoading] = useState(true);
   const [checkoutSummary, setCheckoutSummary] = useState(null);
   const [mockPaymentLoading, setMockPaymentLoading] = useState(false);
+  const [couponInput, setCouponInput] = useState("");
+  const [couponErrorState, setCouponErrorState] = useState("");
 
   const user = JSON.parse(localStorage.getItem("user") || "null");
 
@@ -51,6 +54,54 @@ export default function CheckoutPage() {
       }
     }
   }, [slots]);
+
+  const lastJoinedZoneRef = useRef(null);
+
+  // Re-fetch bill summary when active address/zone changes
+  useEffect(() => {
+    if (selectedAddress && cart.length > 0) {
+      const appliedCode = checkoutSummary?.appliedCoupon?.code || localStorage.getItem("appliedCouponCode");
+      fetchSummary(cart, appliedCode);
+    }
+  }, [selectedAddress?._id]);
+
+  // Socket connection & real-time fee update listeners
+  useEffect(() => {
+    const socket = getSocket();
+    joinRoom("fees:global");
+
+    const handleFeesUpdated = () => {
+      if (cart.length > 0) {
+        const appliedCode = checkoutSummary?.appliedCoupon?.code || localStorage.getItem("appliedCouponCode");
+        fetchSummary(cart, appliedCode);
+      }
+    };
+
+    socket.on("fees:updated", handleFeesUpdated);
+
+    return () => {
+      socket.off("fees:updated", handleFeesUpdated);
+      leaveRoom("fees:global");
+    };
+  }, [cart, checkoutSummary?.appliedCoupon?.code]);
+
+  useEffect(() => {
+    if (!selectedAddress) return;
+    const zoneName = selectedAddress.city;
+
+    if (lastJoinedZoneRef.current && lastJoinedZoneRef.current !== zoneName) {
+      leaveRoom(`zone:${lastJoinedZoneRef.current}`);
+    }
+
+    joinRoom(`zone:${zoneName}`);
+    lastJoinedZoneRef.current = zoneName;
+
+    return () => {
+      if (lastJoinedZoneRef.current) {
+        leaveRoom(`zone:${lastJoinedZoneRef.current}`);
+      }
+    };
+  }, [selectedAddress?.city]);
 
   const loadCart = () => {
     try {
@@ -140,7 +191,8 @@ export default function CheckoutPage() {
           vendorId: item.vendorId
         })),
         couponCode: appliedCouponCode || localStorage.getItem("appliedCouponCode"),
-        vendorId: currentCart[0]?.vendorId
+        vendorId: currentCart[0]?.vendorId,
+        zoneId: selectedAddress?.city || "",
       };
 
       const res = await axios.post(
@@ -155,6 +207,66 @@ export default function CheckoutPage() {
     } catch (error) {
       console.error("Error fetching checkout summary:", error);
     }
+  };
+
+  const handleApplyCoupon = async () => {
+    if (!couponInput) return;
+    setCouponErrorState("");
+    try {
+      const token = localStorage.getItem("userToken");
+      const headers = {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`
+      };
+
+      const payload = {
+        items: cart.map(item => ({
+          productId: item.productId,
+          variantId: item.variantId,
+          qty: item.qty,
+          price: item.price,
+          mrp: item.mrp,
+          name: item.name,
+          brand: item.brand,
+          img: item.img,
+          packSize: item.packSize,
+          vendorId: item.vendorId
+        })),
+        couponCode: couponInput,
+        vendorId: cart[0]?.vendorId,
+        zoneId: selectedAddress?.city || "",
+      };
+
+      const res = await axios.post(
+        `${import.meta.env.VITE_API_URL}/customer/cart/summary`,
+        payload,
+        { headers }
+      );
+
+      if (res.data.success) {
+        if (res.data.summary.couponError) {
+          setCouponErrorState(res.data.summary.couponError);
+          showToast({ type: "error", message: res.data.summary.couponError });
+        } else if (res.data.summary.appliedCoupon) {
+          setCheckoutSummary(res.data.summary);
+          localStorage.setItem("appliedCouponCode", couponInput);
+          showToast({ type: "success", message: `Coupon "${couponInput}" applied successfully!` });
+        } else {
+          setCouponErrorState("Coupon could not be applied.");
+        }
+      }
+    } catch (err) {
+      console.error(err);
+      setCouponErrorState("Error applying coupon.");
+    }
+  };
+
+  const handleRemoveCoupon = () => {
+    localStorage.removeItem("appliedCouponCode");
+    setCouponInput("");
+    setCouponErrorState("");
+    fetchSummary(cart, null);
+    showToast({ type: "info", message: "Coupon removed." });
   };
 
   const selectAddress = (addr) => {
@@ -268,6 +380,36 @@ export default function CheckoutPage() {
 
     try {
       setLoading(true);
+
+      // Capture customer's real GPS coordinates at order time (one-shot, high accuracy)
+      const getLiveLocation = () => {
+        return new Promise((resolve) => {
+          if (!navigator.geolocation) {
+            resolve({ customerLiveLocation: null, locationUnavailable: true });
+            return;
+          }
+          navigator.geolocation.getCurrentPosition(
+            (position) => {
+              resolve({
+                customerLiveLocation: {
+                  lat: position.coords.latitude,
+                  lng: position.coords.longitude,
+                  accuracy: position.coords.accuracy,
+                  capturedAt: new Date(position.timestamp || Date.now())
+                },
+                locationUnavailable: false
+              });
+            },
+            (error) => {
+              console.warn("One-shot GPS capture failed or denied:", error);
+              resolve({ customerLiveLocation: null, locationUnavailable: true });
+            },
+            { enableHighAccuracy: true, timeout: 6000 }
+          );
+        });
+      };
+
+      const locResult = await getLiveLocation();
       const token = localStorage.getItem("userToken");
       const headers = {
         "Content-Type": "application/json",
@@ -305,7 +447,9 @@ export default function CheckoutPage() {
         deliverySlot: {
           date: selectedSlot.date,
           time: selectedSlot.time
-        }
+        },
+        customerLiveLocation: locResult.customerLiveLocation,
+        locationUnavailable: locResult.locationUnavailable,
       };
 
       const res = await axios.post(
@@ -340,7 +484,9 @@ export default function CheckoutPage() {
   const smallCartFee = hasSummary ? checkoutSummary.smallCartFee : 0;
   const deliveryCharge = hasSummary ? checkoutSummary.deliveryPartnerFee : 0;
   const tax = hasSummary ? checkoutSummary.gst : Math.round(subtotal * 0.05);
-  const grandTotal = hasSummary ? checkoutSummary.toPay : (subtotal + tax + deliveryCharge + handlingFee + smallCartFee - couponDiscount);
+  const rainFee = hasSummary ? (checkoutSummary.rainFee || 0) : 0;
+  const customFees = hasSummary ? (checkoutSummary.customFees || 0) : 0;
+  const grandTotal = hasSummary ? checkoutSummary.toPay : (subtotal + tax + deliveryCharge + handlingFee + smallCartFee + rainFee + customFees - couponDiscount);
 
   // Eligibility checking for Place Order button
   const isPlaceOrderEnabled = selectedAddress && isSlotConfirmed && paymentMethod && !loading;
@@ -728,8 +874,60 @@ export default function CheckoutPage() {
         </div>
 
         {/* Right Columns: Bill Details card */}
-        <div className="space-y-6">
-          <div className="bg-white border border-slate-150 p-6 rounded-3xl shadow-sm space-y-6 sticky top-6">
+        <div className="space-y-6 sticky top-24">
+          
+          {/* Coupon Promo Card */}
+          <div className="bg-white border border-slate-150 p-6 rounded-3xl shadow-sm space-y-3">
+            <h4 className="font-extrabold text-slate-800 text-sm flex items-center gap-1.5">
+              <Sparkles size={16} className="text-purple-650" /> Apply Coupon
+            </h4>
+            
+            {checkoutSummary?.appliedCoupon ? (
+              <div className="flex items-center justify-between bg-emerald-50 border border-emerald-200 rounded-2xl px-4 py-3 text-xs">
+                <div>
+                  <p className="font-black text-emerald-850">
+                    "{checkoutSummary.appliedCoupon.code}" APPLIED!
+                  </p>
+                  <p className="text-emerald-700 font-semibold mt-0.5">
+                    Saved ₹{checkoutSummary.appliedCoupon.discountAmount.toFixed(2)} on this order
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleRemoveCoupon}
+                  className="text-xs font-extrabold text-rose-650 hover:text-rose-800 transition cursor-pointer"
+                >
+                  Remove
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={couponInput}
+                    onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
+                    placeholder="Enter Promo Code"
+                    className="flex-1 border px-3 py-2.5 rounded-xl outline-none focus:border-purple-600 text-xs font-mono uppercase font-semibold"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleApplyCoupon}
+                    className="bg-purple-100 hover:bg-purple-200 text-purple-700 text-xs font-black px-4 rounded-xl transition cursor-pointer"
+                  >
+                    Apply
+                  </button>
+                </div>
+                {couponErrorState && (
+                  <p className="text-[10px] text-red-650 font-bold bg-red-50/50 p-2 rounded-lg">
+                    ⚠️ {couponErrorState}
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+
+          <div className="bg-white border border-slate-150 p-6 rounded-3xl shadow-sm space-y-6">
             <h3 className="font-extrabold text-slate-800 text-lg border-b pb-2">Bill Summary</h3>
 
             <div className="space-y-3.5 text-sm font-semibold text-slate-600">
@@ -747,33 +945,47 @@ export default function CheckoutPage() {
                 </div>
               )}
 
-              {/* Handling Fee */}
-              <div className="flex justify-between">
-                <span>Handling Fee:</span>
-                <span className="text-slate-800">₹{handlingFee.toFixed(2)}</span>
-              </div>
+              {/* Dynamic Fee Breakdown */}
+              {checkoutSummary?.feeBreakdown ? (
+                checkoutSummary.feeBreakdown.map((fee) => (
+                  <div key={fee.feeType} className="flex justify-between">
+                    <span>{fee.label}:</span>
+                    <span className={fee.feeType === "delivery_partner" && fee.amount === 0 ? "text-emerald-600 font-black bg-emerald-50/50 px-2 py-0.5 rounded text-xs uppercase" : "text-slate-800"}>
+                      {fee.feeType === "delivery_partner" && fee.amount === 0 ? "FREE" : `₹${fee.amount.toFixed(2)}`}
+                    </span>
+                  </div>
+                ))
+              ) : (
+                <>
+                  {/* Handling Fee */}
+                  <div className="flex justify-between">
+                    <span>Handling Fee:</span>
+                    <span className="text-slate-800">₹{handlingFee.toFixed(2)}</span>
+                  </div>
 
-              {/* Small Cart Fee (Hidden if >= 99) */}
-              {subtotal < 99 && smallCartFee > 0 && (
-                <div className="flex justify-between text-amber-700">
-                  <span>Small Cart Fee:</span>
-                  <span>₹{smallCartFee.toFixed(2)}</span>
-                </div>
+                  {/* Small Cart Fee (Hidden if >= 99) */}
+                  {subtotal < 99 && smallCartFee > 0 && (
+                    <div className="flex justify-between text-amber-700">
+                      <span>Small Cart Fee:</span>
+                      <span>₹{smallCartFee.toFixed(2)}</span>
+                    </div>
+                  )}
+
+                  {/* Delivery Fee (FREE threshold at >= 149) */}
+                  <div className="flex justify-between">
+                    <span>Delivery Partner Fee:</span>
+                    <span className={deliveryCharge === 0 ? "text-emerald-600 font-black bg-emerald-50/50 px-2 py-0.5 rounded text-xs uppercase" : "text-slate-800"}>
+                      {deliveryCharge === 0 ? "FREE" : `₹${deliveryCharge.toFixed(2)}`}
+                    </span>
+                  </div>
+
+                  {/* Tax GST */}
+                  <div className="flex justify-between">
+                    <span>GST & Taxes (5%):</span>
+                    <span className="text-slate-800">₹{tax.toFixed(2)}</span>
+                  </div>
+                </>
               )}
-
-              {/* Delivery Fee (FREE threshold at >= 149) */}
-              <div className="flex justify-between">
-                <span>Delivery Partner Fee:</span>
-                <span className={deliveryCharge === 0 ? "text-emerald-600 font-black bg-emerald-50/50 px-2 py-0.5 rounded text-xs uppercase" : "text-slate-800"}>
-                  {deliveryCharge === 0 ? "FREE" : `₹${deliveryCharge.toFixed(2)}`}
-                </span>
-              </div>
-
-              {/* Tax GST */}
-              <div className="flex justify-between">
-                <span>GST & Taxes (5%):</span>
-                <span className="text-slate-800">₹{tax.toFixed(2)}</span>
-              </div>
 
               {/* Final Grand Total */}
               <div className="border-t pt-3 flex justify-between text-base font-black text-slate-850">

@@ -70,6 +70,10 @@ export default function CartPage() {
       const headers = { "Content-Type": "application/json" };
       if (token) headers.Authorization = `Bearer ${token}`;
 
+      const storedAddr = localStorage.getItem("selectedAddress");
+      const parsedAddr = storedAddr ? JSON.parse(storedAddr) : null;
+      const zoneId = parsedAddr?.city || "";
+
       const payload = {
         items: currentCart.map(item => ({
           productId: item.productId,
@@ -84,7 +88,8 @@ export default function CartPage() {
           vendorId: item.vendorId
         })),
         couponCode: appliedCouponCode,
-        vendorId: currentCart[0]?.vendorId
+        vendorId: currentCart[0]?.vendorId,
+        zoneId: zoneId
       };
 
       const res = await axios.post(
@@ -190,13 +195,23 @@ export default function CartPage() {
   // Apply selected coupon
   const handleApplyCoupon = async (code) => {
     setCouponError(null);
+    const token = localStorage.getItem("userToken");
+    if (!token) {
+      showToast({ type: "warning", message: "Please login to apply coupons." });
+      navigate("/login");
+      return;
+    }
+    
     try {
-      const token = localStorage.getItem("userToken");
       const headers = {
         "Content-Type": "application/json",
         Authorization: `Bearer ${token}`
       };
       
+      const storedAddr = localStorage.getItem("selectedAddress");
+      const parsedAddr = storedAddr ? JSON.parse(storedAddr) : null;
+      const zoneId = parsedAddr?.city || "";
+
       const payload = {
         couponCode: code,
         items: cart.map(item => ({
@@ -211,7 +226,8 @@ export default function CartPage() {
           packSize: item.packSize,
           vendorId: item.vendorId
         })),
-        vendorId: cart[0]?.vendorId
+        vendorId: cart[0]?.vendorId,
+        zoneId: zoneId
       };
 
       const res = await axios.post(
@@ -223,15 +239,19 @@ export default function CartPage() {
       if (res.data.success) {
         if (res.data.summary.couponError) {
           setCouponError(res.data.summary.couponError);
+          showToast({ type: "error", message: res.data.summary.couponError });
         } else {
           setSummary(res.data.summary);
           localStorage.setItem("appliedCouponCode", code);
           setShowCouponModal(false);
           setCouponCodeInput("");
+          showToast({ type: "success", message: `Coupon "${code}" applied successfully!` });
         }
       }
     } catch (error) {
-      setCouponError(error.response?.data?.message || "Failed to apply coupon.");
+      const errMsg = error.response?.data?.message || "Failed to apply coupon.";
+      setCouponError(errMsg);
+      showToast({ type: "error", message: errMsg });
     }
   };
 

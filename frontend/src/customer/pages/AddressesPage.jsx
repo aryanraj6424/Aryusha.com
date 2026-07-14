@@ -350,10 +350,11 @@
 
 
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { useToast } from "../../components/Toast";
 import ConfirmDialog from "../../components/Toast/ConfirmDialog";
 import { getAddressFromCoords } from "../../services/locationApi";
+import LocationMapSelector from "../components/location/LocationMapSelector";
 
 import {
   createAddress,
@@ -363,8 +364,10 @@ import {
 
 function AddressesPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { showToast } = useToast();
   const [confirmState, setConfirmState] = useState(null);
+  const [showMap, setShowMap] = useState(false);
 
   const [formData, setFormData] = useState({
     fullName: "",
@@ -386,6 +389,23 @@ function AddressesPage() {
   const [lat, setLat] = useState(null);
   const [lng, setLng] = useState(null);
   const [locLoading, setLocLoading] = useState(false);
+
+  // Auto pre-fill from router coordinates state
+  useEffect(() => {
+    if (location.state?.prefill) {
+      const { latitude, longitude, address: prefAddr } = location.state.prefill;
+      setLat(latitude);
+      setLng(longitude);
+      setFormData((prev) => ({
+        ...prev,
+        pincode: prefAddr?.postcode || prev.pincode,
+        city: prefAddr?.city || prev.city,
+        state: prefAddr?.state || prev.state,
+        area: prefAddr?.road || prefAddr?.formatted?.split(",")?.[0] || prev.area,
+      }));
+      showToast({ type: "success", message: "Location details pre-filled from map!" });
+    }
+  }, [location.state]);
 
   const handleDetectLocation = () => {
     if (!navigator.geolocation) {
@@ -645,29 +665,30 @@ function AddressesPage() {
           className="w-full border p-3 rounded-xl"
         />
 
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap sm:flex-nowrap">
           <input
             name="pincode"
             value={formData.pincode}
             onChange={handleChange}
             placeholder="Pincode"
-            className="flex-1 border p-3 rounded-xl outline-none focus:border-purple-600 font-semibold"
+            className="flex-1 border p-3 rounded-xl outline-none focus:border-purple-600 font-semibold min-w-[120px]"
           />
           <button
             type="button"
             disabled={locLoading}
             onClick={handleDetectLocation}
-            className="bg-purple-100 hover:bg-purple-200 disabled:bg-slate-100 text-purple-700 font-bold px-5 rounded-xl text-sm transition"
+            className="bg-purple-100 hover:bg-purple-200 disabled:bg-slate-100 text-purple-700 font-bold px-4 rounded-xl text-xs sm:text-sm transition flex-shrink-0"
           >
             {locLoading ? "Detecting..." : "Detect Location"}
           </button>
+          <button
+            type="button"
+            onClick={() => setShowMap(true)}
+            className="bg-purple-600 hover:bg-purple-700 text-white font-bold px-4 rounded-xl text-xs sm:text-sm transition flex-shrink-0"
+          >
+            Select on Map 🗺️
+          </button>
         </div>
-
-        {lat && lng && (
-          <div className="text-xs text-green-700 bg-green-50 px-3 py-2 rounded-xl font-bold flex items-center gap-1.5 border border-green-100">
-            📍 Coordinates Detected: Latitude {lat.toFixed(6)}, Longitude {lng.toFixed(6)}
-          </div>
-        )}
 
         <select
           name="addressType"
@@ -779,6 +800,25 @@ function AddressesPage() {
           type={confirmState.type || "warning"}
           onConfirm={confirmState.onConfirm}
           onCancel={() => setConfirmState(null)}
+        />
+      )}
+      {showMap && (
+        <LocationMapSelector
+          initialLocation={lat && lng ? { latitude: lat, longitude: lng } : null}
+          onClose={() => setShowMap(false)}
+          onConfirm={({ latitude, longitude, address: prefAddr }) => {
+            setLat(latitude);
+            setLng(longitude);
+            setFormData((prev) => ({
+              ...prev,
+              pincode: prefAddr?.postcode || prev.pincode,
+              city: prefAddr?.city || prev.city,
+              state: prefAddr?.state || prev.state,
+              area: prefAddr?.road || prefAddr?.formatted?.split(",")?.[0] || prev.area,
+            }));
+            setShowMap(false);
+            showToast({ type: "success", message: "Location resolved from map!" });
+          }}
         />
       )}
     </div>

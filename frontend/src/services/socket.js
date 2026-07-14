@@ -15,6 +15,7 @@
 import { io } from "socket.io-client";
 
 const BACKEND_URL = import.meta.env.VITE_API_URL?.replace("/api", "") || "http://localhost:5000";
+const activeRooms = new Set();
 
 let _socket = null;
 
@@ -27,12 +28,16 @@ export function getSocket() {
       reconnectionAttempts: Infinity,
       reconnectionDelay: 1000,
       reconnectionDelayMax: 5000,
-      // Prevent duplicate listeners on React StrictMode double-invoke
       autoConnect: true,
     });
 
     _socket.on("connect", () => {
       console.log("[Socket] Connected:", _socket.id);
+      // Automatically re-join active rooms on reconnection
+      activeRooms.forEach((room) => {
+        _socket.emit("join:room", room);
+        console.log(`[Socket] Auto-rejoined room: ${room}`);
+      });
     });
 
     _socket.on("disconnect", (reason) => {
@@ -50,11 +55,13 @@ export function getSocket() {
 /** Join a named room (server listens for "join:room" event) */
 export function joinRoom(room) {
   const socket = getSocket();
+  activeRooms.add(room);
   socket.emit("join:room", room);
 }
 
 /** Leave a named room */
 export function leaveRoom(room) {
   const socket = getSocket();
+  activeRooms.delete(room);
   socket.emit("leave:room", room);
 }

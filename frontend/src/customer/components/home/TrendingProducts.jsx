@@ -25,7 +25,7 @@ function ProductCard({ product }) {
   } = useProductVariant(product);
 
   return (
-    <div className="bg-white rounded-2xl border border-slate-100 p-4 shadow-sm hover:shadow-md transition flex flex-col justify-between relative">
+    <div className="bg-white rounded-2xl border border-slate-100 p-3 sm:p-4 shadow-sm hover:shadow-md transition flex flex-col justify-between relative">
       {/* Discount Badge */}
       {displayDiscount > 0 && (
         <span className="absolute top-3 left-3 bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full z-10">
@@ -37,7 +37,7 @@ function ProductCard({ product }) {
         {/* Product Image */}
         <div 
           onClick={() => navigate(`/customer/product/${product._id}`)}
-          className="h-36 w-full rounded-xl bg-slate-50 flex items-center justify-center overflow-hidden mb-3 cursor-pointer hover:opacity-90 transition"
+          className="h-32 sm:h-36 md:h-40 w-full rounded-xl bg-slate-50 flex items-center justify-center overflow-hidden mb-3 cursor-pointer hover:opacity-90 transition"
         >
           <img
             src={selectedImage || "https://via.placeholder.com/150"}
@@ -122,15 +122,15 @@ function ProductCard({ product }) {
           <div className="flex items-center justify-between bg-purple-50 border border-purple-200 rounded-xl overflow-hidden shadow-sm h-[44px] w-full">
             <button
               onClick={() => handleDecrementCart()}
-              className="h-full hover:bg-purple-100 text-purple-700 font-bold transition flex items-center justify-center flex-1"
+              className="h-full w-11 flex-shrink-0 hover:bg-purple-100 text-purple-700 font-bold transition flex items-center justify-center"
               title="Decrease quantity"
             >
               <Minus size={14} />
             </button>
-            <span className="text-sm font-black text-purple-800 w-10 text-center select-none">{cartQty}</span>
+            <span className="text-sm font-black text-purple-800 flex-1 text-center select-none">{cartQty}</span>
             <button
               onClick={() => handleAddToCart(1)}
-              className="h-full hover:bg-purple-100 text-purple-700 font-bold transition flex items-center justify-center flex-1"
+              className="h-full w-11 flex-shrink-0 hover:bg-purple-100 text-purple-700 font-bold transition flex items-center justify-center"
               title="Increase quantity"
             >
               <Plus size={14} />
@@ -176,7 +176,7 @@ function TrendingProducts({ products = [], groupedProducts = {}, isFilterActive 
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4">
             {products.map((product) => <ProductCard key={product._id} product={product} />)}
           </div>
         )}
@@ -212,7 +212,7 @@ function TrendingProducts({ products = [], groupedProducts = {}, isFilterActive 
             </h2>
             <span className="text-xs font-semibold text-purple-600">Great Discounts</span>
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4">
             {groupedProducts.featured.map((product) => <ProductCard key={product._id} product={product} />)}
           </div>
         </div>
@@ -227,7 +227,7 @@ function TrendingProducts({ products = [], groupedProducts = {}, isFilterActive 
             </h2>
             <span className="text-xs font-semibold text-purple-600">Newly Uploaded</span>
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4">
             {groupedProducts.recentlyAdded.map((product) => <ProductCard key={product._id} product={product} />)}
           </div>
         </div>
@@ -245,7 +245,7 @@ function TrendingProducts({ products = [], groupedProducts = {}, isFilterActive 
                 </h2>
                 <span className="text-xs font-semibold text-purple-600">Explore Category</span>
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4">
                 {group.products.slice(0, 4).map((product) => <ProductCard key={product._id} product={product} />)}
               </div>
             </div>

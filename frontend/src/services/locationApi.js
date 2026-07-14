@@ -22,12 +22,19 @@ export const getAddressFromCoords = async (lat, lng) => {
           item.address?.village ||
           item.address?.county ||
           "",
+        state: item.address?.state || "",
+        road:
+          item.address?.road ||
+          item.address?.suburb ||
+          item.address?.neighbourhood ||
+          item.address?.city_district ||
+          "",
       };
     }
-    return { formatted: "Current Location", postcode: "", city: "" };
+    return { formatted: "Current Location", postcode: "", city: "", state: "", road: "" };
   } catch (err) {
     console.error("Reverse geocoding failed via proxy:", err);
-    return { formatted: "Current Location", postcode: "", city: "" };
+    return { formatted: "Current Location", postcode: "", city: "", state: "", road: "" };
   }
 };
 
@@ -49,6 +56,19 @@ export const searchLocation = async (text) => {
           lat: parseFloat(item.lat),
           lon: parseFloat(item.lon),
           postcode: item.address?.postcode || "",
+          city:
+            item.address?.city ||
+            item.address?.town ||
+            item.address?.village ||
+            item.address?.county ||
+            "",
+          state: item.address?.state || "",
+          road:
+            item.address?.road ||
+            item.address?.suburb ||
+            item.address?.neighbourhood ||
+            item.address?.city_district ||
+            "",
         },
       }));
     }

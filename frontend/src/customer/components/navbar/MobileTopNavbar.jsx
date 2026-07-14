@@ -113,9 +113,9 @@ function MobileTopNavbar() {
           onClick={() =>
             navigate("/customer/location")
           }
-          className="flex items-center gap-2 flex-1 text-left"
+          className="flex items-center gap-2 flex-1 text-left min-h-[44px]"
         >
-          <div className="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center">
+          <div className="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center flex-shrink-0">
             <MapPin
               size={18}
               className="text-purple-700"
@@ -127,9 +127,11 @@ function MobileTopNavbar() {
               Delivering To
             </p>
 
-            <p className="font-semibold text-sm truncate max-w-[180px]">
-              {selectedAddress?.fullAddress
-                ? selectedAddress.fullAddress
+            <p className="font-semibold text-sm truncate max-w-[40vw] sm:max-w-[12rem]">
+              {selectedAddress
+                ? selectedAddress.fullAddress ||
+                  `${selectedAddress.houseNo || ""} ${selectedAddress.area || ""}`.trim() ||
+                  "Location Selected"
                 : "Select Location"}
             </p>
           </div>
@@ -141,6 +143,8 @@ function MobileTopNavbar() {
             onClick={() =>
               navigate("/customer/profile")
             }
+            className="w-11 h-11 flex items-center justify-center flex-shrink-0"
+            title="Profile"
           >
             <div className="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center">
               <User
@@ -154,7 +158,7 @@ function MobileTopNavbar() {
             onClick={() =>
               navigate("/login")
             }
-            className="bg-purple-600 text-white px-4 py-2 rounded-xl text-sm font-medium"
+            className="bg-purple-600 text-white px-4 py-2 rounded-xl text-sm font-medium min-h-[44px] flex items-center justify-center flex-shrink-0"
           >
             Login
           </button>

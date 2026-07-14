@@ -68,6 +68,7 @@ export default function AdminSidebar({ isOpen, setIsOpen }) {
         { path: "/admin/customers", label: "Customer Management", icon: Users },
         { path: "/admin/marketing", label: "Marketing & Banners", icon: Megaphone },
         { path: "/admin/offers", label: "Offers & Coupons", icon: ChevronRight },
+        { path: "/admin/fees", label: "Fee Management", icon: ChevronRight },
       ]
     },
     {
@@ -75,7 +76,6 @@ export default function AdminSidebar({ isOpen, setIsOpen }) {
       items: [
         { path: "/admin/reports", label: "Reports & Analytics", icon: BarChart3 },
         { path: "/admin/settings", label: "System Settings", icon: Settings },
-        { path: "/admin/fee-settings", label: "Fee Settings", icon: ChevronRight },
         { path: "/admin/users", label: "Users & Roles", icon: ChevronRight },
         { path: "/admin/support", label: "Support Tickets", icon: ChevronRight },
       ]

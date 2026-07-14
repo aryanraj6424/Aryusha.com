@@ -3,6 +3,8 @@ import PDFDocument from "pdfkit";
 import CustomerOrder from "../models/CustomerOrder.js";
 import Invoice from "../models/Invoice.js";
 import { VendorListing, VendorProduct, ProductVariant } from "../../models/catalog.js";
+import { calculateOrderFees } from "../../utils/feeCalculator.js";
+import { calculateVendorOrderCommission } from "../../utils/commissionCalculator.js";
 
 // Helper: Generate unique IDs
 const generateUniqueId = async (prefix, Model, field) => {
@@ -34,6 +36,8 @@ export const placeOrder = async (req, res) => {
       couponDiscount,
       paymentMethod,
       deliverySlot,
+      customerLiveLocation,
+      locationUnavailable,
     } = req.body;
 
     if (!customerId || !vendorId || !items || items.length === 0 || !deliveryAddress) {
@@ -117,15 +121,36 @@ export const placeOrder = async (req, res) => {
     const orderId = await generateUniqueId("QK", CustomerOrder, "orderId");
 
     // 4. Create the CustomerOrder record
+    // 3.5 Recalculate fees server-side based on customer city/zone and total
+    const zoneId = deliveryAddress.city || "";
+    const { breakdown, totalFees } = await calculateOrderFees(totalAmount, zoneId);
+
+    const finalHandlingFee = breakdown.find(f => f.feeType === "handling")?.amount || 0;
+    const finalSmallCartFee = breakdown.find(f => f.feeType === "small_cart")?.amount || 0;
+    const finalDeliveryFee = breakdown.find(f => f.feeType === "delivery_partner")?.amount || 0;
+    const finalGst = breakdown.find(f => f.feeType === "gst")?.amount || 0;
+    const finalRainFee = breakdown.find(f => f.feeType === "rain")?.amount || 0;
+
+    const totalCalculatedFees = finalHandlingFee + finalSmallCartFee + finalDeliveryFee + finalGst + finalRainFee;
+    const finalGrandTotal = Math.max(0, totalAmount - couponDiscount + totalCalculatedFees);
+
+    // Calculate and lock the commission at order time
+    const commissionDetails = await calculateVendorOrderCommission({ items }, vendorId);
+
+    // 4. Create the CustomerOrder record
     const order = await CustomerOrder.create({
       orderId,
       customerId,
       vendorId,
       items,
       totalAmount,
-      deliveryCharge: deliveryCharge || 0,
-      taxAmount: taxAmount || 0,
-      grandTotal,
+      deliveryCharge: finalDeliveryFee,
+      taxAmount: finalGst,
+      handlingFee: finalHandlingFee,
+      smallCartFee: finalSmallCartFee,
+      rainFee: finalRainFee,
+      feeBreakdown: breakdown.map(f => ({ feeType: f.feeType, label: f.label, amount: f.amount })),
+      grandTotal: finalGrandTotal,
       couponCode: couponCode || null,
       couponDiscount: couponDiscount || 0,
       paymentMethod: paymentMethod || "COD",
@@ -133,6 +158,14 @@ export const placeOrder = async (req, res) => {
       orderStatus: "Pending",
       deliveryAddress,
       deliverySlot: deliverySlot || null,
+      customerLiveLocation: customerLiveLocation || null,
+      locationUnavailable: locationUnavailable || false,
+      vendorCommission: {
+        rate: commissionDetails.rate,
+        commissionType: commissionDetails.type,
+        amount: commissionDetails.commissionAmount,
+        calculatedAt: new Date()
+      }
     });
 
     if (couponCode) {
@@ -147,10 +180,13 @@ export const placeOrder = async (req, res) => {
     // Clean cart notification/confirmation simulation
     console.log(`Notification sent to Customer ${customerId}: Order ${orderId} placed successfully!`);
 
+    const orderObj = order.toObject();
+    delete orderObj.vendorCommission;
+
     res.status(201).json({
       success: true,
       message: "Order placed successfully!",
-      order,
+      order: orderObj,
     });
   } catch (error) {
     console.error("Order placement failure:", error);
@@ -164,6 +200,7 @@ export const placeOrder = async (req, res) => {
 export const getCustomerOrders = async (req, res) => {
   try {
     const orders = await CustomerOrder.find({ customerId: req.params.userId })
+      .select("-vendorCommission")
       .populate("vendorId", "shopName phone")
       .sort({ createdAt: -1 });
 
@@ -183,6 +220,7 @@ export const getCustomerOrders = async (req, res) => {
 export const getOrderById = async (req, res) => {
   try {
     const order = await CustomerOrder.findById(req.params.id)
+      .select("-vendorCommission")
       .populate("vendorId", "shopName phone address")
       .populate("customerId", "fullName phoneNumber email");
 
@@ -446,6 +484,39 @@ export const getOrderOtp = async (req, res) => {
     });
   } catch (error) {
     console.error("Fetch OTP error:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Rate an order
+// @route   PUT /api/customer/orders/:id/rate
+// @access  Private (Customer)
+export const rateOrder = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { rating, feedback } = req.body;
+
+    if (!rating || rating < 1 || rating > 5) {
+      return res.status(400).json({ success: false, message: "Rating must be between 1 and 5." });
+    }
+
+    const order = await CustomerOrder.findById(id);
+    if (!order) {
+      return res.status(404).json({ success: false, message: "Order not found." });
+    }
+
+    // Enforce owner check
+    if (order.customerId.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ success: false, message: "Unauthorized to rate this order." });
+    }
+
+    order.rating = rating;
+    order.ratingFeedback = feedback || "";
+    await order.save();
+
+    res.status(200).json({ success: true, message: "Thank you for rating the order!" });
+  } catch (error) {
+    console.error("Error rating order:", error);
     res.status(500).json({ success: false, message: error.message });
   }
 };

@@ -24,6 +24,10 @@ const orderItemSchema = new mongoose.Schema({
     required: true,
     min: 1,
   },
+  img: {
+    type: String,
+    default: "",
+  },
 });
 
 const customerOrderSchema = new mongoose.Schema(
@@ -129,9 +133,52 @@ const customerOrderSchema = new mongoose.Schema(
         note: String,
       },
     ],
+    customerLiveLocation: {
+      lat: { type: Number, default: null },
+      lng: { type: Number, default: null },
+      accuracy: { type: Number, default: null },
+      capturedAt: { type: Date, default: null },
+    },
+    locationUnavailable: {
+      type: Boolean,
+      default: false,
+    },
     liveTracking: {
       type: Boolean,
       default: true,
+    },
+    handlingFee: {
+      type: Number,
+      default: 0,
+    },
+    smallCartFee: {
+      type: Number,
+      default: 0,
+    },
+    rainFee: {
+      type: Number,
+      default: 0,
+    },
+    feeBreakdown: [
+      {
+        feeType: String,
+        label: String,
+        amount: Number,
+      }
+    ],
+    rating: {
+      type: Number,
+      default: null,
+    },
+    ratingFeedback: {
+      type: String,
+      default: "",
+    },
+    vendorCommission: {
+      rate: { type: Number, default: 0 },
+      commissionType: { type: String, enum: ["percentage", "flat"], default: "percentage" },
+      amount: { type: Number, default: 0 },
+      calculatedAt: { type: Date, default: null }
     },
   },
   {

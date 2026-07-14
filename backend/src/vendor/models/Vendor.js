@@ -291,6 +291,24 @@ const vendorSchema = new mongoose.Schema(
         },
       },
     ],
+    commissionType: {
+      type: String,
+      enum: ["percentage", "flat"],
+      default: "percentage",
+    },
+    commissionValue: {
+      type: Number,
+      default: null,
+    },
+    commissionUpdatedAt: {
+      type: Date,
+      default: null,
+    },
+    commissionUpdatedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Admin",
+      default: null,
+    },
   },
   {
     timestamps: true,

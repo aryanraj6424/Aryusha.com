@@ -14,7 +14,9 @@ export const getFeeSettings = async (req, res) => {
         smallCartFee: 0,
         smallCartThreshold: 0,
         deliveryPartnerFee: 0,
-        gstPercent: 5
+        gstPercent: 5,
+        defaultCommissionType: "percentage",
+        defaultCommissionValue: 8
       });
       await settings.save();
     }
@@ -43,7 +45,9 @@ export const updateFeeSettings = async (req, res) => {
       smallCartFee,
       smallCartThreshold,
       deliveryPartnerFee,
-      gstPercent
+      gstPercent,
+      defaultCommissionType,
+      defaultCommissionValue
     } = req.body;
 
     // Validation checks
@@ -51,11 +55,12 @@ export const updateFeeSettings = async (req, res) => {
       handlingFee < 0 ||
       smallCartFee < 0 ||
       smallCartThreshold < 0 ||
-      deliveryPartnerFee < 0
+      deliveryPartnerFee < 0 ||
+      (defaultCommissionValue !== undefined && defaultCommissionValue < 0)
     ) {
       return res.status(400).json({
         success: false,
-        message: "Fees and thresholds cannot be negative values"
+        message: "Fees, thresholds, and commission values cannot be negative values"
       });
     }
 
@@ -76,6 +81,9 @@ export const updateFeeSettings = async (req, res) => {
     settings.smallCartThreshold = smallCartThreshold !== undefined ? smallCartThreshold : settings.smallCartThreshold;
     settings.deliveryPartnerFee = deliveryPartnerFee !== undefined ? deliveryPartnerFee : settings.deliveryPartnerFee;
     settings.gstPercent = gstPercent !== undefined ? gstPercent : settings.gstPercent;
+    
+    if (defaultCommissionType !== undefined) settings.defaultCommissionType = defaultCommissionType;
+    if (defaultCommissionValue !== undefined) settings.defaultCommissionValue = defaultCommissionValue;
 
     await settings.save();
 

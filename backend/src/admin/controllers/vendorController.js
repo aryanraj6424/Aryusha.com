@@ -589,6 +589,8 @@ export const updateVendor = async (req, res) => {
       longitude,
       deliveryRadius,
       serviceAreas,
+      commissionType,
+      commissionValue,
     } = req.body;
 
     // Validation rules
@@ -643,6 +645,17 @@ export const updateVendor = async (req, res) => {
     if (longitude !== undefined) vendor.longitude = (longitude === null || longitude === "") ? null : Number(longitude);
     if (deliveryRadius !== undefined) vendor.deliveryRadius = (deliveryRadius === null || deliveryRadius === "") ? null : Number(deliveryRadius);
     if (serviceAreas !== undefined) vendor.serviceAreas = serviceAreas;
+
+    if (commissionType !== undefined) {
+      vendor.commissionType = commissionType;
+      vendor.commissionUpdatedAt = new Date();
+      vendor.commissionUpdatedBy = req.user?._id || null;
+    }
+    if (commissionValue !== undefined) {
+      vendor.commissionValue = (commissionValue === null || commissionValue === "") ? null : Number(commissionValue);
+      vendor.commissionUpdatedAt = new Date();
+      vendor.commissionUpdatedBy = req.user?._id || null;
+    }
 
     // Update nested objects
     if (ownerDetails) {

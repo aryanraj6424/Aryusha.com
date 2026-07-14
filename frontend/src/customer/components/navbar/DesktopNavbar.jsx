@@ -243,26 +243,26 @@ function DesktopNavbar() {
   return (
     <nav className="sticky top-0 z-50 bg-white border-b border-purple-100 shadow-sm">
 
-      <div className="max-w-[1400px] mx-auto px-6">
+      <div className="max-w-[1400px] mx-auto px-4 lg:px-6">
 
-        <div className="h-20 flex items-center gap-6">
+        <div className="h-20 flex items-center gap-3 lg:gap-6">
 
           {/* Logo */}
 
           <div
             onClick={() => navigate("/")}
-            className="cursor-pointer flex items-center gap-3"
+            className="cursor-pointer flex items-center gap-2 lg:gap-3 flex-shrink-0"
           >
-            <div className="w-12 h-12 bg-purple-600 rounded-2xl flex items-center justify-center text-white text-xl font-bold">
+            <div className="w-10 h-10 lg:w-12 lg:h-12 bg-purple-600 rounded-2xl flex items-center justify-center text-white text-lg lg:text-xl font-bold">
               Q
             </div>
 
             <div>
-              <h1 className="text-2xl font-bold text-purple-700">
+              <h1 className="text-xl lg:text-2xl font-bold text-purple-700">
                 QuickCart
               </h1>
 
-              <p className="text-xs text-gray-500">
+              <p className="text-xs text-gray-500 hidden lg:block">
                 Delivery in 10 mins ⚡
               </p>
             </div>
@@ -274,19 +274,19 @@ function DesktopNavbar() {
             onClick={() =>
               navigate("/customer/location")
             }
-            className="min-w-[260px] bg-purple-50 hover:bg-purple-100 transition rounded-2xl px-4 py-3 flex items-center gap-3"
+            className="min-w-[180px] lg:min-w-[260px] bg-purple-50 hover:bg-purple-100 transition rounded-2xl px-2.5 lg:px-4 py-2 lg:py-3 flex items-center gap-2 lg:gap-3 text-left"
           >
             <MapPin
-              size={20}
-              className="text-purple-600"
+              size={18}
+              className="text-purple-600 flex-shrink-0"
             />
 
-            <div className="text-left">
-              <p className="text-xs text-gray-500">
+            <div className="overflow-hidden">
+              <p className="text-[10px] lg:text-xs text-gray-500">
                 Delivering To
               </p>
 
-              <p className="font-semibold text-gray-800 truncate max-w-[220px]">
+              <p className="font-semibold text-gray-800 text-xs lg:text-sm truncate max-w-[100px] lg:max-w-[180px]">
                 {locationText}
               </p>
             </div>
@@ -300,17 +300,17 @@ function DesktopNavbar() {
 
           {/* Right Side */}
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 lg:gap-3">
 
             {/* Cart — always visible for guests and authenticated users */}
             <button
               onClick={() => navigate("/customer/cart")}
-              className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white px-5 py-3 rounded-xl font-medium transition"
+              className="flex items-center gap-1.5 lg:gap-2 bg-purple-600 hover:bg-purple-700 text-white px-3 lg:px-5 py-2.5 lg:py-3 rounded-xl font-medium transition text-sm lg:text-base flex-shrink-0"
             >
-              <ShoppingCart size={18} />
+              <ShoppingCart size={16} className="lg:w-[18px] lg:h-[18px]" />
               <span>Cart</span>
               {cartCount > 0 && (
-                <span className="bg-white text-purple-700 text-xs font-bold px-2 py-1 rounded-full">
+                <span className="bg-white text-purple-700 text-xs font-bold px-1.5 lg:px-2 py-0.5 lg:py-1 rounded-full">
                   {cartCount}
                 </span>
               )}
@@ -321,10 +321,10 @@ function DesktopNavbar() {
                 {/* Profile */}
                 <button
                   onClick={() => navigate("/customer/profile")}
-                  className="flex items-center gap-2 px-4 py-2 rounded-xl hover:bg-purple-50 transition"
+                  className="flex items-center gap-1.5 lg:gap-2 px-2.5 lg:px-4 py-2 rounded-xl hover:bg-purple-50 transition text-sm lg:text-base flex-shrink-0"
                 >
-                  <User size={18} />
-                  <span className="font-medium">
+                  <User size={16} className="lg:w-[18px] lg:h-[18px]" />
+                  <span className="font-medium truncate max-w-[80px] lg:max-w-[150px]">
                     {user?.fullName || user?.name || "Customer"}
                   </span>
                 </button>
@@ -332,24 +332,24 @@ function DesktopNavbar() {
                 {/* Logout */}
                 <button
                   onClick={handleLogout}
-                  className="flex items-center gap-2 bg-red-500 hover:bg-red-600 text-white px-4 py-3 rounded-xl"
+                  className="flex items-center gap-1.5 lg:gap-2 bg-red-500 hover:bg-red-600 text-white px-3 lg:px-4 py-2.5 lg:py-3 rounded-xl text-sm lg:text-base flex-shrink-0"
                 >
-                  <LogOut size={18} />
-                  Logout
+                  <LogOut size={16} className="lg:w-[18px] lg:h-[18px]" />
+                  <span>Logout</span>
                 </button>
               </>
             ) : (
               <>
                 <button
                   onClick={() => navigate("/login")}
-                  className="px-5 py-2 border border-purple-600 text-purple-600 rounded-xl hover:bg-purple-50"
+                  className="px-3 lg:px-5 py-2 border border-purple-600 text-purple-600 rounded-xl hover:bg-purple-50 text-sm lg:text-base flex-shrink-0"
                 >
                   Login
                 </button>
 
                 <button
                   onClick={() => navigate("/signup")}
-                  className="px-5 py-2 bg-purple-600 text-white rounded-xl hover:bg-purple-700"
+                  className="px-3 lg:px-5 py-2 bg-purple-600 text-white rounded-xl hover:bg-purple-700 text-sm lg:text-base flex-shrink-0"
                 >
                   Sign Up
                 </button>

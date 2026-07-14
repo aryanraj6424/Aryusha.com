@@ -5,7 +5,8 @@ import {
   getOrderById,
   downloadInvoice,
   getOrderTracking,
-  getOrderOtp
+  getOrderOtp,
+  rateOrder
 } from "../controllers/orderController.js";
 import protect from "../../middleware/authMiddleware.js";
 
@@ -13,6 +14,8 @@ const router = express.Router();
 
 // Protect all customer order endpoints
 router.use(protect);
+
+router.put("/:id/rate", rateOrder);
 
 // Place an order
 router.post("/", placeOrder);

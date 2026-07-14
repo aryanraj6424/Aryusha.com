@@ -1,7 +1,7 @@
 import mongoose from "mongoose";
 import { Product, ProductVariant, VendorListing, VendorProduct } from "../../models/catalog.js";
 import Coupon from "../../admin/models/Coupon.js";
-import PlatformFeeSettings from "../../admin/models/PlatformFeeSettings.js";
+import { calculateOrderFees } from "../../utils/feeCalculator.js";
 import CustomerOrder from "../models/CustomerOrder.js";
 import DeliverySlot from "../models/DeliverySlot.js";
 
@@ -181,18 +181,7 @@ export const getCartSummary = async (req, res) => {
       mrpTotal += (item.mrp || item.price) * item.qty;
     }
 
-    // Fetch Fee Settings from Admin API/DB
-    let feeSettings = await PlatformFeeSettings.findOne();
-    if (!feeSettings) {
-      // Defend with defaults if settings are not initialized
-      feeSettings = {
-        handlingFee: 10,
-        smallCartFee: 30,
-        smallCartThreshold: 500,
-        deliveryPartnerFee: 30,
-        gstPercent: 5
-      };
-    }
+
 
     let couponDiscount = 0;
     let appliedCoupon = null;
@@ -243,16 +232,19 @@ export const getCartSummary = async (req, res) => {
       }
     }
 
-    // Bill calculations
-    const handlingFee = feeSettings.handlingFee || 0;
-    const deliveryFeeThreshold = 149;
-    const smallCartThreshold = 99;
+    // Bill calculations using dynamic FeeConfig overrides
+    const zoneId = req.body.zoneId || req.query.zoneId || "";
+    const { breakdown, totalFees } = await calculateOrderFees(itemTotal, zoneId);
 
-    const smallCartFee = itemTotal < smallCartThreshold ? (feeSettings.smallCartFee || 15) : 0;
-    const deliveryPartnerFee = itemTotal < deliveryFeeThreshold ? (feeSettings.deliveryPartnerFee || 30) : 0;
-    const gst = Math.round((itemTotal * (feeSettings.gstPercent || 5)) / 100);
+    const handlingFee = breakdown.find(f => f.feeType === "handling")?.amount || 0;
+    const smallCartFee = breakdown.find(f => f.feeType === "small_cart")?.amount || 0;
+    const deliveryPartnerFee = breakdown.find(f => f.feeType === "delivery_partner")?.amount || 0;
+    const gst = breakdown.find(f => f.feeType === "gst")?.amount || 0;
+    const rainFee = breakdown.find(f => f.feeType === "rain")?.amount || 0;
+    const customFees = breakdown.filter(f => !["handling", "small_cart", "delivery_partner", "gst", "rain"].includes(f.feeType)).reduce((sum, f) => sum + f.amount, 0);
 
-    const toPay = Math.max(0, itemTotal - couponDiscount + handlingFee + smallCartFee + deliveryPartnerFee + gst);
+    const totalCalculatedFees = handlingFee + smallCartFee + deliveryPartnerFee + gst + rainFee + customFees;
+    const toPay = Math.max(0, itemTotal - couponDiscount + totalCalculatedFees);
 
     const suggestions = await getCrossSellSuggestions(rawItems, vendorId);
 
@@ -267,6 +259,9 @@ export const getCartSummary = async (req, res) => {
         smallCartFee,
         deliveryPartnerFee,
         gst,
+        rainFee,
+        customFees,
+        feeBreakdown: breakdown,
         toPay,
         appliedCoupon,
         couponError,

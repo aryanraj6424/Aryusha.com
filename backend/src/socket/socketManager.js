@@ -18,6 +18,8 @@
  *   order:delivered          — order delivered (OTP verified)
  */
 
+import CustomerOrder from "../customer/models/CustomerOrder.js";
+
 let _io = null;
 
 /** Called once from server.js during startup */
@@ -33,6 +35,35 @@ export function initSocket(io) {
 
     socket.on("leave:room", (room) => {
       socket.leave(room);
+    });
+
+    socket.on("customer:location:update", async ({ orderId, lat, lng, accuracy, timestamp }) => {
+      if (!orderId) return;
+
+      // Broadcast customer location updates to all listeners in the order room
+      io.to(`order:${orderId}`).emit("customer:location:broadcast", {
+        lat,
+        lng,
+        accuracy,
+        timestamp: timestamp || Date.now()
+      });
+
+      // Save the latest coordinate point to the database
+      try {
+        await CustomerOrder.findByIdAndUpdate(orderId, {
+          $set: {
+            customerLiveLocation: {
+              lat,
+              lng,
+              accuracy,
+              capturedAt: new Date(timestamp || Date.now())
+            },
+            locationUnavailable: false
+          }
+        });
+      } catch (err) {
+        console.error(`[Socket] Error updating customer live location for order ${orderId}:`, err.message);
+      }
     });
 
     socket.on("disconnect", () => {

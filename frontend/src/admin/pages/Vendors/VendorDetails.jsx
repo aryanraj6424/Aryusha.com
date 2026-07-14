@@ -1,7 +1,7 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { useState, useEffect, useRef } from "react";
 import axios from "axios";
-import { ArrowLeft, Shield, FileText, CheckSquare, Settings, User, Building2, Check, X, ShieldAlert, MapPin, Plus, Trash2, Edit, Search } from "lucide-react";
+import { ArrowLeft, Shield, FileText, CheckSquare, Settings, User, Building2, Check, X, ShieldAlert, MapPin, Plus, Trash2, Edit, Search, Coins } from "lucide-react";
 import CoverageMap from "../../../vendor/components/CoverageMap";
 import { useToast } from "../../../components/Toast";
 import ConfirmDialog from "../../../components/Toast/ConfirmDialog";
@@ -22,6 +22,11 @@ export default function VendorDetails() {
   const [permissions, setPermissions] = useState(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("profile");
+
+  const [platformSettings, setPlatformSettings] = useState(null);
+  const [commissionType, setCommissionType] = useState("percentage");
+  const [commissionValue, setCommissionValue] = useState("");
+  const [savingCommission, setSavingCommission] = useState(false);
 
   // Location and Service Area States
   const [latInput, setLatInput] = useState("");
@@ -51,6 +56,16 @@ export default function VendorDetails() {
         couponAccess: { view: true, create: true, edit: true, delete: true },
         product: { view: true, add: true, edit: true, delete: true },
       });
+
+      // Fetch global commission settings
+      try {
+        const settingsRes = await axios.get(`${import.meta.env.VITE_API_URL}/admin/fee-settings`);
+        if (settingsRes.data?.success) {
+          setPlatformSettings(settingsRes.data.data);
+        }
+      } catch (settingsErr) {
+        console.error("Error fetching fee settings:", settingsErr);
+      }
     } catch (error) {
       console.error(error);
       showToast({ type: "error", message: "Failed to fetch vendor details." });
@@ -62,6 +77,38 @@ export default function VendorDetails() {
   useEffect(() => {
     fetchVendorDetails();
   }, [id]);
+
+  useEffect(() => {
+    if (vendor) {
+      setCommissionType(vendor.commissionType || "percentage");
+      setCommissionValue(vendor.commissionValue !== null && vendor.commissionValue !== undefined ? vendor.commissionValue : "");
+    }
+  }, [vendor]);
+
+  const handleSaveCommission = async () => {
+    setSavingCommission(true);
+    try {
+      const commVal = commissionValue === "" ? null : Number(commissionValue);
+      if (commVal !== null && (isNaN(commVal) || commVal < 0)) {
+        showToast({ type: "warning", message: "Commission value must be a positive number." });
+        setSavingCommission(false);
+        return;
+      }
+      
+      await axios.put(`${import.meta.env.VITE_API_URL}/admin/vendors/${id}`, {
+        commissionType,
+        commissionValue: commVal
+      });
+
+      showToast({ type: "success", message: "Commission settings saved successfully." });
+      fetchVendorDetails();
+    } catch (error) {
+      console.error(error);
+      showToast({ type: "error", message: error.response?.data?.message || "Failed to save commission settings." });
+    } finally {
+      setSavingCommission(false);
+    }
+  };
 
 
   // Autocomplete address search
@@ -384,6 +431,16 @@ export default function VendorDetails() {
           <Settings size={16} /> Permissions Control
         </button>
         <button
+          onClick={() => setActiveTab("commission")}
+          className={`flex items-center gap-2 px-5 py-3 border-b-2 font-semibold text-sm transition-colors ${
+            activeTab === "commission"
+              ? "border-green-600 text-green-600"
+              : "border-transparent text-gray-500 hover:text-gray-700"
+          }`}
+        >
+          <Coins size={16} /> Commission Settings
+        </button>
+        <button
           onClick={() => setActiveTab("serviceAreas")}
           className={`flex items-center gap-2 px-5 py-3 border-b-2 font-semibold text-sm transition-colors ${
             activeTab === "serviceAreas"
@@ -675,6 +732,84 @@ export default function VendorDetails() {
               >
                 <CheckSquare size={18} /> Save Permissions
               </button>
+            </div>
+          </div>
+        )}
+
+        {activeTab === "commission" && (
+          <div className="space-y-6">
+            <div className="border p-6 rounded-2xl bg-white shadow-sm space-y-6">
+              <h3 className="text-lg font-bold text-slate-800 border-b pb-2 flex items-center gap-2">
+                <Coins className="text-green-600" size={20} />
+                Commission Configuration
+              </h3>
+
+              <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 space-y-2">
+                <p className="text-xs text-slate-500 font-bold uppercase tracking-wider">Platform Default Reference</p>
+                <div className="flex items-center gap-4 text-sm font-semibold text-slate-700">
+                  <div>
+                    Type: <span className="text-slate-900 font-bold uppercase">{platformSettings?.defaultCommissionType || "percentage"}</span>
+                  </div>
+                  <div>
+                    Value: <span className="text-slate-900 font-bold">{platformSettings?.defaultCommissionValue ?? 8}%</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid md:grid-cols-2 gap-6 pt-2">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-500 block">Commission Type</label>
+                  <select
+                    value={commissionType}
+                    onChange={(e) => setCommissionType(e.target.value)}
+                    className="w-full border rounded-xl px-3 py-2.5 outline-none focus:border-green-600 bg-white font-semibold text-sm"
+                  >
+                    <option value="percentage">Percentage (%)</option>
+                    <option value="flat">Flat (Fixed amount per order)</option>
+                  </select>
+                  <p className="text-[10px] text-slate-400 font-semibold">
+                    Whether the commission is calculated as a percentage of product subtotal or a fixed amount per order.
+                  </p>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-500 block">
+                    Custom Commission Value {commissionType === "percentage" ? "(%)" : "(₹)"}
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="any"
+                    value={commissionValue}
+                    onChange={(e) => setCommissionValue(e.target.value)}
+                    placeholder="Leave empty to use platform default"
+                    className="w-full border rounded-xl px-3 py-2.5 outline-none focus:border-green-600 font-semibold text-sm"
+                  />
+                  <p className="text-[10px] text-slate-400 font-semibold">
+                    If blank/cleared, the vendor uses the platform default.
+                  </p>
+                </div>
+              </div>
+
+              <div className="border-t pt-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                <div className="text-sm font-semibold text-slate-600">
+                  Effective commission:{" "}
+                  <span className="font-extrabold text-green-700 bg-green-50 border border-green-150 px-2.5 py-0.5 rounded-full text-xs">
+                    {commissionValue !== "" && commissionValue !== null && commissionValue !== undefined
+                      ? `${commissionValue}${commissionType === "percentage" ? "%" : " flat"} (Custom Override)`
+                      : `${platformSettings?.defaultCommissionValue ?? 8}% (Platform Default)`}
+                  </span>
+                </div>
+
+                <button
+                  type="button"
+                  disabled={savingCommission}
+                  onClick={handleSaveCommission}
+                  className="bg-[#1a5d1a] hover:bg-[#154a15] text-white px-6 py-2.5 rounded-xl text-sm font-black transition disabled:opacity-50 flex items-center gap-2 cursor-pointer shadow-sm"
+                >
+                  {savingCommission ? "Saving..." : "Save Settings"}
+                </button>
+              </div>
             </div>
           </div>
         )}

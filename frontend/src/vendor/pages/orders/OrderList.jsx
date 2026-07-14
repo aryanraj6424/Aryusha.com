@@ -533,6 +533,31 @@ export default function OrderList() {
                         <span>Order Total:</span>
                         <span className="text-[#6d28d9]">₹{selectedOrder.grandTotal.toFixed(2)}</span>
                       </div>
+                      {(() => {
+                        const hasCommission = selectedOrder.vendorCommission && selectedOrder.vendorCommission.amount !== undefined;
+                        const commRate = hasCommission ? selectedOrder.vendorCommission.rate : 8;
+                        const commType = hasCommission ? selectedOrder.vendorCommission.commissionType : "percentage";
+                        
+                        const itemSubtotal = selectedOrder.totalAmount || selectedOrder.items?.reduce((sum, item) => sum + item.price * item.qty, 0) || 0;
+                        const commAmount = hasCommission 
+                          ? selectedOrder.vendorCommission.amount 
+                          : (commType === "percentage" ? itemSubtotal * (commRate / 100) : commRate);
+                        const finalComm = Math.round(commAmount * 100) / 100;
+                        const payout = Math.max(0, itemSubtotal - finalComm);
+
+                        return (
+                          <>
+                            <div className="flex justify-between text-red-500 font-bold border-t border-slate-100 pt-1.5 mt-1.5">
+                              <span>Platform Commission ({commRate}{commType === "percentage" ? "%" : " flat"}):</span>
+                              <span>-₹{finalComm.toFixed(2)}</span>
+                            </div>
+                            <div className="flex justify-between text-xs font-black text-emerald-700 pt-1">
+                              <span>Your Payout:</span>
+                              <span>₹{payout.toFixed(2)}</span>
+                            </div>
+                          </>
+                        );
+                      })()}
                     </div>
                   </div>
                 </div>

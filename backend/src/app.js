@@ -17,6 +17,8 @@ import attributeRoutes from "./admin/routes/attributeRoutes.js";
 import feeSettingsRoutes from "./admin/routes/feeSettingsRoutes.js";
 import couponRoutes from "./admin/routes/couponRoutes.js";
 import adminOrderRoutes from "./admin/routes/orderRoutes.js";
+import adminFeeRoutes from "./admin/routes/feeRoutes.js";
+import customerFeeRoutes from "./customer/routes/feeRoutes.js";
 import adminDeliveryRoutes from "./admin/routes/adminDeliveryRoutes.js";
 import adminCustomerRoutes from "./admin/routes/adminCustomerRoutes.js";
 import bannerRoutes from "./admin/routes/bannerRoutes.js";
@@ -132,6 +134,16 @@ app.use(
 app.use(
   "/api/admin/coupons",
   couponRoutes
+);
+
+app.use(
+  "/api/admin/fees",
+  adminFeeRoutes
+);
+
+app.use(
+  "/api/fees",
+  customerFeeRoutes
 );
 
 // product and attribute routes

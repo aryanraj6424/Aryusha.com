@@ -52,7 +52,7 @@ export default function CustomerProfilePage() {
   ];
 
   return (
-    <div className="max-w-3xl mx-auto p-5">
+    <div className="max-w-3xl mx-auto py-5 px-0 sm:px-5">
 
       <ProfileHeader
         name={

@@ -137,7 +137,7 @@ export default function WishlistPage() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto py-6 px-4 space-y-6">
+    <div className="max-w-4xl mx-auto py-6 px-0 sm:px-4 space-y-6">
       {/* Breadcrumbs */}
       <nav className="flex items-center gap-1.5 text-xs text-slate-400 font-semibold flex-wrap">
         <Link to="/customer/dashboard" className="hover:text-purple-600 transition">Home</Link>

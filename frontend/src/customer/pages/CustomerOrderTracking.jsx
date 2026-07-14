@@ -25,6 +25,97 @@ export default function CustomerOrderTracking() {
 
   const user = JSON.parse(localStorage.getItem("user") || "null");
 
+  const watchIdRef = useRef(null);
+  const lastEmitTimeRef = useRef(0);
+  const lastEmitCoordsRef = useRef(null);
+
+  const calculateHaversineDistance = (lat1, lon1, lat2, lon2) => {
+    const R = 6371e3; // metres
+    const phi1 = (lat1 * Math.PI) / 180;
+    const phi2 = (lat2 * Math.PI) / 180;
+    const deltaPhi = ((lat2 - lat1) * Math.PI) / 180;
+    const deltaLambda = ((lon2 - lon1) * Math.PI) / 180;
+
+    const a =
+      Math.sin(deltaPhi / 2) * Math.sin(deltaPhi / 2) +
+      Math.cos(phi1) * Math.cos(phi2) *
+      Math.sin(deltaLambda / 2) * Math.sin(deltaLambda / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+    return R * c; // in metres
+  };
+
+  useEffect(() => {
+    if (!tracking) return;
+
+    const isOrderActive = !["Delivered", "Rejected", "Cancelled"].includes(tracking.orderStatus);
+    const socket = getSocket();
+
+    if (isOrderActive) {
+      joinRoom(`order:${id}`);
+
+      if (navigator.geolocation && !watchIdRef.current) {
+        watchIdRef.current = navigator.geolocation.watchPosition(
+          (position) => {
+            const { latitude, longitude, accuracy } = position.coords;
+            const now = Date.now();
+
+            const timeDiff = now - lastEmitTimeRef.current;
+            let shouldEmit = false;
+
+            if (timeDiff >= 4000) {
+              shouldEmit = true;
+            } else if (lastEmitCoordsRef.current) {
+              const distance = calculateHaversineDistance(
+                lastEmitCoordsRef.current.lat,
+                lastEmitCoordsRef.current.lng,
+                latitude,
+                longitude
+              );
+              if (distance >= 10) {
+                shouldEmit = true;
+              }
+            } else {
+              shouldEmit = true;
+            }
+
+            if (shouldEmit) {
+              socket.emit("customer:location:update", {
+                orderId: id,
+                lat: latitude,
+                lng: longitude,
+                accuracy,
+                timestamp: now,
+              });
+              lastEmitTimeRef.current = now;
+              lastEmitCoordsRef.current = { lat: latitude, lng: longitude };
+            }
+          },
+          (err) => {
+            console.warn("[Tracking] watchPosition failed:", err);
+          },
+          { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+        );
+      }
+    } else {
+      if (watchIdRef.current !== null) {
+        navigator.geolocation.clearWatch(watchIdRef.current);
+        watchIdRef.current = null;
+      }
+      leaveRoom(`order:${id}`);
+    }
+  }, [tracking?.orderStatus, id]);
+
+  useEffect(() => {
+    return () => {
+      if (watchIdRef.current !== null) {
+        navigator.geolocation.clearWatch(watchIdRef.current);
+        watchIdRef.current = null;
+      }
+      leaveRoom(`order:${id}`);
+    };
+  }, [id]);
+
   // Fetch tracking details
   const fetchTracking = async () => {
     try {
