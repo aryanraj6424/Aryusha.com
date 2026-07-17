@@ -228,6 +228,8 @@ const productSchema = new Schema(
 
     status: { type: String, enum: ['active', 'inactive', 'draft', 'pending', 'approved', 'rejected', 'hidden'], default: 'draft', index: true },
     isDeleted: { type: Boolean, default: false, index: true },
+    commissionType: { type: String, enum: ['percentage', 'flat', 'inherit'], default: 'inherit' },
+    commissionValue: { type: Number, default: null },
     createdBy: { type: Schema.Types.ObjectId },
     creatorModel: { type: String, enum: ['Admin', 'Vendor'], default: 'Admin' },
     approvalHistory: [
@@ -237,7 +239,9 @@ const productSchema = new Schema(
         remarks: String,
         updatedAt: { type: Date, default: Date.now }
       }
-    ]
+    ],
+    averageRating: { type: Number, default: 0 },
+    totalReviews: { type: Number, default: 0 }
   },
   { timestamps: true }
 );
@@ -403,6 +407,8 @@ const vendorProductSchema = new Schema(
     sku: { type: String, required: true, trim: true },
     condition: { type: String, default: "New" },
     vendorNotes: { type: String, default: "" },
+    averageRating: { type: Number, default: 0 },
+    totalReviews: { type: Number, default: 0 },
     status: { type: String, enum: ['active', 'inactive'], default: 'active', index: true }
   },
   { timestamps: true }
@@ -420,6 +426,25 @@ const ProductVariant = mongoose.model('ProductVariant', productVariantSchema);
 const VendorListing = mongoose.model('VendorListing', vendorListingSchema);
 const VendorProduct = mongoose.model('VendorProduct', vendorProductSchema);
 
+const productReviewSchema = new Schema(
+  {
+    productId: { type: Schema.Types.ObjectId, ref: 'Product', required: true, index: true },
+    vendorId: { type: Schema.Types.ObjectId, ref: 'Vendor', required: true, index: true },
+    customerId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    orderId: { type: Schema.Types.ObjectId, ref: 'CustomerOrder', required: true },
+    customerName: { type: String, required: true },
+    rating: { type: Number, required: true, min: 1, max: 5 },
+    reviewText: { type: String, default: "" },
+    isVerifiedPurchase: { type: Boolean, default: true }
+  },
+  { timestamps: true }
+);
+
+// One review per customer per vendor product
+productReviewSchema.index({ customerId: 1, vendorId: 1, productId: 1 }, { unique: true });
+
+const ProductReview = mongoose.model('ProductReview', productReviewSchema);
+
 /* ============================================================================
  * EXPORTS
  * ========================================================================= */
@@ -431,6 +456,7 @@ export {
   ProductVariant,
   VendorListing,
   VendorProduct,
-  Brand
+  Brand,
+  ProductReview
 };
 

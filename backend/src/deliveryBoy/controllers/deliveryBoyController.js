@@ -12,6 +12,7 @@ const ensureMockAssignments = async (deliveryBoyId) => {
 };
 
 import mongoose from "mongoose";
+import { handleOrderStatusChange, runInTransaction } from "../../utils/ledgerSyncHelper.js";
 
 // Get Dashboard Data
 export const getDashboard = async (req, res) => {
@@ -249,73 +250,80 @@ export const verifyOtp = async (req, res) => {
   try {
     const { otp, latitude, longitude } = req.body;
     const orderId = req.params.id;
+    let resultOrder = null;
 
     if (!otp) {
       return res.status(400).json({ success: false, message: "OTP code is required" });
     }
 
-    const order = await CustomerOrder.findOne({
-      _id: orderId,
-      deliveryBoyId: req.deliveryBoy._id
+    await runInTransaction(async (session) => {
+      const order = await CustomerOrder.findOne({
+        _id: orderId,
+        deliveryBoyId: req.deliveryBoy._id
+      }).session(session);
+
+      if (!order) {
+        throw new Error("Order assignment not found");
+      }
+
+      if (order.deliveryOtp !== otp) {
+        throw new Error("Invalid OTP code. Access denied.");
+      }
+
+      // Mark as completed
+      order.deliveryStatus = "Delivered";
+      order.orderStatus = "Delivered";
+      order.paymentStatus = "Paid"; // COD orders are marked as Paid on delivery
+
+      order.deliveryLogs.push({
+        status: "Delivered",
+        timestamp: new Date(),
+        latitude: latitude || null,
+        longitude: longitude || null,
+        note: "Delivery successfully completed via customer OTP verification."
+      });
+
+      await order.save({ session });
+
+      // Sync the ledger status to Delivered
+      await handleOrderStatusChange(order._id, "Delivered", session);
+
+      // Credit earnings to rider
+      const fee = order.deliveryCharge || 35;
+      const incentive = 5;
+      const commission = 2;
+      const credit = fee + incentive + commission;
+
+      await DeliveryBoyEarnings.findOneAndUpdate(
+        { deliveryBoy: req.deliveryBoy._id },
+        {
+          $inc: {
+            totalEarnings: credit,
+            incentives: incentive,
+            commissions: commission,
+            walletBalance: credit,
+            settledBalance: credit
+          }
+        },
+        { upsert: true, session }
+      );
+      resultOrder = order;
     });
-
-    if (!order) {
-      return res.status(404).json({ success: false, message: "Order assignment not found" });
-    }
-
-    if (order.deliveryOtp !== otp) {
-      return res.status(400).json({ success: false, message: "Invalid OTP code. Access denied." });
-    }
-
-    // Mark as completed
-    order.deliveryStatus = "Delivered";
-    order.orderStatus = "Delivered";
-    order.paymentStatus = "Paid"; // COD orders are marked as Paid on delivery
-
-    order.deliveryLogs.push({
-      status: "Delivered",
-      timestamp: new Date(),
-      latitude: latitude || null,
-      longitude: longitude || null,
-      note: "Delivery successfully completed via customer OTP verification."
-    });
-
-    await order.save();
 
     // Emit real-time "delivered" event to customer, vendor, and admin
-    const deliveredPayload = { orderId: order._id, orderId: order.orderId, status: "Delivered" };
-    if (order.customerId) emitToRoom(`customer:${order.customerId}`, "order:delivered", deliveredPayload);
-    if (order.vendorId) emitToRoom(`vendor:${order.vendorId}`, "order:delivered", deliveredPayload);
+    const deliveredPayload = { orderId: resultOrder._id, orderIdStr: resultOrder.orderId, status: "Delivered" };
+    if (resultOrder.customerId) emitToRoom(`customer:${resultOrder.customerId}`, "order:delivered", deliveredPayload);
+    if (resultOrder.vendorId) emitToRoom(`vendor:${resultOrder.vendorId}`, "order:delivered", deliveredPayload);
     emitToRoom("admin:global", "order:delivered", deliveredPayload);
-
-    // Credit earnings to rider
-    const fee = order.deliveryCharge || 35;
-    const incentive = 5;
-    const commission = 2;
-    const credit = fee + incentive + commission;
-
-    await DeliveryBoyEarnings.findOneAndUpdate(
-      { deliveryBoy: req.deliveryBoy._id },
-      {
-        $inc: {
-          totalEarnings: credit,
-          incentives: incentive,
-          commissions: commission,
-          walletBalance: credit,
-          settledBalance: credit
-        }
-      },
-      { upsert: true }
-    );
 
     res.status(200).json({
       success: true,
       message: "Order delivered successfully!",
-      order
+      order: resultOrder
     });
   } catch (error) {
     console.error("OTP Verification Error:", error);
-    res.status(500).json({ success: false, message: "Server Error" });
+    res.status(500).json({ success: false, message: error.message || "Server Error" });
   }
 };
 

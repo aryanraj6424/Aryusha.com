@@ -1,14 +1,13 @@
 // customer/components/navbar/MobileBottomNavbar.jsx
 
 import { useNavigate, useLocation } from "react-router-dom";
-
 import {
   House,
   LayoutGrid,
   Flame,
   ShoppingCart,
+  User,
 } from "lucide-react";
-
 import { useState, useEffect } from "react";
 
 function MobileBottomNavbar() {
@@ -56,18 +55,24 @@ function MobileBottomNavbar() {
       icon: ShoppingCart,
       path: "/customer/cart",
     },
+    {
+      label: "Account",
+      icon: User,
+      path: "/customer/profile",
+    },
   ];
 
   return (
     <div className="fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-purple-100 shadow-lg">
 
-      <div className="grid grid-cols-4 h-16">
+      <div className="grid grid-cols-5 h-16">
 
         {navItems.map((item) => {
           const Icon = item.icon;
 
           const isActive =
-            location.pathname === item.path;
+            location.pathname === item.path ||
+            (item.path === "/customer/dashboard" && location.pathname === "/");
 
           return (
             <button
@@ -78,28 +83,32 @@ function MobileBottomNavbar() {
               className={`relative flex flex-col items-center justify-center gap-1 transition
                 ${
                   isActive
-                    ? "text-purple-700"
-                    : "text-gray-500"
+                    ? "text-[#6B21D9]"
+                    : "text-gray-500 hover:text-[#6B21D9]"
                 }`}
             >
 
               <div className="relative">
 
-                <Icon size={22} />
+                <Icon size={22} className={isActive ? "stroke-[2.5]" : "stroke-[2]"} />
 
                 {item.label === "Cart" &&
                   cartCount > 0 && (
                     <span
                       className="
                         absolute
-                        -top-2
+                        -top-1.5
                         -right-2
-                        bg-purple-600
+                        bg-[#EF4444]
                         text-white
-                        text-[10px]
-                        px-1.5
-                        py-0.5
+                        text-[9px]
+                        font-black
+                        w-4
+                        h-4
                         rounded-full
+                        flex
+                        items-center
+                        justify-center
                       "
                     >
                       {cartCount}
@@ -108,12 +117,12 @@ function MobileBottomNavbar() {
 
               </div>
 
-              <span className="text-xs font-medium">
+              <span className={`text-[10px] font-bold ${isActive ? "text-[#6B21D9]" : "text-gray-500"}`}>
                 {item.label}
               </span>
 
               {isActive && (
-                <div className="absolute top-0 w-10 h-1 bg-purple-600 rounded-b-full" />
+                <div className="absolute top-0 w-10 h-1 bg-[#6B21D9] rounded-b-full" />
               )}
 
             </button>

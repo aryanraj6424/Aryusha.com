@@ -22,6 +22,9 @@ import customerFeeRoutes from "./customer/routes/feeRoutes.js";
 import adminDeliveryRoutes from "./admin/routes/adminDeliveryRoutes.js";
 import adminCustomerRoutes from "./admin/routes/adminCustomerRoutes.js";
 import bannerRoutes from "./admin/routes/bannerRoutes.js";
+import adminFinanceRoutes from "./admin/routes/adminFinanceRoutes.js";
+import vendorFinanceRoutes from "./vendor/routes/vendorFinanceRoutes.js";
+import vendorCustomerRoutes from "./vendor/routes/vendorCustomerRoutes.js";
 import categoryRoutes from "./routes/categoryRoutes.js";
 import catalogRoutes from "./routes/catalogRoutes.js";
 import brandRoutes from "./routes/brandRoutes.js";
@@ -107,12 +110,17 @@ app.use(
   vendorProductsRoutes
 );
 
+app.use("/api/vendor/finance", vendorFinanceRoutes);
+app.use("/api/vendor/customers", vendorCustomerRoutes);
+
 
 //admin route
 app.use(
   "/api/admin/auth",
   adminAuthRoutes
 );
+
+app.use("/api/admin/finance", adminFinanceRoutes);
 
 // addressRoutes
 

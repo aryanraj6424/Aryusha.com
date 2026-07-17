@@ -1,47 +1,3 @@
-// import mongoose from "mongoose";
-
-// const userSchema =
-//   new mongoose.Schema(
-//     {
-//       fullName: {
-//         type: String,
-//         required: true,
-//       },
-
-//       phoneNumber: {
-//         type: String,
-//         required: true,
-//         unique: true,
-//       },
-
-//       email: {
-//         type: String,
-//       },
-
-//       password: {
-//         type: String,
-//         required: true,
-//       },
-
-//       otp: {
-//         type: String,
-//       },
-
-//       otpExpires: {
-//         type: Date,
-//       },
-//     },
-//     {
-//       timestamps: true,
-//     }
-//   );
-
-// export default mongoose.model(
-//   "User",
-//   userSchema
-// );
-
-
 import mongoose from "mongoose";
 
 const userSchema = new mongoose.Schema(
@@ -53,8 +9,8 @@ const userSchema = new mongoose.Schema(
 
     phoneNumber: {
       type: String,
-      required: true,
       unique: true,
+      sparse: true,
     },
 
     email: {
@@ -64,7 +20,24 @@ const userSchema = new mongoose.Schema(
 
     password: {
       type: String,
-      required: true,
+      // Optional — Google-only accounts have no password
+    },
+
+    // Google OAuth fields
+    googleId: {
+      type: String,
+      default: null,
+    },
+
+    photoURL: {
+      type: String,
+      default: null,
+    },
+
+    provider: {
+      type: String,
+      enum: ["local", "google"],
+      default: "local",
     },
 
     otp: {
@@ -89,9 +62,6 @@ const userSchema = new mongoose.Schema(
 
 const User =
   mongoose.models.User ||
-  mongoose.model(
-    "User",
-    userSchema
-  );
+  mongoose.model("User", userSchema);
 
 export default User;

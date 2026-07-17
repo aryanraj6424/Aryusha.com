@@ -11,7 +11,8 @@ import {
   LogOut,
   ChevronRight,
   Menu,
-  X
+  X,
+  Coins
 } from "lucide-react";
 
 export default function AdminSidebar({ isOpen, setIsOpen }) {
@@ -51,6 +52,12 @@ export default function AdminSidebar({ isOpen, setIsOpen }) {
         { path: "/admin/vendors", label: "Vendor Management", icon: ShoppingBag },
         { path: "/admin/orders", label: "Orders Management", icon: ChevronRight },
         { path: "/admin/returns", label: "Returns & Refunds", icon: ChevronRight },
+      ]
+    },
+    {
+      section: "FINANCE & PAYMENTS",
+      items: [
+        { path: "/admin/finance", label: "Commission & Payouts", icon: Coins },
       ]
     },
     {

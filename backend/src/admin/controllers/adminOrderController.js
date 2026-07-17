@@ -1,4 +1,7 @@
+import mongoose from "mongoose";
 import CustomerOrder from "../../customer/models/CustomerOrder.js";
+import { handleOrderStatusChange, runInTransaction } from "../../utils/ledgerSyncHelper.js";
+import { serializeAdminOrder } from "../../utils/financeSerializer.js";
 
 // Get All Orders (Admin Panel)
 export const getAllOrders = async (req, res) => {
@@ -10,7 +13,7 @@ export const getAllOrders = async (req, res) => {
       .sort({ createdAt: -1 });
 
     const mappedOrders = orders.map((order) => {
-      const obj = order.toObject();
+      const obj = serializeAdminOrder(order);
       return {
         ...obj,
         status: (order.orderStatus || "Pending").toLowerCase(), // map for admin frontent status badge
@@ -44,7 +47,7 @@ export const getOrderById = async (req, res) => {
       return res.status(404).json({ success: false, message: "Order not found" });
     }
 
-    const obj = order.toObject();
+    const obj = serializeAdminOrder(order);
     const mappedOrder = {
       ...obj,
       status: (order.orderStatus || "Pending").toLowerCase(),
@@ -69,50 +72,58 @@ export const getOrderById = async (req, res) => {
 export const updateOrderStatus = async (req, res) => {
   try {
     const { status } = req.body; // pending, processing, shipped, delivered, cancelled
-    const order = await CustomerOrder.findById(req.params.id);
+    let resultOrder = null;
 
-    if (!order) {
-      return res.status(404).json({ success: false, message: "Order not found" });
-    }
+    await runInTransaction(async (session) => {
+      const order = await CustomerOrder.findById(req.params.id).session(session);
 
-    // Map status from admin lowercase format to schema capitalization
-    const statusMapping = {
-      pending: "Pending",
-      processing: "Accepted",
-      shipped: "Out_for_Delivery",
-      delivered: "Delivered",
-      cancelled: "Cancelled",
-    };
-
-    const targetStatus = statusMapping[status.toLowerCase()];
-    if (targetStatus) {
-      order.orderStatus = targetStatus;
-      
-      // Update deliveryStatus to match
-      if (targetStatus === "Out_for_Delivery") {
-        order.deliveryStatus = "On_the_Way";
-      } else if (targetStatus === "Delivered") {
-        order.deliveryStatus = "Delivered";
-        order.paymentStatus = "Paid";
+      if (!order) {
+        throw new Error("Order not found");
       }
 
-      order.deliveryLogs.push({
-        status: order.deliveryStatus,
-        timestamp: new Date(),
-        note: `Order status updated to ${targetStatus} by Administrator`,
-      });
+      // Map status from admin lowercase format to schema capitalization
+      const statusMapping = {
+        pending: "Pending",
+        processing: "Accepted",
+        shipped: "Out_for_Delivery",
+        delivered: "Delivered",
+        cancelled: "Cancelled",
+      };
 
-      await order.save();
-    }
+      const targetStatus = statusMapping[status.toLowerCase()];
+      if (targetStatus) {
+        order.orderStatus = targetStatus;
+        
+        // Update deliveryStatus to match
+        if (targetStatus === "Out_for_Delivery") {
+          order.deliveryStatus = "On_the_Way";
+        } else if (targetStatus === "Delivered") {
+          order.deliveryStatus = "Delivered";
+          order.paymentStatus = "Paid";
+        }
+
+        order.deliveryLogs.push({
+          status: order.deliveryStatus,
+          timestamp: new Date(),
+          note: `Order status updated to ${targetStatus} by Administrator`,
+        });
+
+        await order.save({ session });
+
+        // Sync ledger status and adjust summaries if cancelled
+        await handleOrderStatusChange(order._id, targetStatus, session);
+      }
+      resultOrder = order;
+    });
 
     res.status(200).json({
       success: true,
       message: "Order status updated successfully",
-      order,
+      order: resultOrder,
     });
   } catch (error) {
     console.error("Admin Update Order Status Error:", error);
-    res.status(500).json({ success: false, message: "Server Error" });
+    res.status(500).json({ success: false, message: error.message || "Server Error" });
   }
 };
 

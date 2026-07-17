@@ -9,6 +9,14 @@ const connectDB = async () => {
     const conn = await mongoose.connect(mongoUri);
 
     console.log(`✓ MongoDB Connected: ${conn.connection.host}`);
+
+    // Drop the old non-sparse unique index for phoneNumber so Mongoose can recreate it as sparse
+    try {
+      await conn.connection.db.collection("users").dropIndex("phoneNumber_1");
+      console.log("✓ Dropped old non-sparse phoneNumber_1 index");
+    } catch (err) {
+      // The index might not exist or already be dropped/re-created, which is fine
+    }
     
     // Set JWT_SECRET if not already set
     if (!process.env.JWT_SECRET) {

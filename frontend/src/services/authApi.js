@@ -265,15 +265,15 @@ export const logoutUser = async () => {
 
 /*
 |--------------------------------------------------------------------------
-| GET CURRENT USER
+| UPDATE PROFILE
 |--------------------------------------------------------------------------
 */
 
-export const getCurrentUser = async () => {
-  const response = await API.get(
-    "/auth/me"
-  );
-
+export const updateProfile = async (data) => {
+  const token = localStorage.getItem("userToken");
+  const response = await API.put("/auth/profile", data, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
   return response.data;
 };
 

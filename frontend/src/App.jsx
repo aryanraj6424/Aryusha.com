@@ -39,6 +39,8 @@ import { VendorProvider } from "./vendor/context/VendorContext";
 import VendorPermissionProtectedRoute from "./vendor/components/VendorPermissionProtectedRoute";
 import VendorAssignedArea from "./vendor/pages/areas/VendorAssignedArea";
 import VendorProfile from "./vendor/pages/profile/VendorProfile";
+import VendorFinance from "./vendor/pages/finance/VendorFinance";
+import VendorCustomerList from "./vendor/pages/customers/VendorCustomerList";
 
 // Vendor Product, Inventory & Order imports
 import ProductList from "./vendor/pages/products/ProductList";
@@ -135,6 +137,8 @@ function App() {
         <Route path="assigned-area" element={<VendorAssignedArea />} />
         <Route path="orders" element={<VendorOrderList />} />
         <Route path="profile" element={<VendorProfile />} />
+        <Route path="finance" element={<VendorFinance />} />
+        <Route path="customers" element={<VendorCustomerList />} />
       </Route>
 
       {/* Admin routes */}

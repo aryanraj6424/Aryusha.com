@@ -42,7 +42,9 @@ export default function VendorSidebar({ isOpen, setIsOpen }) {
         { path: "/vendor/dashboard", label: "Dashboard", icon: LayoutDashboard },
         { path: "/vendor/products", label: "Product Management", icon: Package, permission: { module: "product", action: "view" } },
         { path: "/vendor/orders", label: "Order Management", icon: ShoppingBag },
-        { path: "/vendor/assigned-area", label: "Assigned Area", icon: Map }
+        { path: "/vendor/customers", label: "My Customers", icon: Users },
+        { path: "/vendor/assigned-area", label: "Assigned Area", icon: Map },
+        { path: "/vendor/finance", label: "My Commissions", icon: Wallet }
       ]
     }
   ];

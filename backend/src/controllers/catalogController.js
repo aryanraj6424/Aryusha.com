@@ -6,9 +6,11 @@ import {
   Product,
   ProductVariant,
   VendorListing,
-  VendorProduct
+  VendorProduct,
+  ProductReview
 } from "../models/catalog.js";
 import Vendor from "../vendor/models/Vendor.js";
+import CustomerOrder from "../customer/models/CustomerOrder.js";
 
 // @desc    Get all categories
 // @route   GET /api/categories
@@ -1261,7 +1263,9 @@ export const getCustomerProducts = async (req, res) => {
         primaryUnit: primaryVariant.variantLabel,
         primaryStockStatus: primaryVariant.stockStatus,
         primaryVendorName: primaryVariant.vendorName,
-        primaryVendorId: primaryVariant.vendorId
+        primaryVendorId: primaryVariant.vendorId,
+        averageRating: vpLink ? (vpLink.averageRating || 0) : (product.averageRating || 0),
+        totalReviews: vpLink ? (vpLink.totalReviews || 0) : (product.totalReviews || 0)
       });
     }
 
@@ -1467,6 +1471,171 @@ export const getNearbyVendors = async (req, res) => {
     });
   } catch (error) {
     console.error("Get Nearby Vendors Error:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Get reviews for a product (scoped to vendor)
+// @route   GET /api/catalog/products/:id/reviews
+// @access  Public
+export const getProductReviews = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { vendorId } = req.query;
+
+    if (!vendorId) {
+      return res.status(400).json({ success: false, message: "Vendor ID is required." });
+    }
+
+    const reviews = await ProductReview.find({ productId: id, vendorId }).sort({ createdAt: -1 });
+    const totalReviews = reviews.length;
+    const averageRating = totalReviews > 0
+      ? parseFloat((reviews.reduce((sum, r) => sum + r.rating, 0) / totalReviews).toFixed(2))
+      : 0;
+
+    res.status(200).json({
+      success: true,
+      reviews,
+      averageRating,
+      totalReviews
+    });
+  } catch (error) {
+    console.error("Get Product Reviews Error:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Add review for a product (scoped to vendor, verified purchase check)
+// @route   POST /api/catalog/products/:id/reviews
+// @access  Private (Customer)
+export const addProductReview = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { rating, reviewText, vendorId } = req.body;
+
+    if (!rating || rating < 1 || rating > 5) {
+      return res.status(400).json({ success: false, message: "Rating must be between 1 and 5." });
+    }
+
+    const product = await Product.findById(id);
+    if (!product) {
+      return res.status(404).json({ success: false, message: "Product not found." });
+    }
+
+    // Resolve target vendor
+    let targetVendorId = vendorId;
+    if (!targetVendorId && product.creatorModel === "Vendor") {
+      targetVendorId = product.createdBy;
+    }
+
+    if (!targetVendorId) {
+      return res.status(400).json({ success: false, message: "Vendor ID is required to rate this product." });
+    }
+
+    // Verified purchase check: must have a Delivered order containing the product from this vendor
+    const verifiedOrder = await CustomerOrder.findOne({
+      customerId: req.user._id,
+      vendorId: targetVendorId,
+      orderStatus: "Delivered",
+      "items.productId": id
+    });
+
+    if (!verifiedOrder) {
+      return res.status(403).json({
+        success: false,
+        message: "You can only rate products you have purchased and received from this vendor."
+      });
+    }
+
+    // Upsert review (enforcing single review per customer per vendor product)
+    let review = await ProductReview.findOne({
+      productId: id,
+      vendorId: targetVendorId,
+      customerId: req.user._id
+    });
+
+    if (review) {
+      review.rating = rating;
+      review.reviewText = reviewText || "";
+      await review.save();
+    } else {
+      review = await ProductReview.create({
+        productId: id,
+        vendorId: targetVendorId,
+        customerId: req.user._id,
+        orderId: verifiedOrder._id,
+        customerName: req.user.fullName || req.user.name || "Customer",
+        rating,
+        reviewText: reviewText || "",
+        isVerifiedPurchase: true
+      });
+    }
+
+    // Recalculate average rating & total reviews for this vendor product
+    const allReviews = await ProductReview.find({ productId: id, vendorId: targetVendorId });
+    const totalReviews = allReviews.length;
+    const averageRating = totalReviews > 0
+      ? parseFloat((allReviews.reduce((sum, r) => sum + r.rating, 0) / totalReviews).toFixed(2))
+      : 0;
+
+    // Update denormalized aggregates on VendorProduct or Product
+    if (product.creatorModel === "Vendor" && product.createdBy.toString() === targetVendorId.toString()) {
+      product.averageRating = averageRating;
+      product.totalReviews = totalReviews;
+      await product.save();
+    } else {
+      await VendorProduct.updateOne(
+        { masterProductId: id, vendorId: targetVendorId },
+        { averageRating, totalReviews }
+      );
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Thank you for reviewing this product!",
+      review,
+      averageRating,
+      totalReviews
+    });
+  } catch (error) {
+    console.error("Add Product Review Error:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Check review eligibility & existing review details
+// @route   GET /api/catalog/products/:id/review-eligibility
+// @access  Private (Customer)
+export const checkReviewEligibility = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { vendorId } = req.query;
+
+    if (!vendorId) {
+      return res.status(400).json({ success: false, message: "Vendor ID is required." });
+    }
+
+    const verifiedOrder = await CustomerOrder.findOne({
+      customerId: req.user._id,
+      vendorId: vendorId,
+      orderStatus: "Delivered",
+      "items.productId": id
+    });
+
+    const existingReview = await ProductReview.findOne({
+      productId: id,
+      vendorId,
+      customerId: req.user._id
+    });
+
+    res.status(200).json({
+      success: true,
+      eligible: !!verifiedOrder,
+      hasReviewed: !!existingReview,
+      existingReview: existingReview || null
+    });
+  } catch (error) {
+    console.error("Check Review Eligibility Error:", error);
     res.status(500).json({ success: false, message: error.message });
   }
 };

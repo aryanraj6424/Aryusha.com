@@ -28,6 +28,19 @@ const orderItemSchema = new mongoose.Schema({
     type: String,
     default: "",
   },
+  calculatedCommissionAmount: {
+    type: Number,
+    default: 0,
+  },
+  commissionRateApplied: {
+    type: Number,
+    default: 0,
+  },
+  commissionResolutionLevel: {
+    type: String,
+    enum: ["product", "vendor", "global", "none"],
+    default: "none",
+  },
 });
 
 const customerOrderSchema = new mongoose.Schema(

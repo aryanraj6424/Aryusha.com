@@ -130,6 +130,7 @@ import OffersCoupons from "../pages/offers/OffersCoupons";
 // ==============================
 import ReportsAnalytics from "../pages/reports/ReportsAnalytics";
 import FeeManagement from "../pages/fees/FeeManagement";
+import AdminFinance from "../pages/finance/AdminFinance";
 
 // ==============================
 // Deliveries & Riders
@@ -272,6 +273,7 @@ export default function AdminRoutes() {
 
         {/* Reports */}
         <Route path="reports" element={<ReportsAnalytics />} />
+        <Route path="finance" element={<AdminFinance />} />
 
         {/* Deliveries & Riders */}
         <Route path="deliveries" element={<DeliveriesMonitor />} />

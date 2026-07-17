@@ -72,7 +72,7 @@
 
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { User, MapPin } from "lucide-react";
+import { User, MapPin, ChevronDown } from "lucide-react";
 
 import SearchBar from "./SearchBar";
 
@@ -113,7 +113,7 @@ function MobileTopNavbar() {
           onClick={() =>
             navigate("/customer/location")
           }
-          className="flex items-center gap-2 flex-1 text-left min-h-[44px]"
+          className="flex items-center gap-2 flex-1 text-left min-h-[44px] overflow-hidden"
         >
           <div className="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center flex-shrink-0">
             <MapPin
@@ -122,18 +122,21 @@ function MobileTopNavbar() {
             />
           </div>
 
-          <div className="overflow-hidden">
-            <p className="text-xs text-gray-500">
-              Delivering To
-            </p>
+          <div className="flex-1 min-w-0 pr-2">
+            <div className="flex items-center gap-1">
+              <span className="text-[11px] text-gray-400 font-medium">Delivering to</span>
+            </div>
 
-            <p className="font-semibold text-sm truncate max-w-[40vw] sm:max-w-[12rem]">
-              {selectedAddress
-                ? selectedAddress.fullAddress ||
-                  `${selectedAddress.houseNo || ""} ${selectedAddress.area || ""}`.trim() ||
-                  "Location Selected"
-                : "Select Location"}
-            </p>
+            <div className="flex items-center gap-1">
+              <span className="font-extrabold text-xs text-slate-800 truncate block">
+                {selectedAddress
+                  ? selectedAddress.fullAddress ||
+                    `${selectedAddress.houseNo || ""} ${selectedAddress.area || ""}`.trim() ||
+                    "Location Selected"
+                  : "Select Location"}
+              </span>
+              <ChevronDown size={14} className="text-slate-600 flex-shrink-0" />
+            </div>
           </div>
         </button>
 
@@ -143,14 +146,15 @@ function MobileTopNavbar() {
             onClick={() =>
               navigate("/customer/profile")
             }
-            className="w-11 h-11 flex items-center justify-center flex-shrink-0"
+            className="w-11 h-11 flex items-center justify-center flex-shrink-0 relative"
             title="Profile"
           >
-            <div className="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center">
+            <div className="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center relative">
               <User
                 size={18}
                 className="text-purple-700"
               />
+              <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-[#22C55E] border-2 border-white rounded-full"></span>
             </div>
           </button>
         ) : (

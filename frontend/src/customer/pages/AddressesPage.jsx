@@ -380,6 +380,8 @@ function AddressesPage() {
     addressType: "Home",
   });
 
+  const [fieldErrors, setFieldErrors] = useState({});
+
   const [loading, setLoading] = useState(false);
   const [addresses, setAddresses] = useState([]);
   const [success, setSuccess] = useState("");
@@ -446,10 +448,25 @@ function AddressesPage() {
   };
 
   const handleChange = (e) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value,
-    });
+    const { name, value } = e.target;
+    setFormData({ ...formData, [name]: value });
+    // Clear error as user types
+    if (fieldErrors[name]) setFieldErrors((prev) => ({ ...prev, [name]: "" }));
+  };
+
+  /* ── Validation ────────────────────────────────────────── */
+  const validate = () => {
+    const errs = {};
+    if (!formData.fullName.trim())       errs.fullName    = "Full name is required.";
+    if (!formData.phoneNumber.trim())    errs.phoneNumber = "Phone number is required.";
+    else if (!/^\d{10}$/.test(formData.phoneNumber.trim())) errs.phoneNumber = "Enter a valid 10-digit phone number.";
+    if (!formData.houseNo.trim())        errs.houseNo     = "House / Flat No is required.";
+    if (!formData.area.trim())           errs.area        = "Area / Locality is required.";
+    if (!formData.city.trim())           errs.city        = "City is required.";
+    if (!formData.state.trim())          errs.state       = "State is required.";
+    if (!formData.pincode.trim())        errs.pincode     = "Pincode is required.";
+    else if (!/^\d{6}$/.test(formData.pincode.trim())) errs.pincode = "Enter a valid 6-digit pincode.";
+    return errs;
   };
 
   const loadAddresses = async () => {
@@ -475,21 +492,11 @@ function AddressesPage() {
     loadAddresses();
   }, []);
 
-  const handleUseAddress = (
-    address
-  ) => {
-    localStorage.setItem(
-      "selectedAddress",
-      JSON.stringify(address)
-    );
-
-    setSuccess(
-      "✅ Address Selected Successfully"
-    );
-
-    setTimeout(() => {
-      navigate("/");
-    }, 1000);
+  const handleUseAddress = (address) => {
+    localStorage.setItem("selectedAddress", JSON.stringify(address));
+    setSuccess("✅ Address Selected Successfully");
+    const returnTo = location.state?.returnTo || "/customer/checkout";
+    setTimeout(() => { navigate(returnTo); }, 800);
   };
 
   const handleDelete = async (id) => {
@@ -518,16 +525,22 @@ function AddressesPage() {
       setSuccess("");
       setErrorMsg("");
 
-      const user = JSON.parse(
-        localStorage.getItem("user")
-      );
+      // Validate before submitting
+      const errs = validate();
+      if (Object.keys(errs).length > 0) {
+        setFieldErrors(errs);
+        setLoading(false);
+        return;
+      }
+
+      const user = JSON.parse(localStorage.getItem("user"));
 
       if (!user) {
-        // Guest mode address selection
+        // Guest mode — build address with validated data
         const guestAddress = {
           _id: "guest-temp-address",
-          fullName: formData.fullName || "Guest Customer",
-          phoneNumber: formData.phoneNumber || "",
+          fullName: formData.fullName,
+          phoneNumber: formData.phoneNumber,
           houseNo: formData.houseNo,
           area: formData.area,
           city: formData.city,
@@ -541,10 +554,8 @@ function AddressesPage() {
         localStorage.setItem("selectedAddress", JSON.stringify(guestAddress));
         setSuccess("✅ Delivery Address Set Successfully!");
         showToast({ type: "success", message: "Delivery Address set successfully!" });
-        
-        setTimeout(() => {
-          navigate("/");
-        }, 1000);
+        const returnTo = location.state?.returnTo || "/customer/checkout";
+        setTimeout(() => { navigate(returnTo); }, 800);
         return;
       }
 
@@ -621,57 +632,89 @@ function AddressesPage() {
           name="fullName"
           value={formData.fullName}
           onChange={handleChange}
-          placeholder="Full Name"
-          className="w-full border p-3 rounded-xl"
+          placeholder="Full Name *"
+          className={`w-full border p-3 rounded-xl outline-none focus:border-purple-600 ${
+            fieldErrors.fullName ? "border-red-400 bg-red-50" : ""
+          }`}
         />
+        {fieldErrors.fullName && (
+          <p className="text-red-500 text-xs mt-1">{fieldErrors.fullName}</p>
+        )}
 
         <input
           name="phoneNumber"
           value={formData.phoneNumber}
           onChange={handleChange}
-          placeholder="Phone Number"
-          className="w-full border p-3 rounded-xl"
+          placeholder="Phone Number * (10 digits)"
+          className={`w-full border p-3 rounded-xl outline-none focus:border-purple-600 ${
+            fieldErrors.phoneNumber ? "border-red-400 bg-red-50" : ""
+          }`}
         />
+        {fieldErrors.phoneNumber && (
+          <p className="text-red-500 text-xs mt-1">{fieldErrors.phoneNumber}</p>
+        )}
 
         <input
           name="houseNo"
           value={formData.houseNo}
           onChange={handleChange}
-          placeholder="House No / Flat No"
-          className="w-full border p-3 rounded-xl"
+          placeholder="House No / Flat No *"
+          className={`w-full border p-3 rounded-xl outline-none focus:border-purple-600 ${
+            fieldErrors.houseNo ? "border-red-400 bg-red-50" : ""
+          }`}
         />
+        {fieldErrors.houseNo && (
+          <p className="text-red-500 text-xs mt-1">{fieldErrors.houseNo}</p>
+        )}
 
         <input
           name="area"
           value={formData.area}
           onChange={handleChange}
-          placeholder="Area / Locality"
-          className="w-full border p-3 rounded-xl"
+          placeholder="Area / Locality *"
+          className={`w-full border p-3 rounded-xl outline-none focus:border-purple-600 ${
+            fieldErrors.area ? "border-red-400 bg-red-50" : ""
+          }`}
         />
+        {fieldErrors.area && (
+          <p className="text-red-500 text-xs mt-1">{fieldErrors.area}</p>
+        )}
 
         <input
           name="city"
           value={formData.city}
           onChange={handleChange}
-          placeholder="City"
-          className="w-full border p-3 rounded-xl"
+          placeholder="City *"
+          className={`w-full border p-3 rounded-xl outline-none focus:border-purple-600 ${
+            fieldErrors.city ? "border-red-400 bg-red-50" : ""
+          }`}
         />
+        {fieldErrors.city && (
+          <p className="text-red-500 text-xs mt-1">{fieldErrors.city}</p>
+        )}
 
         <input
           name="state"
           value={formData.state}
           onChange={handleChange}
-          placeholder="State"
-          className="w-full border p-3 rounded-xl"
+          placeholder="State *"
+          className={`w-full border p-3 rounded-xl outline-none focus:border-purple-600 ${
+            fieldErrors.state ? "border-red-400 bg-red-50" : ""
+          }`}
         />
+        {fieldErrors.state && (
+          <p className="text-red-500 text-xs mt-1">{fieldErrors.state}</p>
+        )}
 
         <div className="flex gap-2 flex-wrap sm:flex-nowrap">
           <input
             name="pincode"
             value={formData.pincode}
             onChange={handleChange}
-            placeholder="Pincode"
-            className="flex-1 border p-3 rounded-xl outline-none focus:border-purple-600 font-semibold min-w-[120px]"
+            placeholder="Pincode * (6 digits)"
+            className={`flex-1 border p-3 rounded-xl outline-none focus:border-purple-600 font-semibold min-w-[120px] ${
+              fieldErrors.pincode ? "border-red-400 bg-red-50" : ""
+            }`}
           />
           <button
             type="button"
@@ -689,6 +732,9 @@ function AddressesPage() {
             Select on Map 🗺️
           </button>
         </div>
+        {fieldErrors.pincode && (
+          <p className="text-red-500 text-xs mt-1">{fieldErrors.pincode}</p>
+        )}
 
         <select
           name="addressType"

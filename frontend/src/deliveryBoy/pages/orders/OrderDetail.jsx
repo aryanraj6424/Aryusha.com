@@ -105,8 +105,8 @@ export default function OrderDetail() {
               <span className="text-[10px] text-slate-400 uppercase tracking-widest font-black block">Order ID</span>
               <h3 className="text-md font-black text-slate-800">#{order.orderId}</h3>
             </div>
-            <span className="text-[9px] font-black uppercase px-2.5 py-1 rounded-full bg-slate-100 text-slate-700">
-              COD - PENDING
+            <span className={`text-[9px] font-black uppercase px-2.5 py-1 rounded-full ${order.paymentMethod === "COD" ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"}`}>
+              {order.paymentMethod === "COD" ? "COD" : "PREPAID"} - {order.paymentStatus === "Paid" ? "PAID" : "PENDING"}
             </span>
           </div>
 
@@ -195,6 +195,48 @@ export default function OrderDetail() {
               </div>
             ))}
           </div>
+        </div>
+
+        {/* Payment & Collection Details Card */}
+        <div className="bg-white border border-slate-100 rounded-3xl p-5 shadow-sm space-y-3">
+          <div className="flex items-center gap-2.5">
+            <div className={`p-2 rounded-xl ${order.paymentMethod === "COD" ? "bg-amber-50 text-amber-600" : "bg-emerald-50 text-emerald-600"}`}>
+              <IndianRupee size={18} />
+            </div>
+            <div>
+              <h4 className="text-xs font-black text-slate-800">Payment Collection</h4>
+              <p className="text-[10px] text-slate-400 font-bold font-sans">
+                {order.paymentMethod === "COD" ? "Cash on Delivery collection required" : "Prepaid transaction"}
+              </p>
+            </div>
+          </div>
+
+          <div className="pt-2.5 border-t border-slate-50 flex items-center justify-between text-xs">
+            <span className="text-slate-500 font-semibold">Payment Mode:</span>
+            <span className="font-extrabold text-slate-800">{order.paymentMethod === "COD" ? "Cash on Delivery (COD)" : "Online / Prepaid"}</span>
+          </div>
+
+          {order.paymentMethod === "COD" ? (
+            <div className="bg-amber-50 border border-amber-250 rounded-2xl p-3 flex items-center justify-between mt-2">
+              <div>
+                <span className="text-[10px] text-amber-800 font-bold block uppercase tracking-wider">Collect Cash from Customer</span>
+                <span className="text-lg font-black text-amber-950">₹{order.grandTotal?.toFixed(2)}</span>
+              </div>
+              <span className="px-2 py-1 bg-amber-100 text-amber-800 font-black text-[9px] rounded-lg uppercase">
+                Collect Cash
+              </span>
+            </div>
+          ) : (
+            <div className="bg-emerald-50 border border-emerald-250 rounded-2xl p-3 flex items-center justify-between mt-2">
+              <div>
+                <span className="text-[10px] text-emerald-800 font-bold block uppercase tracking-wider">Prepaid Order</span>
+                <span className="text-lg font-black text-emerald-950">₹{order.grandTotal?.toFixed(2)}</span>
+              </div>
+              <span className="px-2 py-1 bg-emerald-100 text-emerald-800 font-black text-[9px] rounded-lg uppercase">
+                No Cash Collection
+              </span>
+            </div>
+          )}
         </div>
 
       </div>

@@ -30,11 +30,15 @@ import {
   rejectProductFamily,
   // Customer
   getCustomerProducts,
-  getNearbyVendors
+  getNearbyVendors,
+  getProductReviews,
+  addProductReview,
+  checkReviewEligibility
 } from "../controllers/catalogController.js";
 import { protectAdmin } from "../admin/middleware/adminAuthMiddleware.js";
 import Admin from "../admin/models/Admin.js";
 import Vendor from "../vendor/models/Vendor.js";
+import protect from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
@@ -78,6 +82,9 @@ router.get("/product-families", getAllProductFamilies);
 router.get("/product-families/sub-category/:subCategoryId", getProductFamiliesBySubCategory);
 router.get("/products", getCustomerProducts);
 router.get("/vendors/nearby", getNearbyVendors);
+router.get("/products/:id/reviews", getProductReviews);
+router.post("/products/:id/reviews", protect, addProductReview);
+router.get("/products/:id/review-eligibility", protect, checkReviewEligibility);
 
 /* ─────────────────────────────────────────────
    Sub Category CRUD

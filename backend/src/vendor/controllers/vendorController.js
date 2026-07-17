@@ -3,6 +3,7 @@ import VendorPermission from "../models/VendorPermission.js";
 import VendorEarnings from "../models/VendorEarnings.js";
 import Settlement from "../models/Settlement.js";
 import Commission from "../models/Commission.js";
+import CommissionLedger from "../models/CommissionLedger.js";
 import Order from "../models/Order.js";
 import { Product } from "../../models/catalog.js";
 import CustomerOrder from "../../customer/models/CustomerOrder.js";
@@ -10,6 +11,8 @@ import DeliveryBoy from "../../deliveryBoy/models/DeliveryBoy.js";
 import { emitToRoom } from "../../socket/socketManager.js";
 import PlatformFeeSettings from "../../admin/models/PlatformFeeSettings.js";
 import { calculateCommissionSync } from "../../utils/commissionCalculator.js";
+import mongoose from "mongoose";
+import { handleOrderStatusChange, runInTransaction } from "../../utils/ledgerSyncHelper.js";
 
 const ensureMockOrders = async (vendorId) => {
   // Disabled mock seeder to use real live data only
@@ -43,7 +46,7 @@ export const getVendorDashboard = async (req, res) => {
 
     const mappedOrders = realOrders.map(order => {
       const commission = calculateCommissionSync(order, commType, commVal);
-      const netAmount = order.grandTotal - commission;
+      const netAmount = order.totalAmount - commission;
       
       let status = "pending";
       if (order.orderStatus === "Delivered") {
@@ -57,7 +60,7 @@ export const getVendorDashboard = async (req, res) => {
       return {
         orderId: order.orderId,
         customerName: order.customerId?.fullName || order.deliveryAddress?.fullName || "Customer",
-        totalAmount: order.grandTotal,
+        totalAmount: order.totalAmount,
         commission,
         netAmount,
         status,
@@ -65,10 +68,14 @@ export const getVendorDashboard = async (req, res) => {
       };
     });
 
-    // Dynamic calculations from database
-    const completedOrders = realOrders.filter(o => o.orderStatus === "Delivered");
-    const totalSales = completedOrders.reduce((sum, o) => sum + o.grandTotal, 0);
-    const commissionPaid = completedOrders.reduce((sum, o) => sum + calculateCommissionSync(o, commType, commVal), 0);
+    // Dynamic calculations from the commission ledger (Single Source of Truth)
+    const activeLedgerEntries = await CommissionLedger.find({
+      vendorId,
+      orderStatus: "Delivered"
+    });
+
+    const totalSales = activeLedgerEntries.reduce((sum, entry) => sum + entry.orderAmount, 0);
+    const commissionPaid = activeLedgerEntries.reduce((sum, entry) => sum + entry.commissionAmount, 0);
     const netRevenue = totalSales - commissionPaid;
 
     let earnings = await VendorEarnings.findOne({ vendor: vendorId });
@@ -88,6 +95,8 @@ export const getVendorDashboard = async (req, res) => {
       earnings.grossRevenue = totalSales;
       earnings.netRevenue = netRevenue;
       earnings.commissionPaid = commissionPaid;
+      // Auto-update wallet balance keeping track of withdrawals
+      earnings.walletBalance = Math.max(0, netRevenue - (earnings.pendingBalance + earnings.settledBalance));
       await earnings.save();
     }
 
@@ -178,10 +187,14 @@ export const getVendorEarningsSelf = async (req, res) => {
       ? vendor.commissionValue 
       : platformSettings.defaultCommissionValue ?? 8;
 
-    // Dynamic calculations from database
-    const completedOrders = await CustomerOrder.find({ vendorId, orderStatus: "Delivered" });
-    const totalSales = completedOrders.reduce((sum, o) => sum + o.grandTotal, 0);
-    const commissionPaid = completedOrders.reduce((sum, o) => sum + calculateCommissionSync(o, commType, commVal), 0);
+    // Dynamic calculations from the commission ledger (Single Source of Truth)
+    const activeLedgerEntries = await CommissionLedger.find({
+      vendorId,
+      orderStatus: "Delivered"
+    });
+
+    const totalSales = activeLedgerEntries.reduce((sum, entry) => sum + entry.orderAmount, 0);
+    const commissionPaid = activeLedgerEntries.reduce((sum, entry) => sum + entry.commissionAmount, 0);
     const netRevenue = totalSales - commissionPaid;
 
     // Get current earnings config
@@ -202,6 +215,8 @@ export const getVendorEarningsSelf = async (req, res) => {
       earnings.grossRevenue = totalSales;
       earnings.netRevenue = netRevenue;
       earnings.commissionPaid = commissionPaid;
+      // Auto-update wallet balance keeping track of withdrawals
+      earnings.walletBalance = Math.max(0, netRevenue - (earnings.pendingBalance + earnings.settledBalance));
       await earnings.save();
     }
 
@@ -716,27 +731,35 @@ export const acceptOrder = async (req, res) => {
   try {
     const orderId = req.params.id;
     const vendorId = req.vendor._id;
+    let resultOrder = null;
 
-    const order = await CustomerOrder.findOne({ _id: orderId, vendorId })
-      .populate("customerId", "fullName email phoneNumber")
-      .populate("deliveryBoyId", "fullName phone");
+    await runInTransaction(async (session) => {
+      const order = await CustomerOrder.findOne({ _id: orderId, vendorId })
+        .populate("customerId", "fullName email phoneNumber")
+        .populate("deliveryBoyId", "fullName phone")
+        .session(session);
 
-    if (!order) {
-      return res.status(404).json({ success: false, message: "Order not found" });
-    }
+      if (!order) {
+        throw new Error("Order not found");
+      }
 
-    if (order.orderStatus !== "Pending") {
-      return res.status(400).json({ success: false, message: "Order is already accepted or processed" });
-    }
+      if (order.orderStatus !== "Pending") {
+        throw new Error("Order is already accepted or processed");
+      }
 
-    order.orderStatus = "Accepted";
-    await order.save();
+      order.orderStatus = "Accepted";
+      await order.save({ session });
+
+      // Sync status in the commission ledger
+      await handleOrderStatusChange(order._id, "Accepted", session);
+      resultOrder = order;
+    });
 
     // Notify customer that their order was accepted
-    if (order.customerId) {
-      emitToRoom(`customer:${order.customerId._id || order.customerId}`, "order:accepted", {
-        orderId: order._id,
-        orderRef: order.orderId,
+    if (resultOrder.customerId) {
+      emitToRoom(`customer:${resultOrder.customerId._id || resultOrder.customerId}`, "order:accepted", {
+        orderId: resultOrder._id,
+        orderRef: resultOrder.orderId,
         message: "Your order has been accepted by the vendor!"
       });
     }
@@ -744,10 +767,10 @@ export const acceptOrder = async (req, res) => {
     res.status(200).json({
       success: true,
       message: "Order accepted successfully",
-      order
+      order: resultOrder
     });
   } catch (error) {
     console.error("Accept Order Error:", error);
-    res.status(500).json({ success: false, message: "Server Error" });
+    res.status(500).json({ success: false, message: error.message || "Server Error" });
   }
 };

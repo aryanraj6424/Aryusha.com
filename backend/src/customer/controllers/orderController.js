@@ -5,6 +5,8 @@ import Invoice from "../models/Invoice.js";
 import { VendorListing, VendorProduct, ProductVariant } from "../../models/catalog.js";
 import { calculateOrderFees } from "../../utils/feeCalculator.js";
 import { calculateVendorOrderCommission } from "../../utils/commissionCalculator.js";
+import { handleOrderCreated, runInTransaction } from "../../utils/ledgerSyncHelper.js";
+import { serializeCustomerOrder } from "../../utils/financeSerializer.js";
 
 // Helper: Generate unique IDs
 const generateUniqueId = async (prefix, Model, field) => {
@@ -23,170 +25,175 @@ const generateUniqueId = async (prefix, Model, field) => {
 // @access  Public (Customer)
 export const placeOrder = async (req, res) => {
   try {
-    const {
-      customerId,
-      vendorId,
-      items,
-      deliveryAddress,
-      totalAmount,
-      deliveryCharge,
-      taxAmount,
-      grandTotal,
-      couponCode,
-      couponDiscount,
-      paymentMethod,
-      deliverySlot,
-      customerLiveLocation,
-      locationUnavailable,
-    } = req.body;
-
-    if (!customerId || !vendorId || !items || items.length === 0 || !deliveryAddress) {
-      return res.status(400).json({ success: false, message: "Missing required order fields." });
-    }
-
-    // 1. Prevent duplicate/double order submission (within 15 seconds window)
-    const duplicateWindow = new Date(Date.now() - 15 * 1000);
-    const potentialDuplicate = await CustomerOrder.findOne({
-      customerId,
-      grandTotal,
-      createdAt: { $gte: duplicateWindow },
-    });
-
-    if (potentialDuplicate) {
-      return res.status(400).json({
-        success: false,
-        message: "Duplicate order submission detected. Please wait 15 seconds.",
-      });
-    }
-
-    // 2. Validate stock availability for each item and decrement stock
-    const operationsToExecute = [];
-    for (const item of items) {
-      // Check standard VendorListing first
-      const listing = await VendorListing.findOne({
+    let resultOrder = null;
+    await runInTransaction(async (session) => {
+      const {
+        customerId,
         vendorId,
-        variantId: item.variantId,
-      });
+        items,
+        deliveryAddress,
+        totalAmount,
+        deliveryCharge,
+        taxAmount,
+        grandTotal,
+        couponCode,
+        couponDiscount,
+        paymentMethod,
+        deliverySlot,
+        customerLiveLocation,
+        locationUnavailable,
+      } = req.body;
 
-      if (listing) {
-        if (listing.stock.quantity < item.qty) {
-          return res.status(400).json({
-            success: false,
-            message: `Insufficient stock for variant "${item.name}". Available: ${listing.stock.quantity}, requested: ${item.qty}`,
-          });
-        }
-        operationsToExecute.push({
-          type: "listing",
-          query: { vendorId, variantId: item.variantId },
-          update: { $inc: { "stock.quantity": -item.qty } },
-        });
-      } else {
-        // Fallback: Check VendorProduct link
-        const vpLink = await VendorProduct.findOne({
+      if (!customerId || !vendorId || !items || items.length === 0 || !deliveryAddress) {
+        throw new Error("Missing required order fields.");
+      }
+
+      // 1. Prevent duplicate/double order submission (within 15 seconds window)
+      const duplicateWindow = new Date(Date.now() - 15 * 1000);
+      const potentialDuplicate = await CustomerOrder.findOne({
+        customerId,
+        grandTotal,
+        createdAt: { $gte: duplicateWindow },
+      }).session(session);
+
+      if (potentialDuplicate) {
+        throw new Error("Duplicate order submission detected. Please wait 15 seconds.");
+      }
+
+      // 2. Validate stock availability for each item and decrement stock
+      const operationsToExecute = [];
+      for (const item of items) {
+        // Check standard VendorListing first
+        const listing = await VendorListing.findOne({
           vendorId,
-          masterProductId: item.productId,
-        });
+          variantId: item.variantId,
+        }).session(session);
 
-        if (vpLink) {
-          if (vpLink.stock < item.qty) {
-            return res.status(400).json({
-              success: false,
-              message: `Insufficient stock for product "${item.name}". Available: ${vpLink.stock}, requested: ${item.qty}`,
-            });
+        if (listing) {
+          if (listing.stock.quantity < item.qty) {
+            throw new Error(`Insufficient stock for variant "${item.name}". Available: ${listing.stock.quantity}, requested: ${item.qty}`);
           }
           operationsToExecute.push({
-            type: "vendorProduct",
-            query: { vendorId, masterProductId: item.productId },
-            update: { $inc: { stock: -item.qty } },
+            type: "listing",
+            query: { vendorId, variantId: item.variantId },
+            update: { $inc: { "stock.quantity": -item.qty } },
           });
         } else {
-          return res.status(400).json({
-            success: false,
-            message: `Product variant "${item.name}" is not listed by this vendor.`,
-          });
+          // Fallback: Check VendorProduct link
+          const vpLink = await VendorProduct.findOne({
+            vendorId,
+            masterProductId: item.productId,
+          }).session(session);
+
+          if (vpLink) {
+            if (vpLink.stock < item.qty) {
+              throw new Error(`Insufficient stock for product "${item.name}". Available: ${vpLink.stock}, requested: ${item.qty}`);
+            }
+            operationsToExecute.push({
+              type: "vendorProduct",
+              query: { vendorId, masterProductId: item.productId },
+              update: { $inc: { stock: -item.qty } },
+            });
+          } else {
+            throw new Error(`Product variant "${item.name}" is not listed by this vendor.`);
+          }
         }
       }
-    }
 
-    // Execute stock decrements
-    for (const op of operationsToExecute) {
-      if (op.type === "listing") {
-        await VendorListing.updateOne(op.query, op.update);
-      } else if (op.type === "vendorProduct") {
-        await VendorProduct.updateOne(op.query, op.update);
+      // Execute stock decrements
+      for (const op of operationsToExecute) {
+        if (op.type === "listing") {
+          await VendorListing.updateOne(op.query, op.update, { session });
+        } else if (op.type === "vendorProduct") {
+          await VendorProduct.updateOne(op.query, op.update, { session });
+        }
       }
-    }
 
-    // 3. Generate Unique Order ID
-    const orderId = await generateUniqueId("QK", CustomerOrder, "orderId");
+      // 3. Generate Unique Order ID
+      const orderId = await generateUniqueId("QK", CustomerOrder, "orderId");
 
-    // 4. Create the CustomerOrder record
-    // 3.5 Recalculate fees server-side based on customer city/zone and total
-    const zoneId = deliveryAddress.city || "";
-    const { breakdown, totalFees } = await calculateOrderFees(totalAmount, zoneId);
+      // 4. Recalculate fees server-side based on customer city/zone and total
+      const zoneId = deliveryAddress.city || "";
+      const { breakdown, totalFees } = await calculateOrderFees(totalAmount, zoneId);
 
-    const finalHandlingFee = breakdown.find(f => f.feeType === "handling")?.amount || 0;
-    const finalSmallCartFee = breakdown.find(f => f.feeType === "small_cart")?.amount || 0;
-    const finalDeliveryFee = breakdown.find(f => f.feeType === "delivery_partner")?.amount || 0;
-    const finalGst = breakdown.find(f => f.feeType === "gst")?.amount || 0;
-    const finalRainFee = breakdown.find(f => f.feeType === "rain")?.amount || 0;
+      const finalHandlingFee = breakdown.find(f => f.feeType === "handling")?.amount || 0;
+      const finalSmallCartFee = breakdown.find(f => f.feeType === "small_cart")?.amount || 0;
+      const finalDeliveryFee = breakdown.find(f => f.feeType === "delivery_partner")?.amount || 0;
+      const finalGst = breakdown.find(f => f.feeType === "gst")?.amount || 0;
+      const finalRainFee = breakdown.find(f => f.feeType === "rain")?.amount || 0;
 
-    const totalCalculatedFees = finalHandlingFee + finalSmallCartFee + finalDeliveryFee + finalGst + finalRainFee;
-    const finalGrandTotal = Math.max(0, totalAmount - couponDiscount + totalCalculatedFees);
+      const totalCalculatedFees = finalHandlingFee + finalSmallCartFee + finalDeliveryFee + finalGst + finalRainFee;
+      const finalGrandTotal = Math.max(0, totalAmount - couponDiscount + totalCalculatedFees);
 
-    // Calculate and lock the commission at order time
-    const commissionDetails = await calculateVendorOrderCommission({ items }, vendorId);
+      // Calculate and lock the commission at order time
+      const commissionDetails = await calculateVendorOrderCommission({ items }, vendorId);
 
-    // 4. Create the CustomerOrder record
-    const order = await CustomerOrder.create({
-      orderId,
-      customerId,
-      vendorId,
-      items,
-      totalAmount,
-      deliveryCharge: finalDeliveryFee,
-      taxAmount: finalGst,
-      handlingFee: finalHandlingFee,
-      smallCartFee: finalSmallCartFee,
-      rainFee: finalRainFee,
-      feeBreakdown: breakdown.map(f => ({ feeType: f.feeType, label: f.label, amount: f.amount })),
-      grandTotal: finalGrandTotal,
-      couponCode: couponCode || null,
-      couponDiscount: couponDiscount || 0,
-      paymentMethod: paymentMethod || "COD",
-      paymentStatus: paymentMethod === "Online" ? "Paid" : "Pending",
-      orderStatus: "Pending",
-      deliveryAddress,
-      deliverySlot: deliverySlot || null,
-      customerLiveLocation: customerLiveLocation || null,
-      locationUnavailable: locationUnavailable || false,
-      vendorCommission: {
-        rate: commissionDetails.rate,
-        commissionType: commissionDetails.type,
-        amount: commissionDetails.commissionAmount,
-        calculatedAt: new Date()
+      // Create the CustomerOrder record
+      const [order] = await CustomerOrder.create([
+        {
+          orderId,
+          customerId,
+          vendorId,
+          items: commissionDetails.items.map(item => ({
+            productId: item.productId,
+            variantId: item.variantId,
+            name: item.name,
+            price: item.price,
+            qty: item.qty,
+            img: item.img,
+            calculatedCommissionAmount: item.calculatedCommissionAmount,
+            commissionRateApplied: item.commissionRateApplied,
+            commissionResolutionLevel: item.commissionResolutionLevel
+          })),
+          totalAmount,
+          deliveryCharge: finalDeliveryFee,
+          taxAmount: finalGst,
+          handlingFee: finalHandlingFee,
+          smallCartFee: finalSmallCartFee,
+          rainFee: finalRainFee,
+          feeBreakdown: breakdown.map(f => ({ feeType: f.feeType, label: f.label, amount: f.amount })),
+          grandTotal: finalGrandTotal,
+          couponCode: couponCode || null,
+          couponDiscount: couponDiscount || 0,
+          paymentMethod: paymentMethod || "COD",
+          paymentStatus: paymentMethod === "Online" ? "Paid" : "Pending",
+          orderStatus: "Pending",
+          deliveryAddress,
+          deliverySlot: deliverySlot || null,
+          customerLiveLocation: customerLiveLocation || null,
+          locationUnavailable: locationUnavailable || false,
+          vendorCommission: {
+            rate: commissionDetails.rate,
+            commissionType: commissionDetails.type,
+            amount: commissionDetails.commissionAmount,
+            calculatedAt: new Date()
+          }
+        }
+      ], { session });
+
+      if (couponCode) {
+        // Lazy load/lookup the Coupon model to update its usage count
+        const Coupon = mongoose.model("Coupon");
+        await Coupon.updateOne(
+          { code: couponCode.toUpperCase() },
+          { $inc: { usedCount: 1 } },
+          { session }
+        );
       }
+
+      // Update Ledger and daily summary inside the transaction
+      await handleOrderCreated(order, session);
+      resultOrder = order;
     });
 
-    if (couponCode) {
-      // Lazy load/lookup the Coupon model to update its usage count
-      const Coupon = mongoose.model("Coupon");
-      await Coupon.updateOne(
-        { code: couponCode.toUpperCase() },
-        { $inc: { usedCount: 1 } }
-      );
-    }
-
     // Clean cart notification/confirmation simulation
-    console.log(`Notification sent to Customer ${customerId}: Order ${orderId} placed successfully!`);
-
-    const orderObj = order.toObject();
-    delete orderObj.vendorCommission;
+    console.log(`Notification sent to Customer: Order placed successfully!`);
+    const serializedOrder = serializeCustomerOrder(resultOrder);
 
     res.status(201).json({
       success: true,
       message: "Order placed successfully!",
-      order: orderObj,
+      order: serializedOrder,
     });
   } catch (error) {
     console.error("Order placement failure:", error);
@@ -204,9 +211,11 @@ export const getCustomerOrders = async (req, res) => {
       .populate("vendorId", "shopName phone")
       .sort({ createdAt: -1 });
 
+    const serializedOrders = orders.map(order => serializeCustomerOrder(order));
+
     res.status(200).json({
       success: true,
-      orders,
+      orders: serializedOrders,
     });
   } catch (error) {
     console.error("Fetch orders failure:", error);
@@ -228,9 +237,11 @@ export const getOrderById = async (req, res) => {
       return res.status(404).json({ success: false, message: "Order not found." });
     }
 
+    const serializedOrder = serializeCustomerOrder(order);
+
     res.status(200).json({
       success: true,
-      order,
+      order: serializedOrder,
     });
   } catch (error) {
     console.error("Fetch order details failure:", error);

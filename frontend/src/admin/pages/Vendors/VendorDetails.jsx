@@ -95,9 +95,12 @@ export default function VendorDetails() {
         return;
       }
       
-      await axios.put(`${import.meta.env.VITE_API_URL}/admin/vendors/${id}`, {
+      const token = localStorage.getItem("adminToken");
+      await axios.put(`${import.meta.env.VITE_API_URL}/admin/finance/vendors/${id}`, {
         commissionType,
         commissionValue: commVal
+      }, {
+        headers: { Authorization: `Bearer ${token}` }
       });
 
       showToast({ type: "success", message: "Commission settings saved successfully." });
