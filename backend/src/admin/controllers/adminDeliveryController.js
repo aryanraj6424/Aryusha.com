@@ -2,6 +2,10 @@ import mongoose from "mongoose";
 import CustomerOrder from "../../customer/models/CustomerOrder.js";
 import DeliveryBoy from "../../deliveryBoy/models/DeliveryBoy.js";
 import DeliveryBoyEarnings from "../../deliveryBoy/models/DeliveryBoyEarnings.js";
+import PayoutSettings from "../../deliveryBoy/models/PayoutSettings.js";
+import RiderNotification from "../../deliveryBoy/models/RiderNotification.js";
+import Vendor from "../../vendor/models/Vendor.js";
+import { emitToRoom } from "../../socket/socketManager.js";
 
 // Helper: Convert array of objects to CSV string
 const convertToCSV = (data, fields) => {
@@ -551,6 +555,380 @@ export const updateDeliveryBoyStatus = async (req, res) => {
     });
   } catch (error) {
     console.error("Update Rider Status Error:", error);
+    res.status(500).json({ success: false, message: "Server Error" });
+  }
+};
+
+// GET /admin/delivery-boys/onboarding (onboarding grid request lists)
+export const getOnboardingRequests = async (req, res) => {
+  try {
+    const { status, search, page = 1, limit = 10 } = req.query;
+    const query = { onboardingStatus: { $ne: "active" } };
+
+    if (status) {
+      query.onboardingStatus = status;
+    }
+
+    if (search) {
+      query.$or = [
+        { fullName: { $regex: search, $options: "i" } },
+        { phone: { $regex: search, $options: "i" } }
+      ];
+    }
+
+    const skipCount = (Number(page) - 1) * Number(limit);
+    const riders = await DeliveryBoy.find(query)
+      .sort({ createdAt: -1 })
+      .skip(skipCount)
+      .limit(Number(limit));
+
+    const totalCount = await DeliveryBoy.countDocuments(query);
+
+    res.status(200).json({
+      success: true,
+      riders,
+      pagination: {
+        page: Number(page),
+        limit: Number(limit),
+        totalCount,
+        totalPages: Math.ceil(totalCount / Number(limit))
+      }
+    });
+  } catch (error) {
+    console.error("Get Onboarding Requests Error:", error);
+    res.status(500).json({ success: false, message: "Server Error" });
+  }
+};
+
+// GET /admin/delivery-boys/:id/onboarding (detailed checklist status)
+export const getOnboardingDetail = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const rider = await DeliveryBoy.findById(id)
+      .populate("assignedStoreId", "shopName address phone");
+
+    if (!rider) {
+      return res.status(404).json({ success: false, message: "Rider not found" });
+    }
+
+    res.status(200).json({ success: true, rider });
+  } catch (error) {
+    console.error("Get Onboarding Detail Error:", error);
+    res.status(500).json({ success: false, message: "Server Error" });
+  }
+};
+
+// PUT /admin/delivery-boys/:id/verify-document (approve/reject single doc)
+export const verifyRiderDocument = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { docType, verificationStatus, rejectionReason } = req.body;
+
+    if (!docType || !["verified", "rejected"].includes(verificationStatus)) {
+      return res.status(400).json({ success: false, message: "Invalid verification status or document type" });
+    }
+
+    const rider = await DeliveryBoy.findById(id);
+    if (!rider) {
+      return res.status(404).json({ success: false, message: "Rider not found" });
+    }
+
+    const docIndex = rider.documents.findIndex(d => d.docType === docType);
+    if (docIndex === -1) {
+      return res.status(404).json({ success: false, message: "Document not found on rider profile" });
+    }
+
+    rider.documents[docIndex].verificationStatus = verificationStatus;
+    rider.documents[docIndex].verifiedBy = req.user?._id || null;
+    rider.documents[docIndex].verifiedAt = new Date();
+    if (verificationStatus === "rejected") {
+      rider.documents[docIndex].rejectionReason = rejectionReason || "Document content not clear";
+    } else {
+      rider.documents[docIndex].rejectionReason = "";
+    }
+
+    // KYC transition verification check logic
+    const mandatoryDocsMap = {
+      bicycle: ["aadhaar", "pan", "photo", "selfie"],
+      own_bike: ["aadhaar", "pan", "driving_license", "vehicle_rc", "insurance", "photo", "selfie"],
+      scooter: ["aadhaar", "pan", "driving_license", "vehicle_rc", "insurance", "photo", "selfie"],
+      e_rickshaw: ["aadhaar", "pan", "driving_license", "vehicle_rc", "insurance", "photo", "selfie"],
+      electric_vehicle: ["aadhaar", "pan", "driving_license", "vehicle_rc", "insurance", "photo", "selfie"]
+    };
+
+    const typeKey = rider.vehicleTypeSelection || "own_bike";
+    const requiredList = mandatoryDocsMap[typeKey] || mandatoryDocsMap["own_bike"];
+
+    const allVerified = requiredList.every(type => 
+      rider.documents.some(d => d.docType === type && d.verificationStatus === "verified")
+    );
+
+    const oldStatus = rider.onboardingStatus;
+    if (allVerified && rider.onboardingStatus === "kyc_pending") {
+      rider.onboardingStatus = "kyc_verified";
+    } else if (!allVerified && rider.onboardingStatus === "kyc_verified") {
+      rider.onboardingStatus = "kyc_pending";
+    }
+
+    // Auto seed training checklist if status advances to training_pending
+    if (rider.onboardingStatus === "kyc_verified") {
+      rider.onboardingStatus = "training_pending";
+      const requiredModules = [
+        "Using the delivery app",
+        "Order pickup process",
+        "Customer interaction",
+        "COD handling",
+        "Safety guidelines",
+        "Delivery timing expectations"
+      ];
+      rider.trainingChecklist = requiredModules.map(moduleName => ({
+        moduleName,
+        type: moduleName === "Customer interaction" ? "in_person" : "video",
+        completed: false
+      }));
+    }
+
+    await rider.save();
+
+    // Emit Socket notification to rider
+    emitToRoom(`deliveryBoy:${rider._id}`, "documentStatusChanged", {
+      docType,
+      verificationStatus,
+      rejectionReason: rider.documents[docIndex].rejectionReason,
+      onboardingStatus: rider.onboardingStatus
+    });
+
+    if (rider.onboardingStatus !== oldStatus) {
+      emitToRoom(`deliveryBoy:${rider._id}`, "onboardingStatusChanged", { onboardingStatus: rider.onboardingStatus });
+    }
+
+    // Persistent notifications
+    await RiderNotification.create({
+      deliveryBoyId: rider._id,
+      title: verificationStatus === "verified" ? "Document Approved! ✅" : "Document Rejected! ❌",
+      message: verificationStatus === "verified"
+        ? `Your ${docType.replace(/_/g, " ").toUpperCase()} document has been verified successfully.`
+        : `Your ${docType.replace(/_/g, " ").toUpperCase()} document was rejected. Reason: ${rejectionReason || "Please re-upload a clear file."}`,
+      type: "onboarding"
+    });
+
+    res.status(200).json({ success: true, message: "Document status updated", rider });
+  } catch (error) {
+    console.error("Verify Rider Document Error:", error);
+    res.status(500).json({ success: false, message: "Server Error" });
+  }
+};
+
+// PUT /admin/delivery-boys/:id/training (mark in-person/checklist completion)
+export const verifyRiderTraining = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { moduleName, completed } = req.body;
+
+    const rider = await DeliveryBoy.findById(id);
+    if (!rider) {
+      return res.status(404).json({ success: false, message: "Rider not found" });
+    }
+
+    const idx = rider.trainingChecklist.findIndex(t => t.moduleName === moduleName);
+    if (idx > -1) {
+      rider.trainingChecklist[idx].completed = !!completed;
+      rider.trainingChecklist[idx].completedAt = completed ? new Date() : null;
+    } else {
+      rider.trainingChecklist.push({
+        moduleName,
+        type: "in_person",
+        completed: !!completed,
+        completedAt: completed ? new Date() : null
+      });
+    }
+
+    const requiredModules = [
+      "Using the delivery app",
+      "Order pickup process",
+      "Customer interaction",
+      "COD handling",
+      "Safety guidelines",
+      "Delivery timing expectations"
+    ];
+    const completedAll = requiredModules.every(mod => 
+      rider.trainingChecklist.some(t => t.moduleName === mod && t.completed)
+    );
+
+    const oldStatus = rider.onboardingStatus;
+    if (completedAll && rider.onboardingStatus === "training_pending") {
+      rider.onboardingStatus = "training_completed";
+    } else if (!completedAll && rider.onboardingStatus === "training_completed") {
+      rider.onboardingStatus = "training_pending";
+    }
+
+    await rider.save();
+
+    if (rider.onboardingStatus !== oldStatus) {
+      emitToRoom(`deliveryBoy:${rider._id}`, "onboardingStatusChanged", { onboardingStatus: rider.onboardingStatus });
+    }
+
+    res.status(200).json({ success: true, message: "Training checklist status updated", rider });
+  } catch (error) {
+    console.error("Verify Rider Training Error:", error);
+    res.status(500).json({ success: false, message: "Server Error" });
+  }
+};
+
+// GET /admin/delivery-boys/:id/store-recommendations (haversine dark stores recommendation list)
+export const getStoreRecommendations = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const rider = await DeliveryBoy.findById(id);
+    if (!rider) {
+      return res.status(404).json({ success: false, message: "Rider not found" });
+    }
+
+    const stores = await Vendor.find({ status: "approved" }).select("shopName address latitude longitude phone");
+    const riderLat = rider.preferredWorkingLocation?.latitude || rider.latitude || 28.6139;
+    const riderLng = rider.preferredWorkingLocation?.longitude || rider.longitude || 77.2090;
+
+    const computeDistance = (lat1, lon1, lat2, lon2) => {
+      const R = 6371; // km
+      const dLat = (lat2 - lat1) * Math.PI / 180;
+      const dLon = (lon2 - lon1) * Math.PI / 180;
+      const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                Math.sin(dLon/2) * Math.sin(dLon/2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+      return R * c;
+    };
+
+    const recommendations = await Promise.all(
+      stores.map(async (store) => {
+        const dist = computeDistance(riderLat, riderLng, store.latitude, store.longitude);
+        const orderCount = await CustomerOrder.countDocuments({
+          vendorId: store._id,
+          createdAt: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) }
+        });
+        return {
+          ...store.toObject(),
+          distanceKm: parseFloat(dist.toFixed(2)),
+          demandIndex: orderCount > 10 ? "High" : orderCount > 3 ? "Medium" : "Low",
+          recentOrders: orderCount
+        };
+      })
+    );
+
+    recommendations.sort((a, b) => a.distanceKm - b.distanceKm);
+    res.status(200).json({ success: true, recommendations });
+  } catch (error) {
+    console.error("Get Store Recommendations Error:", error);
+    res.status(500).json({ success: false, message: "Server Error" });
+  }
+};
+
+// PUT /admin/delivery-boys/:id/assign-store (admin link store)
+export const assignRiderStore = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { storeId } = req.body;
+
+    const rider = await DeliveryBoy.findById(id);
+    if (!rider) {
+      return res.status(404).json({ success: false, message: "Rider not found" });
+    }
+
+    const store = await Vendor.findById(storeId);
+    if (!store) {
+      return res.status(404).json({ success: false, message: "Store not found" });
+    }
+
+    rider.assignedStoreId = storeId;
+    if (rider.onboardingStatus === "training_completed" || rider.onboardingStatus === "training_pending") {
+      rider.onboardingStatus = "agreement_pending";
+    }
+
+    await rider.save();
+
+    // Trigger Notification
+    emitToRoom(`deliveryBoy:${rider._id}`, "onboardingStatusChanged", { onboardingStatus: "agreement_pending" });
+    
+    await RiderNotification.create({
+      deliveryBoyId: rider._id,
+      title: "Store Assigned! 🏪",
+      message: `You have been assigned to dark store: ${store.shopName}. Please sign your agreement.`,
+      type: "assignment"
+    });
+
+    res.status(200).json({ success: true, message: "Store assigned successfully. Pending agreement e-sign.", rider });
+  } catch (error) {
+    console.error("Assign Rider Store Error:", error);
+    res.status(500).json({ success: false, message: "Server Error" });
+  }
+};
+
+// GET /admin/payout-settings (retrieve defaults)
+export const getPayoutSettings = async (req, res) => {
+  try {
+    let settings = await PayoutSettings.findOne();
+    if (!settings) {
+      settings = await PayoutSettings.create({
+        payoutType: "per_order",
+        payoutAmount: 35,
+        incentiveAmount: 5,
+        commissionAmount: 2,
+        onTimeThresholdMinutes: 45
+      });
+    }
+    res.status(200).json({ success: true, settings });
+  } catch (error) {
+    console.error("Get Payout Settings Error:", error);
+    res.status(500).json({ success: false, message: "Server Error" });
+  }
+};
+
+// PUT /admin/payout-settings (update defaults)
+export const updatePayoutSettings = async (req, res) => {
+  try {
+    const { payoutType, payoutAmount, incentiveAmount, commissionAmount, onTimeThresholdMinutes } = req.body;
+    let settings = await PayoutSettings.findOne();
+    if (!settings) {
+      settings = new PayoutSettings();
+    }
+
+    if (payoutType) settings.payoutType = payoutType;
+    if (payoutAmount !== undefined) settings.payoutAmount = payoutAmount;
+    if (incentiveAmount !== undefined) settings.incentiveAmount = incentiveAmount;
+    if (commissionAmount !== undefined) settings.commissionAmount = commissionAmount;
+    if (onTimeThresholdMinutes !== undefined) settings.onTimeThresholdMinutes = onTimeThresholdMinutes;
+
+    await settings.save();
+    res.status(200).json({ success: true, message: "Payout settings updated successfully", settings });
+  } catch (error) {
+    console.error("Update Payout Settings Error:", error);
+    res.status(500).json({ success: false, message: "Server Error" });
+  }
+};
+
+// PUT /admin/delivery-boys/:id/payout-override (rider custom override payout settings)
+export const updateRiderPayoutOverride = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { payoutType, payoutAmount, incentiveAmount, commissionAmount, onTimeThresholdMinutes } = req.body;
+
+    const rider = await DeliveryBoy.findById(id);
+    if (!rider) {
+      return res.status(404).json({ success: false, message: "Rider not found" });
+    }
+
+    rider.payoutOverride = {
+      payoutType: payoutType || "none",
+      payoutAmount: payoutAmount || 0,
+      incentiveAmount: incentiveAmount || 0,
+      commissionAmount: commissionAmount || 0,
+      onTimeThresholdMinutes: onTimeThresholdMinutes || 45
+    };
+
+    await rider.save();
+    res.status(200).json({ success: true, message: "Rider custom payout settings override updated", rider });
+  } catch (error) {
+    console.error("Update Rider Payout Override Error:", error);
     res.status(500).json({ success: false, message: "Server Error" });
   }
 };

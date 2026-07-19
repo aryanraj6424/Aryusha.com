@@ -33,9 +33,39 @@ export default function ProductDetailsPage() {
   const [qty, setQty] = useState(1);
   const [descExpanded, setDescExpanded] = useState(false);
   const [isWishlisted, setIsWishlisted] = useState(false);
+  const [similarProducts, setSimilarProducts] = useState([]);
+  const [similarLoading, setSimilarLoading] = useState(true);
 
-  const [reviews, setReviews] = useState([]);
-  const [reviewsLoading, setReviewsLoading] = useState(true);
+  const fetchSimilarProducts = async () => {
+    if (!product?.categoryId?._id) return;
+    try {
+      setSimilarLoading(true);
+      const params = { category: product.categoryId._id };
+      const stored = localStorage.getItem("selectedAddress");
+      if (stored) {
+        const address = JSON.parse(stored);
+        if (address.pincode) params.pincode = address.pincode;
+        if (address.latitude) params.latitude = address.latitude;
+        if (address.longitude) params.longitude = address.longitude;
+      }
+      const res = await axios.get(`${import.meta.env.VITE_API_URL}/products`, { params });
+      if (res.data.success || res.data.products) {
+        const filtered = (res.data.products || []).filter(p => p._id !== product._id);
+        setSimilarProducts(filtered);
+      }
+    } catch (err) {
+      console.error("Failed to fetch similar products:", err);
+    } finally {
+      setSimilarLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (product?.categoryId?._id) {
+      fetchSimilarProducts();
+    }
+  }, [product]);
+
   const [reviewRating, setReviewRating] = useState(5);
   const [reviewText, setReviewText] = useState("");
   const [eligibility, setEligibility] = useState({ eligible: false, hasReviewed: false, existingReview: null });
@@ -45,15 +75,6 @@ export default function ProductDetailsPage() {
   const fetchReviewsAndEligibility = async () => {
     if (!id || !targetVendorId) return;
     try {
-      setReviewsLoading(true);
-      const res = await axios.get(`${import.meta.env.VITE_API_URL}/products/${id}/reviews`, {
-        params: { vendorId: targetVendorId }
-      });
-      if (res.data.success) {
-        setReviews(res.data.reviews || []);
-      }
-
-      // Check eligibility if logged in
       const token = localStorage.getItem("userToken");
       if (token) {
         const eligRes = await axios.get(`${import.meta.env.VITE_API_URL}/products/${id}/review-eligibility`, {
@@ -64,7 +85,7 @@ export default function ProductDetailsPage() {
           setEligibility(eligRes.data);
           if (eligRes.data.hasReviewed && eligRes.data.existingReview) {
             setReviewRating(eligRes.data.existingReview.rating);
-            setReviewText(eligRes.data.existingReview.reviewText || "");
+            setReviewText("");
           } else {
             setReviewRating(5);
             setReviewText("");
@@ -75,8 +96,6 @@ export default function ProductDetailsPage() {
       }
     } catch (err) {
       console.error("Failed to fetch product reviews/eligibility:", err);
-    } finally {
-      setReviewsLoading(false);
     }
   };
 
@@ -96,7 +115,7 @@ export default function ProductDetailsPage() {
     try {
       const res = await axios.post(
         `${import.meta.env.VITE_API_URL}/products/${id}/reviews`,
-        { rating: reviewRating, reviewText, vendorId: targetVendorId },
+        { rating: reviewRating, reviewText: "", vendorId: targetVendorId },
         { headers: { Authorization: `Bearer ${token}` } }
       );
 
@@ -123,126 +142,76 @@ export default function ProductDetailsPage() {
     }
   }, [id, targetVendorId]);
 
-  const renderReviews = () => {
+  const renderRatingForm = () => {
     const isLoggedIn = !!localStorage.getItem("userToken");
+    if (!eligibility.eligible || eligibility.hasReviewed) return null;
 
     return (
-      <div className="border-t border-slate-100 pt-6 mt-6 space-y-6">
-        <div className="flex items-center justify-between">
-          <h3 className="text-base font-extrabold text-slate-800 tracking-tight">Customer Reviews</h3>
-          {product.totalReviews > 0 && (
-            <div className="flex items-center gap-1 bg-amber-50 border border-amber-100 px-2.5 py-1 rounded-xl text-xs font-black text-amber-700">
-              <span>★</span>
-              <span>{product.averageRating.toFixed(1)} out of 5</span>
-              <span className="text-slate-400 font-medium ml-1">({product.totalReviews})</span>
-            </div>
-          )}
-        </div>
-
-        {/* Write / Edit a review form (Only shown if eligible verified purchaser) */}
-        {eligibility.eligible && (
-          <div className="bg-slate-50 border border-slate-100 rounded-3xl p-5 space-y-4">
-            <h4 className="font-extrabold text-slate-700 text-xs uppercase tracking-wider">
-              {eligibility.hasReviewed ? "Update Your Review" : "Write a Review"}
-            </h4>
-            {isLoggedIn ? (
-              <form onSubmit={handleAddReview} className="space-y-4">
-                <div className="space-y-1">
-                  <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Your Rating</span>
-                  <div className="flex items-center gap-1.5">
-                    {[1, 2, 3, 4, 5].map((star) => (
-                      <button
-                        key={star}
-                        type="button"
-                        onClick={() => setReviewRating(star)}
-                        className="transition hover:scale-110 focus:outline-none cursor-pointer"
-                      >
-                        <span className={`text-2xl ${star <= reviewRating ? "text-amber-500" : "text-slate-200"}`}>★</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="space-y-1">
-                  <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Review Comments</span>
-                  <textarea
-                    value={reviewText}
-                    onChange={(e) => setReviewText(e.target.value)}
-                    placeholder="Share your experience with this product..."
-                    className="w-full border border-slate-200 p-3 rounded-2xl text-xs font-semibold outline-none focus:border-purple-650 bg-white"
-                    rows="3"
-                    required
-                  />
-                </div>
-
-                <button
-                  type="submit"
-                  className="bg-[#6B21D9] hover:bg-[#5B18C2] text-white font-extrabold text-xs px-5 py-2.5 rounded-xl transition cursor-pointer shadow-sm active:scale-[0.98]"
-                >
-                  {eligibility.hasReviewed ? "Update Review" : "Submit Review"}
-                </button>
-              </form>
-            ) : (
-              <div className="text-center py-2">
-                <p className="text-xs text-slate-500 font-bold mb-2">You must be logged in to leave a product review.</p>
-                <Link
-                  to="/customer/login"
-                  className="inline-block bg-[#6B21D9] hover:bg-[#5B18C2] text-white font-extrabold text-xs px-4 py-2 rounded-xl transition cursor-pointer"
-                >
-                  Log In
-                </Link>
+      <div className="bg-slate-50 border border-slate-100 rounded-3xl p-5 space-y-4">
+        <h4 className="font-extrabold text-slate-700 text-xs uppercase tracking-wider">
+          Rate this Product
+        </h4>
+        {isLoggedIn ? (
+          <form onSubmit={handleAddReview} className="space-y-4">
+            <div className="space-y-1">
+              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Your Rating</span>
+              <div className="flex items-center gap-1.5">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <button
+                    key={star}
+                    type="button"
+                    onClick={() => setReviewRating(star)}
+                    className="transition hover:scale-110 focus:outline-none cursor-pointer"
+                  >
+                    <span className={`text-2xl ${star <= reviewRating ? "text-amber-500" : "text-slate-200"}`}>★</span>
+                  </button>
+                ))}
               </div>
-            )}
+            </div>
+
+            <button
+              type="submit"
+              className="bg-[#6B21D9] hover:bg-[#5B18C2] text-white font-extrabold text-xs px-5 py-2.5 rounded-xl transition cursor-pointer shadow-sm active:scale-[0.98]"
+            >
+              Submit Rating
+            </button>
+          </form>
+        ) : (
+          <div className="text-center py-2">
+            <p className="text-xs text-slate-500 font-bold mb-2">You must be logged in to rate this product.</p>
+            <Link
+              to="/customer/login"
+              className="inline-block bg-[#6B21D9] hover:bg-[#5B18C2] text-white font-extrabold text-xs px-4 py-2 rounded-xl transition cursor-pointer"
+            >
+              Log In
+            </Link>
           </div>
         )}
+      </div>
+    );
+  };
 
-        {/* Reviews list */}
-        <div className="space-y-4">
-          {reviewsLoading ? (
-            <div className="text-center py-4 text-xs font-bold text-slate-400 animate-pulse">
-              Loading customer reviews...
-            </div>
-          ) : reviews.length > 0 ? (
-            <div className="divide-y divide-slate-100">
-              {reviews.map((r) => (
-                <div key={r._id} className="py-4 space-y-2 first:pt-0">
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-purple-100 flex items-center justify-center text-xs font-black text-purple-700 uppercase">
-                        {r.customerName?.charAt(0) || "C"}
-                      </div>
-                      <div className="space-y-0.5">
-                        <div className="flex items-center gap-2">
-                          <h5 className="font-extrabold text-slate-800 text-xs">{r.customerName || "Customer"}</h5>
-                          {r.isVerifiedPurchase && (
-                            <span className="text-[8px] font-black text-emerald-605 bg-emerald-50 px-1 py-0.2 rounded border border-emerald-100">
-                              ✓ Verified Purchase
-                            </span>
-                          )}
-                        </div>
-                        <span className="text-[10px] text-slate-400 font-bold block">
-                          {new Date(r.createdAt).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-0.5 bg-amber-50 px-2 py-0.5 rounded-lg text-xs font-black text-amber-705">
-                      <span>★</span>
-                      <span>{r.rating}</span>
-                    </div>
-                  </div>
-                  {r.reviewText && (
-                    <p className="text-xs text-slate-600 font-semibold leading-relaxed pl-11">
-                      "{r.reviewText}"
-                    </p>
-                  )}
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="text-center py-6 border border-dashed border-slate-200 rounded-3xl">
-              <p className="text-xs text-slate-400 font-bold">No customer reviews yet. Be the first to share your thoughts!</p>
-            </div>
-          )}
+  const renderSimilarProducts = () => {
+    if (similarLoading) {
+      return (
+        <div className="border-t border-slate-100 pt-6 mt-6 space-y-4">
+          <h3 className="text-base sm:text-lg font-extrabold text-slate-800 tracking-tight">Similar Products</h3>
+          <div className="text-center py-6 text-xs font-bold text-slate-400 animate-pulse">
+            Loading similar products...
+          </div>
+        </div>
+      );
+    }
+
+    if (similarProducts.length === 0) return null;
+
+    return (
+      <div className="border-t border-slate-100 pt-6 mt-6 space-y-4">
+        <h3 className="text-base sm:text-lg font-extrabold text-slate-800 tracking-tight">Similar Products</h3>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {similarProducts.slice(0, 4).map((p) => (
+            <ProductCard key={p._id} product={p} />
+          ))}
         </div>
       </div>
     );
@@ -477,7 +446,7 @@ export default function ProductDetailsPage() {
   return (
     <>
       {/* MOBILE ONLY VIEW (Scoped to < 768px viewports) */}
-      <div className="block md:hidden max-w-md mx-auto px-4 pb-24 pt-3 bg-white space-y-4 select-none">
+      <div className="block md:hidden w-full px-4 pb-24 pt-3 bg-white space-y-4 select-none">
         {/* Breadcrumb Navigation */}
         <nav className="flex items-center gap-1 text-[10px] text-slate-400 font-semibold flex-wrap">
           <Link to="/customer/dashboard" className="hover:text-purple-650 transition">Home</Link>
@@ -663,6 +632,36 @@ export default function ProductDetailsPage() {
             Change
           </button>
         </div>
+        {/* Scoped CSS Styles for mobile product description rendering */}
+        <style>{`
+          .mobile-product-description p {
+            margin-bottom: 0.5rem;
+            line-height: 1.6;
+            color: #4b5563;
+          }
+          .mobile-product-description strong {
+            display: block;
+            font-weight: 800;
+            color: #1f2937;
+            margin-top: 1rem;
+            margin-bottom: 0.25rem;
+            font-size: 0.8rem;
+            border-bottom: 1px solid #f3f4f6;
+            padding-bottom: 0.15rem;
+          }
+          .mobile-product-description strong:first-of-type {
+            margin-top: 0.15rem;
+          }
+          .mobile-product-description ul, .mobile-product-description ol {
+            margin-bottom: 0.5rem;
+            padding-left: 1rem;
+            list-style-type: disc;
+          }
+          .mobile-product-description li {
+            margin-bottom: 0.2rem;
+            color: #4b5563;
+          }
+        `}</style>
 
         {/* Product specs / Details toggle strip */}
         <div className="bg-white border border-slate-100 p-4 rounded-2xl shadow-sm space-y-3">
@@ -678,11 +677,57 @@ export default function ProductDetailsPage() {
             </span>
           </button>
           
-          <div className={`overflow-hidden transition-all duration-300 text-slate-600 text-xs leading-relaxed font-medium break-words ${
+          <div className={`overflow-hidden transition-all duration-300 text-slate-655 text-xs leading-relaxed font-medium break-words ${
             descExpanded ? "max-h-[1000px] opacity-100 mt-2" : "max-h-0 opacity-0"
           }`}>
-            <div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(product.description || "No description provided for this product.") }} />
+            <div className="mobile-product-description" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(product.description || "No description provided for this product.") }} />
             {family?.shortDescription && <p className="text-slate-500 italic mt-2 font-semibold">Note: {family.shortDescription}</p>}
+          </div>
+        </div>
+
+        {/* Specifications card section on mobile */}
+        <div className="bg-white border border-slate-100 p-4 rounded-2xl shadow-sm space-y-3">
+          <h3 className="font-extrabold text-slate-800 text-xs flex items-center gap-1.5 border-b pb-2">
+            Specifications
+          </h3>
+          
+          <div className="divide-y divide-slate-100 text-[11px] font-semibold">
+            <div className="py-2.5 flex justify-between">
+              <span className="text-slate-400">Returnable</span>
+              <span className={`font-extrabold text-right ${product.isReturnable ? "text-emerald-650" : "text-slate-550"}`}>
+                {product.isReturnable ? "Yes" : "No"}
+              </span>
+            </div>
+            {family?.shelfLife && (
+              <div className="py-2.5 flex justify-between">
+                <span className="text-slate-400">Shelf Life</span>
+                <span className="text-slate-700 font-extrabold text-right">{family.shelfLife}</span>
+              </div>
+            )}
+            {family?.storageInstructions && (
+              <div className="py-2.5 flex justify-between">
+                <span className="text-slate-400">Storage</span>
+                <span className="text-slate-700 font-extrabold text-right">{family.storageInstructions}</span>
+              </div>
+            )}
+            {family?.countryOfOrigin && (
+              <div className="py-2.5 flex justify-between">
+                <span className="text-slate-400">Origin</span>
+                <span className="text-slate-700 font-extrabold text-right">{family.countryOfOrigin}</span>
+              </div>
+            )}
+            {family?.fssaiLicenseNumber && (
+              <div className="py-2.5 flex justify-between">
+                <span className="text-slate-400">FSSAI License</span>
+                <span className="text-slate-700 font-extrabold text-right">{family.fssaiLicenseNumber}</span>
+              </div>
+            )}
+            {product.attributes && product.attributes.map((attr, idx) => (
+              <div key={idx} className="py-2.5 flex justify-between">
+                <span className="text-slate-400">{attr.key}</span>
+                <span className="text-slate-700 font-extrabold text-right">{attr.value}</span>
+              </div>
+            ))}
           </div>
         </div>
 
@@ -702,10 +747,11 @@ export default function ProductDetailsPage() {
           </div>
         </div>
 
-        {renderReviews()}
+        {renderRatingForm()}
+        {renderSimilarProducts()}
 
         {/* Bottom Fixed Action purchase bar */}
-        <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-100 p-3.5 flex justify-between items-center z-40 shadow-lg">
+        <div className="fixed bottom-16 left-0 right-0 bg-white border-t border-slate-100 p-3.5 flex justify-between items-center z-40 shadow-lg">
           <div className="flex flex-col">
             <div className="flex items-baseline gap-1.5">
               <span className="text-xl font-black text-slate-800">₹{displayPrice}</span>
@@ -757,7 +803,7 @@ export default function ProductDetailsPage() {
       </div>
 
       {/* DESKTOP ONLY VIEW (completely untouched) */}
-      <div className="hidden md:block max-w-6xl mx-auto py-6 px-4 space-y-8">
+      <div className="hidden md:block max-w-[1400px] mx-auto py-6 px-4 space-y-8">
         {/* Breadcrumb Navigation */}
         <nav className="flex items-center gap-1.5 text-xs text-slate-400 font-semibold flex-wrap">
           <Link to="/customer/dashboard" className="hover:text-purple-600 transition">Home</Link>
@@ -1087,8 +1133,215 @@ export default function ProductDetailsPage() {
           </div>
         </div>
 
-        {renderReviews()}
+        {renderRatingForm()}
+        {renderSimilarProducts()}
       </div>
     </>
+  );
+}
+
+function ProductCard({ product }) {
+  const navigate = useNavigate();
+  const [isWishlisted, setIsWishlisted] = useState(false);
+  
+  const {
+    selectedVariant,
+    handleVariantChange,
+    selectedImage,
+    handleAddToCart,
+    handleDecrementCart,
+    cartQty,
+    displayPrice,
+    displayMrp,
+    displayDiscount,
+    isOutOfStock,
+    isLowStock,
+    packSizeLabel,
+    cleanName
+  } = useProductVariant(product);
+
+  const fetchWishlist = async () => {
+    try {
+      const token = localStorage.getItem("userToken");
+      if (!token) return;
+      const res = await axios.get(`${import.meta.env.VITE_API_URL}/customer/wishlist`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.data.success) {
+        const inWishlist = (res.data.wishlist || []).some(item => item._id === product._id);
+        setIsWishlisted(inWishlist);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  useEffect(() => {
+    fetchWishlist();
+    window.addEventListener("wishlist-updated", fetchWishlist);
+    return () => {
+      window.removeEventListener("wishlist-updated", fetchWishlist);
+    };
+  }, [product._id]);
+
+  const toggleWishlist = async (e) => {
+    e.stopPropagation();
+    const token = localStorage.getItem("userToken");
+    if (!token) return;
+    try {
+      if (isWishlisted) {
+        await axios.delete(`${import.meta.env.VITE_API_URL}/customer/wishlist/${product._id}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        setIsWishlisted(false);
+      } else {
+        await axios.post(`${import.meta.env.VITE_API_URL}/customer/wishlist/${product._id}`, {}, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        setIsWishlisted(true);
+      }
+      window.dispatchEvent(new Event("wishlist-updated"));
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  return (
+    <div className="bg-white rounded-2xl border border-slate-100 p-2.5 sm:p-4 shadow-sm hover:shadow-md transition flex flex-col justify-between relative overflow-hidden">
+      {/* Discount Badge */}
+      {displayDiscount > 0 && (
+        <span className="absolute top-0 left-0 bg-[#FF3F3F] text-white text-[9px] font-black px-2 py-0.5 rounded-br-lg rounded-tl-2xl z-10">
+          {displayDiscount}% OFF
+        </span>
+      )}
+
+      {/* Wishlist Heart */}
+      <button
+        onClick={toggleWishlist}
+        className="absolute top-2 right-2 bg-white rounded-full w-6 h-6 flex items-center justify-center shadow z-10 border border-slate-50 cursor-pointer"
+        title="Add to wishlist"
+      >
+        <Heart size={12} className={isWishlisted ? "text-red-500 fill-red-500" : "text-slate-400"} />
+      </button>
+
+      <div>
+        {/* Product Image */}
+        <div 
+          onClick={() => navigate(`/customer/product/${product._id}`)}
+          className="h-28 sm:h-36 md:h-40 w-full rounded-xl bg-slate-50 flex items-center justify-center overflow-hidden mb-2 cursor-pointer hover:opacity-90 transition p-1"
+        >
+          <img
+            src={selectedImage || "https://via.placeholder.com/150"}
+            alt={cleanName || product.name}
+            className="h-full w-auto max-w-full object-contain"
+          />
+        </div>
+
+        {/* Product Info */}
+        <div className="flex items-center justify-between gap-1 mb-0.5">
+          <span className="text-[9px] uppercase tracking-wider text-[#B45309] font-black block">
+            {product.brand || "Generic"}
+          </span>
+          {product.totalReviews > 0 && (
+            <div className="flex items-center gap-0.5 text-[9px] font-black text-amber-650 bg-amber-50/70 px-1 py-0.2 rounded">
+              <span>★</span>
+              <span>{product.averageRating.toFixed(1)}</span>
+            </div>
+          )}
+        </div>
+        <h3 
+          onClick={() => navigate(`/customer/product/${product._id}`)}
+          className="font-bold text-slate-800 text-xs sm:text-sm line-clamp-2 min-h-[32px] sm:min-h-[40px] cursor-pointer hover:text-purple-650 transition leading-tight mb-1"
+        >
+          {cleanName || product.name}
+        </h3>
+        <p className="text-[10px] sm:text-xs text-slate-500 font-bold mb-1">
+          Pack: {packSizeLabel}
+        </p>
+
+        {/* Stock Status */}
+        <div className="mb-2">
+          {isOutOfStock ? (
+            <span className="text-[9px] font-black text-red-500 bg-red-50 px-1.5 py-0.5 rounded">
+              Out of Stock
+            </span>
+          ) : isLowStock ? (
+            <span className="text-[9px] font-black text-amber-500 bg-amber-50 px-1.5 py-0.5 rounded">
+              Low Stock
+            </span>
+          ) : (
+            <span className="text-[9px] font-black text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">
+              In Stock
+            </span>
+          )}
+        </div>
+      </div>
+
+      <div>
+        {/* Price details */}
+        <div className="flex items-baseline gap-1.5 mb-2">
+          <span className="text-[#6B21D9] font-black text-sm sm:text-base">
+            ₹{displayPrice}
+          </span>
+          {displayMrp > displayPrice && (
+            <span className="text-slate-400 text-[10px] sm:text-xs line-through">
+              ₹{displayMrp}
+            </span>
+          )}
+        </div>
+
+        {/* Variant Selector Pills */}
+        {product.variants && product.variants.length > 1 && (
+          <div className="flex gap-1 mb-2 overflow-x-auto pb-1 scrollbar-hide">
+            {product.variants.map((v) => (
+              <button
+                key={v._id}
+                onClick={() => handleVariantChange(v)}
+                className={`flex-shrink-0 px-2 py-0.5 text-[9px] font-black rounded-md border transition ${
+                  selectedVariant?._id === v._id
+                    ? "border-purple-600 bg-purple-50 text-[#6B21D9]"
+                    : "border-slate-200 text-slate-500 hover:border-slate-300 hover:bg-slate-50"
+                }`}
+              >
+                {v.variantLabel}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Action Button */}
+        {isOutOfStock ? (
+          <button
+            disabled
+            className="w-full py-1.5 rounded-lg font-black bg-slate-100 text-slate-400 cursor-not-allowed flex items-center justify-center text-[10px] h-[34px]"
+          >
+            Out of Stock
+          </button>
+        ) : cartQty > 0 ? (
+          <div className="flex items-center justify-between bg-purple-50 border border-purple-200 rounded-lg overflow-hidden shadow-sm h-[34px] w-full">
+            <button
+              onClick={() => handleDecrementCart()}
+              className="h-full w-8 flex-shrink-0 hover:bg-purple-100 text-[#6B21D9] font-black transition flex items-center justify-center cursor-pointer"
+            >
+              <Minus size={12} />
+            </button>
+            <span className="text-xs font-black text-purple-800 flex-1 text-center select-none">{cartQty}</span>
+            <button
+              onClick={() => handleAddToCart(1)}
+              className="h-full w-8 flex-shrink-0 hover:bg-purple-100 text-[#6B21D9] font-black transition flex items-center justify-center cursor-pointer"
+            >
+              <Plus size={12} />
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={() => handleAddToCart(1)}
+            className="w-full py-1.5 rounded-lg font-black bg-[#6B21D9] hover:bg-[#5B18C2] text-white shadow-sm transition flex items-center justify-center gap-1 text-[11px] h-[34px] cursor-pointer"
+          >
+            <ShoppingCart size={11} className="stroke-[2.5]" /> Add
+          </button>
+        )}
+      </div>
+    </div>
   );
 }

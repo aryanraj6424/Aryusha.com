@@ -9,7 +9,16 @@ import {
   exportDeliveryReports,
   getDeliveryBoys,
   getDeliveryBoyById,
-  updateDeliveryBoyStatus
+  updateDeliveryBoyStatus,
+  getOnboardingRequests,
+  getOnboardingDetail,
+  verifyRiderDocument,
+  verifyRiderTraining,
+  getStoreRecommendations,
+  assignRiderStore,
+  getPayoutSettings,
+  updatePayoutSettings,
+  updateRiderPayoutOverride
 } from "../controllers/adminDeliveryController.js";
 
 const router = express.Router();
@@ -23,8 +32,20 @@ router.get("/delivery-logs", getDeliveryLogs);
 router.get("/delivery-logs/export", exportDeliveryLogs);
 router.get("/reports/deliveries", getDeliveryReports);
 router.get("/reports/deliveries/export", exportDeliveryReports);
+
+// Payout Settings
+router.get("/payout-settings", getPayoutSettings);
+router.put("/payout-settings", updatePayoutSettings);
+
 router.get("/delivery-boys", getDeliveryBoys);
+router.get("/delivery-boys/onboarding", getOnboardingRequests);
 router.get("/delivery-boys/:id", getDeliveryBoyById);
+router.get("/delivery-boys/:id/onboarding", getOnboardingDetail);
 router.put("/delivery-boys/:id/status", updateDeliveryBoyStatus);
+router.put("/delivery-boys/:id/verify-document", verifyRiderDocument);
+router.put("/delivery-boys/:id/training", verifyRiderTraining);
+router.get("/delivery-boys/:id/store-recommendations", getStoreRecommendations);
+router.put("/delivery-boys/:id/assign-store", assignRiderStore);
+router.put("/delivery-boys/:id/payout-override", updateRiderPayoutOverride);
 
 export default router;

@@ -23,6 +23,7 @@ import adminDeliveryRoutes from "./admin/routes/adminDeliveryRoutes.js";
 import adminCustomerRoutes from "./admin/routes/adminCustomerRoutes.js";
 import bannerRoutes from "./admin/routes/bannerRoutes.js";
 import adminFinanceRoutes from "./admin/routes/adminFinanceRoutes.js";
+import staticPageRoutes from "./admin/routes/staticPageRoutes.js";
 import vendorFinanceRoutes from "./vendor/routes/vendorFinanceRoutes.js";
 import vendorCustomerRoutes from "./vendor/routes/vendorCustomerRoutes.js";
 import categoryRoutes from "./routes/categoryRoutes.js";
@@ -179,10 +180,9 @@ app.use("/api/delivery-boy", deliveryBoyRoutes);
 // Admin Customers & Banners
 app.use("/api/admin/customers", adminCustomerRoutes);
 app.use("/api/admin/banners", bannerRoutes);
-
-// Admin Orders & Deliveries
 app.use("/api/admin/orders", adminOrderRoutes);
 app.use("/api/admin", adminDeliveryRoutes);
+app.use("/api/footer", staticPageRoutes);
 
 // location api
 app.use("/api/location", locationRoutes);

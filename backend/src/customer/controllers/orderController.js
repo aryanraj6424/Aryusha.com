@@ -2,7 +2,7 @@ import mongoose from "mongoose";
 import PDFDocument from "pdfkit";
 import CustomerOrder from "../models/CustomerOrder.js";
 import Invoice from "../models/Invoice.js";
-import { VendorListing, VendorProduct, ProductVariant } from "../../models/catalog.js";
+import { VendorListing, VendorProduct, ProductVariant, ProductReview, Product } from "../../models/catalog.js";
 import { calculateOrderFees } from "../../utils/feeCalculator.js";
 import { calculateVendorOrderCommission } from "../../utils/commissionCalculator.js";
 import { handleOrderCreated, runInTransaction } from "../../utils/ledgerSyncHelper.js";
@@ -524,6 +524,58 @@ export const rateOrder = async (req, res) => {
     order.rating = rating;
     order.ratingFeedback = feedback || "";
     await order.save();
+
+    // Create or update ProductReview for each item in the order
+    for (const item of order.items) {
+      const productId = item.productId;
+      const targetVendorId = order.vendorId;
+
+      const product = await Product.findById(productId);
+      if (!product) continue;
+
+      let review = await ProductReview.findOne({
+        productId,
+        vendorId: targetVendorId,
+        customerId: req.user._id
+      });
+
+      if (review) {
+        review.rating = rating;
+        review.reviewText = feedback || "";
+        review.orderId = order._id;
+        await review.save();
+      } else {
+        review = await ProductReview.create({
+          productId,
+          vendorId: targetVendorId,
+          customerId: req.user._id,
+          orderId: order._id,
+          customerName: req.user.fullName || req.user.name || "Customer",
+          rating,
+          reviewText: feedback || "",
+          isVerifiedPurchase: true
+        });
+      }
+
+      // Recalculate average rating & total reviews for this vendor product
+      const allReviews = await ProductReview.find({ productId, vendorId: targetVendorId });
+      const totalReviews = allReviews.length;
+      const averageRating = totalReviews > 0
+        ? parseFloat((allReviews.reduce((sum, r) => sum + r.rating, 0) / totalReviews).toFixed(2))
+        : 0;
+
+      // Update denormalized aggregates on VendorProduct or Product
+      if (product.creatorModel === "Vendor" && product.createdBy.toString() === targetVendorId.toString()) {
+        product.averageRating = averageRating;
+        product.totalReviews = totalReviews;
+        await product.save();
+      } else {
+        await VendorProduct.updateOne(
+          { masterProductId: productId, vendorId: targetVendorId },
+          { averageRating, totalReviews }
+        );
+      }
+    }
 
     res.status(200).json({ success: true, message: "Thank you for rating the order!" });
   } catch (error) {

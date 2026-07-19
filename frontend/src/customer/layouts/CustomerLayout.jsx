@@ -63,6 +63,7 @@ import { useEffect } from "react";
 import DesktopNavbar from "../components/navbar/DesktopNavbar";
 import MobileTopNavbar from "../components/navbar/MobileTopNavbar";
 import MobileBottomNavbar from "../components/navbar/MobileBottomNavbar";
+import Footer from "../components/footer/Footer";
 
 export default function CustomerLayout() {
   const navigate = useNavigate();
@@ -144,6 +145,9 @@ export default function CustomerLayout() {
       >
         <Outlet />
       </main>
+
+      {/* Footer */}
+      <Footer />
 
       {/* Mobile Bottom Navigation */}
       <div className="md:hidden">

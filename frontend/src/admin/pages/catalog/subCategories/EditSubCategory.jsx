@@ -14,6 +14,7 @@ export default function EditSubCategory() {
     categoryId: "",
     name: "",
     description: "",
+    image: "",
     status: true,
     slug: "",
     metaTitle: "",
@@ -25,7 +26,23 @@ export default function EditSubCategory() {
   const [updating, setUpdating] = useState(false);
   const [seoOpen, setSeoOpen] = useState(false);
 
+  const [uploadingImage, setUploadingImage] = useState(false);
   const [uploadingOgImage, setUploadingOgImage] = useState(false);
+
+  const handleImageUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    try {
+      setUploadingImage(true);
+      const data = await uploadFile(file, "subcategories");
+      setFormData((prev) => ({ ...prev, image: data.url }));
+    } catch (err) {
+      console.error(err);
+      showToast({ type: "error", message: err.response?.data?.message || "Failed to upload image" });
+    } finally {
+      setUploadingImage(false);
+    }
+  };
 
   const handleOgImageUpload = async (e) => {
     const file = e.target.files[0];
@@ -59,6 +76,7 @@ export default function EditSubCategory() {
           categoryId: sub.categoryId?._id || sub.categoryId || "",
           name: sub.name,
           description: sub.description || "",
+          image: sub.image || "",
           status: sub.status === "active",
           slug: sub.slug || "",
           metaTitle: sub.metaTitle || "",
@@ -99,6 +117,7 @@ export default function EditSubCategory() {
           categoryId: formData.categoryId,
           name: formData.name,
           description: formData.description,
+          image: formData.image,
           status: formData.status ? "active" : "inactive",
           slug: formData.slug,
           metaTitle: formData.metaTitle,
@@ -173,13 +192,29 @@ export default function EditSubCategory() {
         </div>
 
         <div>
+          <label className="block mb-2 font-semibold text-gray-700">Sub Category Image</label>
+          <div className="flex items-center gap-3 mt-1">
+            {formData.image && (
+              <img src={formData.image} alt="Preview" className="w-12 h-12 object-contain border rounded-lg p-1 bg-slate-50" />
+            )}
+            <input
+              type="file"
+              accept="image/*"
+              onChange={handleImageUpload}
+              className="block w-full text-sm text-slate-500 file:mr-4 file:py-2.5 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-green-50 file:text-green-700 hover:file:bg-green-100 cursor-pointer"
+            />
+          </div>
+          {uploadingImage && <span className="text-xs text-green-600 font-semibold block mt-1">Uploading to Cloudinary...</span>}
+        </div>
+
+        <div>
           <label className="flex gap-3 items-center font-semibold text-gray-700 cursor-pointer select-none">
             <input
               type="checkbox"
               name="status"
               checked={formData.status}
               onChange={handleChange}
-              className="w-5 h-5 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+              className="w-5 h-5 text-green-600 focus:ring-green-500 border-gray-300 rounded"
             />
             Active
           </label>

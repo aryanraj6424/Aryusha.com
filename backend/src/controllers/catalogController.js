@@ -11,6 +11,7 @@ import {
 } from "../models/catalog.js";
 import Vendor from "../vendor/models/Vendor.js";
 import CustomerOrder from "../customer/models/CustomerOrder.js";
+import User from "../customer/models/User.js";
 
 // @desc    Get all categories
 // @route   GET /api/categories
@@ -1487,15 +1488,26 @@ export const getProductReviews = async (req, res) => {
       return res.status(400).json({ success: false, message: "Vendor ID is required." });
     }
 
-    const reviews = await ProductReview.find({ productId: id, vendorId }).sort({ createdAt: -1 });
-    const totalReviews = reviews.length;
+    const reviews = await ProductReview.find({ productId: id, vendorId })
+      .populate("customerId", "fullName")
+      .sort({ createdAt: -1 });
+
+    const processedReviews = reviews.map((r) => {
+      const reviewObj = r.toObject();
+      if (r.customerId && r.customerId.fullName) {
+        reviewObj.customerName = r.customerId.fullName;
+      }
+      return reviewObj;
+    });
+
+    const totalReviews = processedReviews.length;
     const averageRating = totalReviews > 0
-      ? parseFloat((reviews.reduce((sum, r) => sum + r.rating, 0) / totalReviews).toFixed(2))
+      ? parseFloat((processedReviews.reduce((sum, r) => sum + r.rating, 0) / totalReviews).toFixed(2))
       : 0;
 
     res.status(200).json({
       success: true,
-      reviews,
+      reviews: processedReviews,
       averageRating,
       totalReviews
     });

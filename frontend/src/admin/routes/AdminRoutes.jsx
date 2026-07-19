@@ -140,6 +140,10 @@ import DeliveryLogs from "../pages/deliveries/DeliveryLogs";
 import DeliveryReports from "../pages/deliveries/DeliveryReports";
 import DeliveryBoyOverview from "../pages/deliveries/DeliveryBoyOverview";
 import DeliveryBoyDetail from "../pages/deliveries/DeliveryBoyDetail";
+import OnboardingRequests from "../pages/deliveries/OnboardingRequests";
+import DocumentVerification from "../pages/deliveries/DocumentVerification";
+import StoreAssignment from "../pages/deliveries/StoreAssignment";
+import PayoutSettingsPage from "../pages/deliveries/PayoutSettingsPage";
 
 // ==============================
 // Settings
@@ -156,6 +160,11 @@ import UsersRoles from "../pages/users/UsersRoles";
 // Support
 // ==============================
 import SupportTickets from "../pages/support/SupportTickets";
+
+// ==============================
+// Footer Management
+// ==============================
+import FooterManagement from "../pages/footer/FooterManagement";
 
 export default function AdminRoutes() {
   return (
@@ -279,6 +288,10 @@ export default function AdminRoutes() {
         <Route path="deliveries" element={<DeliveriesMonitor />} />
         <Route path="delivery-logs" element={<DeliveryLogs />} />
         <Route path="delivery-reports" element={<DeliveryReports />} />
+        <Route path="delivery-onboarding" element={<OnboardingRequests />} />
+        <Route path="delivery-kyc" element={<DocumentVerification />} />
+        <Route path="delivery-assignment" element={<StoreAssignment />} />
+        <Route path="delivery-payout-settings" element={<PayoutSettingsPage />} />
         <Route path="delivery-boys" element={<DeliveryBoyOverview />} />
         <Route path="delivery-boys/:id" element={<DeliveryBoyDetail />} />
 
@@ -291,6 +304,9 @@ export default function AdminRoutes() {
 
         {/* Support */}
         <Route path="support" element={<SupportTickets />} />
+
+        {/* Footer Management */}
+        <Route path="footer" element={<FooterManagement />} />
       </Route>
     </Routes>
   );

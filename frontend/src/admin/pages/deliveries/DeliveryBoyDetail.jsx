@@ -148,6 +148,107 @@ export default function DeliveryBoyDetail() {
 
       </div>
 
+      {/* Onboarding and Checklist Progress */}
+      <div className="bg-white border border-slate-150 rounded-3xl p-6 shadow-sm space-y-6">
+        <div className="flex justify-between items-center pb-3 border-b border-slate-50">
+          <div>
+            <h3 className="font-extrabold text-slate-800 text-sm">Onboarding Progress & Verification Checklists</h3>
+            <p className="text-[10px] text-slate-400 font-bold uppercase mt-0.5 font-semibold">
+              Current Phase: <strong className="text-green-800 uppercase">{rider.onboardingStatus?.replace(/_/g, " ")}</strong>
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => navigate(`/admin/delivery-kyc?rider=${rider._id}`)}
+              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs rounded-xl shadow-sm transition cursor-pointer"
+            >
+              Verify KYC Docs
+            </button>
+            <button
+              onClick={() => navigate(`/admin/delivery-assignment?rider=${rider._id}`)}
+              className="px-3 py-1.5 bg-[#1a5d1a] hover:bg-[#154b15] text-white font-bold text-xs rounded-xl shadow-sm transition cursor-pointer"
+            >
+              Manage Store Link
+            </button>
+          </div>
+        </div>
+
+        {/* Stepper Progress Indicator */}
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 pt-1">
+          {[
+            { key: "signup_pending", label: "1. Phone Verified", activeStates: ["kyc_pending", "kyc_verified", "training_pending", "training_completed", "agreement_pending", "active"] },
+            { key: "kyc_pending", label: "2. KYC Uploads", activeStates: ["kyc_verified", "training_pending", "training_completed", "agreement_pending", "active"] },
+            { key: "training_pending", label: "3. Training Modules", activeStates: ["training_completed", "agreement_pending", "active"] },
+            { key: "agreement_pending", label: "4. Store Assigned", activeStates: ["agreement_pending", "active"] },
+            { key: "active", label: "5. Fully Active", activeStates: ["active"] }
+          ].map((step, idx) => {
+            const isCompleted = step.activeStates.includes(rider.onboardingStatus);
+            const isCurrent = rider.onboardingStatus === step.key || (idx === 3 && rider.onboardingStatus === "agreement_pending") || (idx === 2 && rider.onboardingStatus === "training_completed");
+            return (
+              <div key={step.key} className={`p-3 rounded-xl border text-center ${
+                isCompleted 
+                  ? "bg-green-50/50 border-green-200 text-green-800" 
+                  : isCurrent 
+                  ? "bg-amber-50/50 border-amber-200 text-amber-850 font-bold" 
+                  : "bg-slate-50/50 border-slate-100 text-slate-400"
+              }`}>
+                <div className="text-[10px] uppercase font-black tracking-wider">{step.label}</div>
+                <div className="text-[9px] font-semibold mt-1">
+                  {isCompleted ? "✓ Completed" : isCurrent ? "● Action Needed" : "○ Locked"}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Documents and Training grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="space-y-3">
+            <h4 className="font-extrabold text-slate-700 text-xs uppercase tracking-wider">KYC Documents Verification Status</h4>
+            {(!rider.documents || rider.documents.length === 0) ? (
+              <p className="text-xs text-slate-400 font-semibold italic">No documents uploaded.</p>
+            ) : (
+              <div className="space-y-2">
+                {rider.documents.map(d => (
+                  <div key={d._id} className="flex justify-between items-center bg-slate-50/50 p-2.5 rounded-xl border border-slate-100">
+                    <span className="text-xs font-bold uppercase text-slate-700">{d.docType?.replace(/_/g, " ")}</span>
+                    <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded ${
+                      d.verificationStatus === "verified"
+                        ? "bg-green-50 text-green-700 border border-green-150"
+                        : d.verificationStatus === "rejected"
+                        ? "bg-red-50 text-red-700 border border-red-150"
+                        : "bg-amber-50 text-amber-700 border border-amber-150"
+                    }`}>
+                      {d.verificationStatus}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-3">
+            <h4 className="font-extrabold text-slate-700 text-xs uppercase tracking-wider">Training Checklist Status</h4>
+            {(!rider.trainingChecklist || rider.trainingChecklist.length === 0) ? (
+              <p className="text-xs text-slate-400 font-semibold italic">Checklist not initialized (Verify KYC documents to start training).</p>
+            ) : (
+              <div className="space-y-2">
+                {rider.trainingChecklist.map(t => (
+                  <div key={t._id} className="flex justify-between items-center bg-slate-50/50 p-2.5 rounded-xl border border-slate-100">
+                    <span className="text-xs font-bold text-slate-700">{t.moduleName}</span>
+                    <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded ${
+                      t.completed ? "bg-green-50 text-green-700 border border-green-150" : "bg-slate-100 text-slate-400 border border-slate-150"
+                    }`}>
+                      {t.completed ? "Complete" : "Pending"}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
       {/* History table */}
       <div className="bg-white border border-slate-150 rounded-3xl p-6 shadow-sm space-y-4">
         <h3 className="font-extrabold text-slate-800 text-sm">Assigned Delivery History</h3>

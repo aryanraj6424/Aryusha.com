@@ -27,9 +27,22 @@ export const DeliveryBoyProvider = ({ children }) => {
       const headers = { Authorization: `Bearer ${token}` };
       const apiBase = import.meta.env.VITE_API_URL;
       
-      const res = await axios.get(`${apiBase}/delivery-boy/dashboard`, { headers });
+      const res = await axios.get(`${apiBase}/delivery-boy/onboarding-status`, { headers });
       if (res.data.success) {
-        // Sync is successful, session is active.
+        const currentSaved = JSON.parse(localStorage.getItem("deliveryBoy") || "{}");
+        const updatedRider = {
+          ...currentSaved,
+          fullName: res.data.fullName || currentSaved.fullName,
+          phone: res.data.phone || currentSaved.phone,
+          email: res.data.email || currentSaved.email,
+          city: res.data.city || currentSaved.city,
+          onboardingStatus: res.data.onboardingStatus,
+          vehicleTypeSelection: res.data.vehicleTypeSelection,
+          assignedStoreId: res.data.assignedStore,
+          isOnline: res.data.isOnline ?? currentSaved.isOnline
+        };
+        localStorage.setItem("deliveryBoy", JSON.stringify(updatedRider));
+        setDeliveryBoy(updatedRider);
       }
     } catch (error) {
       console.error("Failed to sync delivery boy data:", error);

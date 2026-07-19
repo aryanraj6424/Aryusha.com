@@ -20,6 +20,7 @@ export default function EditProductFamily() {
     familyName: "",
     description: "",
     shortDescription: "",
+    image: "",
     status: "Active",
     tags: "",
     unitType: "weight",
@@ -43,6 +44,7 @@ export default function EditProductFamily() {
   const [seoOpen, setSeoOpen] = useState(false);
 
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [uploadingMainImage, setUploadingMainImage] = useState(false);
   const [uploadingOgImage, setUploadingOgImage] = useState(false);
 
   const handleGalleryImageUpload = async (e) => {
@@ -75,6 +77,21 @@ export default function EditProductFamily() {
     }
   };
 
+  const handleMainImageUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    try {
+      setUploadingMainImage(true);
+      const data = await uploadFile(file, "product-families");
+      setFormData((prev) => ({ ...prev, image: data.url }));
+    } catch (err) {
+      console.error(err);
+      showToast({ type: "error", message: err.response?.data?.message || "Failed to upload image" });
+    } finally {
+      setUploadingMainImage(false);
+    }
+  };
+
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -100,6 +117,7 @@ export default function EditProductFamily() {
           familyName: fam.name,
           description: fam.description || "",
           shortDescription: fam.shortDescription || "",
+          image: fam.image || "",
           status: fam.status === "active" ? "Active" : "Inactive",
           tags: fam.tags ? fam.tags.join(", ") : "",
           unitType: fam.unitType || "weight",
@@ -182,6 +200,7 @@ export default function EditProductFamily() {
           name: formData.familyName,
           description: formData.description,
           shortDescription: formData.shortDescription,
+          image: formData.image,
           status: formData.status.toLowerCase(),
           images: formData.images,
           tags: tagsArray,
@@ -313,6 +332,22 @@ export default function EditProductFamily() {
               <option>Inactive</option>
             </select>
           </div>
+        </div>
+
+        <div>
+          <label className="block mb-2 font-semibold text-gray-700">Product Family Image (Main)</label>
+          <div className="flex items-center gap-3 mt-1">
+            {formData.image && (
+              <img src={formData.image} alt="Preview" className="w-12 h-12 object-contain border rounded-lg p-1 bg-slate-50" />
+            )}
+            <input
+              type="file"
+              accept="image/*"
+              onChange={handleMainImageUpload}
+              className="block w-full text-sm text-slate-500 file:mr-4 file:py-2.5 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-green-50 file:text-green-700 hover:file:bg-green-100 cursor-pointer"
+            />
+          </div>
+          {uploadingMainImage && <span className="text-xs text-green-600 font-semibold block mt-1">Uploading to Cloudinary...</span>}
         </div>
 
         <div>

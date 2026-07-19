@@ -12,6 +12,7 @@ export default function AddSubCategory() {
     categoryId: "",
     name: "",
     description: "",
+    image: "",
     status: true,
     slug: "",
     metaTitle: "",
@@ -23,7 +24,23 @@ export default function AddSubCategory() {
   const [saving, setSaving] = useState(false);
   const [seoOpen, setSeoOpen] = useState(false);
 
+  const [uploadingImage, setUploadingImage] = useState(false);
   const [uploadingOgImage, setUploadingOgImage] = useState(false);
+
+  const handleImageUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    try {
+      setUploadingImage(true);
+      const data = await uploadFile(file, "subcategories");
+      setFormData((prev) => ({ ...prev, image: data.url }));
+    } catch (err) {
+      console.error(err);
+      showToast({ type: "error", message: err.response?.data?.message || "Failed to upload image" });
+    } finally {
+      setUploadingImage(false);
+    }
+  };
 
   const handleOgImageUpload = async (e) => {
     const file = e.target.files[0];
@@ -78,6 +95,7 @@ export default function AddSubCategory() {
           categoryId: formData.categoryId,
           name: formData.name,
           description: formData.description,
+          image: formData.image,
           status: formData.status ? "active" : "inactive",
           slug: formData.slug,
           metaTitle: formData.metaTitle,
@@ -149,6 +167,22 @@ export default function AddSubCategory() {
             onChange={handleChange}
             className="w-full border rounded-lg p-3 mt-1 outline-none focus:border-green-500"
           />
+        </div>
+
+        <div>
+          <label className="block mb-2 font-semibold text-gray-700">Sub Category Image</label>
+          <div className="flex items-center gap-3 mt-1">
+            {formData.image && (
+              <img src={formData.image} alt="Preview" className="w-12 h-12 object-contain border rounded-lg p-1 bg-slate-50" />
+            )}
+            <input
+              type="file"
+              accept="image/*"
+              onChange={handleImageUpload}
+              className="block w-full text-sm text-slate-500 file:mr-4 file:py-2.5 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-green-50 file:text-green-700 hover:file:bg-green-100 cursor-pointer"
+            />
+          </div>
+          {uploadingImage && <span className="text-xs text-green-600 font-semibold block mt-1">Uploading to Cloudinary...</span>}
         </div>
 
         <div>

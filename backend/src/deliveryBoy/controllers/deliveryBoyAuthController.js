@@ -26,6 +26,7 @@ export const registerDeliveryBoy = async (req, res) => {
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
+    const otp = generateOtp();
 
     const deliveryBoy = await DeliveryBoy.create({
       fullName,
@@ -37,7 +38,14 @@ export const registerDeliveryBoy = async (req, res) => {
       },
       status: "approved", // approved by default for quick testing
       accountStatus: "active",
+      onboardingStatus: "signup_pending",
+      otp,
+      otpExpiry: Date.now() + 10 * 60 * 1000
     });
+
+    console.log("================================");
+    console.log(`DELIVERY BOY SIGNUP OTP FOR ${phone}: ${otp}`);
+    console.log("================================");
 
     // Initialize Earnings records
     await DeliveryBoyEarnings.create({
@@ -54,7 +62,7 @@ export const registerDeliveryBoy = async (req, res) => {
 
     res.status(201).json({
       success: true,
-      message: "Delivery Boy registered successfully",
+      message: "Delivery Boy registered successfully. Please verify OTP.",
       deliveryBoy,
       token,
     });
@@ -303,9 +311,18 @@ export const verifyOtp = async (req, res) => {
       return res.status(400).json({ success: false, message: "OTP expired" });
     }
 
+    if (deliveryBoy.onboardingStatus === "signup_pending") {
+      deliveryBoy.onboardingStatus = "kyc_pending";
+    }
+
+    deliveryBoy.otp = null;
+    deliveryBoy.otpExpiry = null;
+    await deliveryBoy.save();
+
     res.status(200).json({
       success: true,
       message: "OTP verified successfully",
+      onboardingStatus: deliveryBoy.onboardingStatus
     });
   } catch (error) {
     console.error("Verify OTP Error:", error);

@@ -34,14 +34,21 @@ export default function Description({ formData, setFormData }) {
             placeholder="Describe the product — ingredients, highlights, usage instructions, etc."
             modules={{
               toolbar: [
-                ['bold', 'italic', 'underline'],
-                [{ 'list': 'ordered' }, { 'list': 'bullet' }],
+                [{ 'header': [1, 2, 3, 4, 5, 6, false] }],
+                ['bold', 'italic', 'underline', 'strike'],
+                [{ 'color': [] }, { 'background': [] }],
+                [{ 'align': [] }],
+                [{ 'list': 'ordered'}, { 'list': 'bullet' }],
+                [{ 'indent': '-1'}, { 'indent': '+1' }],
+                ['link', 'image'],
                 ['clean']
               ]
             }}
           />
         </div>
-        <p className="text-xs text-gray-400 mt-1 text-right">{charCount} / 2000 characters</p>
+        <p className={`text-xs mt-1 text-right ${charCount > 5000 ? "text-red-500 font-bold" : "text-gray-400"}`}>
+          {charCount} / 5000 characters
+        </p>
       </div>
 
       <div className="bg-blue-50 border border-blue-100 text-blue-700 text-sm rounded-xl px-4 py-3">

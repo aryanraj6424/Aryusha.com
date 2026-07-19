@@ -1,4 +1,4 @@
-import { Routes, Route, Outlet } from "react-router-dom";
+import { Routes, Route, Outlet, Navigate } from "react-router-dom";
 import { ToastProvider, ToastContainer } from "./components/Toast";
 
 import LoginPage from "./pages/auth/LoginPage";
@@ -22,6 +22,7 @@ import WishlistPage from "./customer/pages/profile/WishlistPage";
 import HelpSupportPage from "./customer/pages/profile/HelpSupportPage";
 import CartPage from "./customer/pages/CartPage";
 import CheckoutPage from "./customer/pages/CheckoutPage";
+import StaticPageViewer from "./customer/pages/StaticPageViewer";
 import CustomerOrderTracking from "./customer/pages/CustomerOrderTracking";
 
 // Vendor imports
@@ -37,6 +38,7 @@ import PendingApproval from "./vendor/pages/dashboard/PendingApproval";
 import VendorDashboard from "./vendor/pages/dashboard/VendorDashboard";
 import { VendorProvider } from "./vendor/context/VendorContext";
 import VendorPermissionProtectedRoute from "./vendor/components/VendorPermissionProtectedRoute";
+import VendorProtectedRoute from "./vendor/components/VendorProtectedRoute";
 import VendorAssignedArea from "./vendor/pages/areas/VendorAssignedArea";
 import VendorProfile from "./vendor/pages/profile/VendorProfile";
 import VendorFinance from "./vendor/pages/finance/VendorFinance";
@@ -104,6 +106,7 @@ function App() {
         <Route path="orders/:id/track" element={<CustomerOrderTracking />} />
         <Route path="wishlist" element={<WishlistPage />} />
         <Route path="support" element={<HelpSupportPage />} />
+        <Route path="page/:slug" element={<StaticPageViewer />} />
 
         <Route path="addresses" element={<AddressesPage />} />
         <Route path="refunds" element={<RefundsPage />} />
@@ -124,10 +127,13 @@ function App() {
         path="/vendor"
         element={
           <VendorProvider>
-            <VendorLayout />
+            <VendorProtectedRoute>
+              <VendorLayout />
+            </VendorProtectedRoute>
           </VendorProvider>
         }
       >
+        <Route index element={<Navigate to="dashboard" replace />} />
         <Route path="dashboard" element={<VendorDashboard />} />
         <Route path="products" element={<VendorPermissionProtectedRoute module="product" action="view"><ProductList /></VendorPermissionProtectedRoute>} />
         <Route path="products/add" element={<VendorPermissionProtectedRoute module="product" action="add"><AddProduct /></VendorPermissionProtectedRoute>} />

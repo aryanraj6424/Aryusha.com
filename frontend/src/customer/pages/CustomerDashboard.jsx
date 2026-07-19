@@ -26,9 +26,9 @@ function CustomerDashboard() {
   const [searchParams, setSearchParams] = useSearchParams();
   const category = searchParams.get("category") || "all";
   const searchQuery = searchParams.get("search") || "";
+  const subCategory = searchParams.get("subCategory") || "all";
 
   // Remaining filter states
-  const [subCategory, setSubCategory] = useState("all");
   const [productFamily, setProductFamily] = useState("all");
   const [brand, setBrand] = useState("all");
   const [minPrice, setMinPrice] = useState("");
@@ -129,12 +129,10 @@ function CustomerDashboard() {
         .get(`${import.meta.env.VITE_API_URL}/sub-categories/category/${category}`)
         .then((res) => setSubCategoriesList(res.data.subCategories || []))
         .catch((err) => console.error(err));
-      setSubCategory("all");
       setProductFamily("all");
     } else {
       setSubCategoriesList([]);
       setFamiliesList([]);
-      setSubCategory("all");
       setProductFamily("all");
     }
   }, [category]);

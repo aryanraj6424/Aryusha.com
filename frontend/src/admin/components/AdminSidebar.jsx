@@ -63,10 +63,14 @@ export default function AdminSidebar({ isOpen, setIsOpen }) {
     {
       section: "DELIVERY MANAGEMENT",
       items: [
+        { path: "/admin/delivery-onboarding", label: "Onboarding Requests", icon: ChevronRight },
+        { path: "/admin/delivery-kyc", label: "Document Verification", icon: ChevronRight },
+        { path: "/admin/delivery-assignment", label: "Vehicle & Store Assignment", icon: ChevronRight },
+        { path: "/admin/delivery-payout-settings", label: "Payout Settings", icon: ChevronRight },
+        { path: "/admin/delivery-boys", label: "Rider Oversight", icon: ChevronRight },
         { path: "/admin/deliveries", label: "Deliveries Monitor", icon: ChevronRight },
         { path: "/admin/delivery-logs", label: "Delivery Logs", icon: ChevronRight },
         { path: "/admin/delivery-reports", label: "Delivery Reports", icon: ChevronRight },
-        { path: "/admin/delivery-boys", label: "Rider Oversight", icon: ChevronRight },
       ]
     },
     {
@@ -76,6 +80,12 @@ export default function AdminSidebar({ isOpen, setIsOpen }) {
         { path: "/admin/marketing", label: "Marketing & Banners", icon: Megaphone },
         { path: "/admin/offers", label: "Offers & Coupons", icon: ChevronRight },
         { path: "/admin/fees", label: "Fee Management", icon: ChevronRight },
+      ]
+    },
+    {
+      section: "FOOTER MANAGEMENT",
+      items: [
+        { path: "/admin/footer", label: "Footer Management", icon: Settings },
       ]
     },
     {

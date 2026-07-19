@@ -9,6 +9,7 @@ import { Product } from "../../models/catalog.js";
 import CustomerOrder from "../../customer/models/CustomerOrder.js";
 import DeliveryBoy from "../../deliveryBoy/models/DeliveryBoy.js";
 import { emitToRoom } from "../../socket/socketManager.js";
+import RiderNotification from "../../deliveryBoy/models/RiderNotification.js";
 import PlatformFeeSettings from "../../admin/models/PlatformFeeSettings.js";
 import { calculateCommissionSync } from "../../utils/commissionCalculator.js";
 import mongoose from "mongoose";
@@ -590,6 +591,14 @@ export const assignDeliveryBoy = async (req, res) => {
 
     await order.save();
 
+    // Create persistent notification for delivery boy
+    await RiderNotification.create({
+      deliveryBoyId,
+      title: "New Delivery Assigned! 📦",
+      message: `A new order (${order.orderId}) has been assigned to you.`,
+      type: "order"
+    });
+
     // Notify the assigned delivery boy in real-time
     emitToRoom(`deliveryBoy:${deliveryBoyId}`, "order:assigned", {
       orderId: order._id,
@@ -651,6 +660,14 @@ export const reassignDeliveryBoy = async (req, res) => {
     });
 
     await order.save();
+
+    // Create persistent notification for newly assigned delivery boy
+    await RiderNotification.create({
+      deliveryBoyId,
+      title: "New Delivery Assigned! 📦",
+      message: `An order (${order.orderId}) has been reassigned to you.`,
+      type: "order"
+    });
 
     // Notify newly assigned delivery boy and admin
     emitToRoom(`deliveryBoy:${deliveryBoyId}`, "order:assigned", {

@@ -4,6 +4,8 @@ import CustomerOrder from "../../customer/models/CustomerOrder.js";
 import Vendor from "../../vendor/models/Vendor.js";
 import User from "../../customer/models/User.js";
 import { emitToRoom } from "../../socket/socketManager.js";
+import RiderNotification from "../models/RiderNotification.js";
+import PayoutSettings from "../models/PayoutSettings.js";
 
 // Seeding helper to ensure delivery boy has orders for UI demonstration
 const ensureMockAssignments = async (deliveryBoyId) => {
@@ -288,10 +290,40 @@ export const verifyOtp = async (req, res) => {
       // Sync the ledger status to Delivered
       await handleOrderStatusChange(order._id, "Delivered", session);
 
-      // Credit earnings to rider
-      const fee = order.deliveryCharge || 35;
-      const incentive = 5;
-      const commission = 2;
+      // Fetch dynamic default payout configurations
+      let settings = await PayoutSettings.findOne().session(session);
+      if (!settings) {
+        settings = {
+          payoutType: "per_order",
+          payoutAmount: 35,
+          incentiveAmount: 5,
+          commissionAmount: 2,
+          onTimeThresholdMinutes: 45
+        };
+      }
+
+      const rider = await DeliveryBoy.findById(req.deliveryBoy._id).session(session);
+      const isOverride = rider && rider.payoutOverride && rider.payoutOverride.payoutType !== "none";
+      
+      const payoutType = isOverride ? rider.payoutOverride.payoutType : settings.payoutType;
+      const baseFee = isOverride ? rider.payoutOverride.payoutAmount : settings.payoutAmount;
+      const incentiveVal = isOverride ? rider.payoutOverride.incentiveAmount : settings.incentiveAmount;
+      const commissionVal = isOverride ? rider.payoutOverride.commissionAmount : settings.commissionAmount;
+      const thresholdMinutes = isOverride ? rider.payoutOverride.onTimeThresholdMinutes : settings.onTimeThresholdMinutes;
+
+      // On-time check based on Assigned timestamp logs
+      let incentive = 0;
+      const assignedLog = order.deliveryLogs.find(l => l.status === "Assigned");
+      if (assignedLog) {
+        const timeTakenMs = Date.now() - new Date(assignedLog.timestamp).getTime();
+        if (timeTakenMs <= thresholdMinutes * 60 * 1000) {
+          incentive = incentiveVal;
+        }
+      }
+
+      // Base fee only credited immediately if payoutType is per_order
+      const fee = (payoutType === "per_order") ? (order.deliveryCharge || baseFee) : 0;
+      const commission = commissionVal;
       const credit = fee + incentive + commission;
 
       await DeliveryBoyEarnings.findOneAndUpdate(
@@ -382,6 +414,266 @@ export const updateProfile = async (req, res) => {
     });
   } catch (error) {
     console.error("Update Profile Error:", error);
+    res.status(500).json({ success: false, message: "Server Error" });
+  }
+};
+
+// Get Onboarding Status & Progress
+export const getOnboardingStatus = async (req, res) => {
+  try {
+    const rider = await DeliveryBoy.findById(req.deliveryBoy._id)
+      .populate("assignedStoreId", "shopName address phone");
+    if (!rider) {
+      return res.status(404).json({ success: false, message: "Rider not found" });
+    }
+    res.status(200).json({
+      success: true,
+      onboardingStatus: rider.onboardingStatus,
+      vehicleTypeSelection: rider.vehicleTypeSelection,
+      documents: rider.documents,
+      bankDetails: rider.bankDetails,
+      trainingChecklist: rider.trainingChecklist,
+      agreement: rider.agreement,
+      assignedStore: rider.assignedStoreId,
+      fullName: rider.fullName,
+      phone: rider.phone,
+      email: rider.email,
+      city: rider.city,
+      preferredWorkingLocation: rider.preferredWorkingLocation,
+      preferredShift: rider.preferredShift
+    });
+  } catch (error) {
+    console.error("Get Onboarding Status Error:", error);
+    res.status(500).json({ success: false, message: "Server Error" });
+  }
+};
+
+// Update Vehicle Type Selection
+export const updateVehicleSelection = async (req, res) => {
+  try {
+    const { vehicleTypeSelection } = req.body;
+    if (!["own_bike", "scooter", "e_rickshaw", "electric_vehicle", "bicycle"].includes(vehicleTypeSelection)) {
+      return res.status(400).json({ success: false, message: "Invalid vehicle type" });
+    }
+
+    const rider = await DeliveryBoy.findById(req.deliveryBoy._id);
+    rider.vehicleTypeSelection = vehicleTypeSelection;
+    await rider.save();
+
+    res.status(200).json({ success: true, message: "Vehicle type updated", rider });
+  } catch (error) {
+    console.error("Update Vehicle Selection Error:", error);
+    res.status(500).json({ success: false, message: "Server Error" });
+  }
+};
+
+// Submit KYC and Bank Account Info
+export const submitKycDetails = async (req, res) => {
+  try {
+    const { email, city, preferredWorkingLocation, preferredShift, bankDetails, documents } = req.body;
+    const rider = await DeliveryBoy.findById(req.deliveryBoy._id);
+
+    if (email) rider.email = email;
+    if (city) rider.city = city;
+    if (preferredWorkingLocation) {
+      rider.preferredWorkingLocation = {
+        address: preferredWorkingLocation.address || "",
+        latitude: preferredWorkingLocation.latitude || 0,
+        longitude: preferredWorkingLocation.longitude || 0
+      };
+    }
+    if (preferredShift) rider.preferredShift = preferredShift;
+
+    if (bankDetails) {
+      rider.bankDetails = {
+        accountNumber: bankDetails.accountNumber || "",
+        ifscCode: bankDetails.ifscCode || "",
+        accountHolderName: bankDetails.accountHolderName || "",
+        passbookImage: bankDetails.passbookImage || ""
+      };
+    }
+
+    if (documents && Array.isArray(documents)) {
+      documents.forEach(doc => {
+        const existingIdx = rider.documents.findIndex(d => d.docType === doc.docType);
+        if (existingIdx > -1) {
+          rider.documents[existingIdx].fileUrl = doc.fileUrl;
+          rider.documents[existingIdx].fileType = doc.fileType || "image";
+          rider.documents[existingIdx].verificationStatus = "pending";
+          rider.documents[existingIdx].uploadedAt = new Date();
+        } else {
+          rider.documents.push({
+            docType: doc.docType,
+            fileUrl: doc.fileUrl,
+            fileType: doc.fileType || "image",
+            verificationStatus: "pending"
+          });
+        }
+      });
+    }
+
+    // Set status to pending document review
+    rider.onboardingStatus = "kyc_pending";
+    await rider.save();
+
+    // Trigger notification to admin dashboard (Socket.io)
+    emitToRoom("admin:global", "documentUploaded", {
+      riderId: rider._id,
+      riderName: rider.fullName,
+      message: `${rider.fullName} uploaded KYC documents.`
+    });
+
+    res.status(200).json({ success: true, message: "KYC details submitted successfully", rider });
+  } catch (error) {
+    console.error("Submit KYC Details Error:", error);
+    res.status(500).json({ success: false, message: "Server Error" });
+  }
+};
+
+// Submit/Complete Training Videos Checklist
+export const submitTrainingChecklist = async (req, res) => {
+  try {
+    const { moduleName } = req.body;
+    const rider = await DeliveryBoy.findById(req.deliveryBoy._id);
+
+    if (rider.onboardingStatus !== "training_pending") {
+      return res.status(400).json({ success: false, message: "Rider is not in training stage" });
+    }
+
+    const idx = rider.trainingChecklist.findIndex(t => t.moduleName === moduleName);
+    if (idx > -1) {
+      rider.trainingChecklist[idx].completed = true;
+      rider.trainingChecklist[idx].completedAt = new Date();
+    } else {
+      rider.trainingChecklist.push({
+        moduleName,
+        type: "video",
+        completed: true,
+        completedAt: new Date()
+      });
+    }
+
+    // Check if all 6 standard modules are complete
+    const requiredModules = [
+      "Using the delivery app",
+      "Order pickup process",
+      "Customer interaction",
+      "COD handling",
+      "Safety guidelines",
+      "Delivery timing expectations"
+    ];
+    const completedAllVideos = requiredModules.every(mod => 
+      rider.trainingChecklist.some(t => t.moduleName === mod && t.completed)
+    );
+
+    if (completedAllVideos) {
+      rider.onboardingStatus = "training_completed";
+      emitToRoom(`deliveryBoy:${rider._id}`, "onboardingStatusChanged", { onboardingStatus: "training_completed" });
+    }
+
+    await rider.save();
+    res.status(200).json({ success: true, message: `Module "${moduleName}" marked complete`, rider });
+  } catch (error) {
+    console.error("Submit Training Error:", error);
+    res.status(500).json({ success: false, message: "Server Error" });
+  }
+};
+
+// Sign e-Agreement Contract
+export const signAgreement = async (req, res) => {
+  try {
+    const { typedName, signed } = req.body;
+    if (!signed || !typedName) {
+      return res.status(400).json({ success: false, message: "Agreement must be checked and signed" });
+    }
+
+    const rider = await DeliveryBoy.findById(req.deliveryBoy._id);
+    if (rider.onboardingStatus === "active") {
+      return res.status(200).json({ success: true, message: "Agreement already signed. Account active.", rider });
+    }
+    if (rider.onboardingStatus !== "agreement_pending") {
+      return res.status(400).json({ success: false, message: "Rider is not in agreement signing stage" });
+    }
+
+    const ipAddress = req.ip || req.headers["x-forwarded-for"] || "127.0.0.1";
+
+    rider.agreement = {
+      signed: true,
+      signedAt: new Date(),
+      ipAddress,
+      typedName,
+      agreementPdfUrl: "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf" // stub pdf URL
+    };
+
+    rider.onboardingStatus = "active";
+    await rider.save();
+
+    // Notify Rider and Admin
+    emitToRoom(`deliveryBoy:${rider._id}`, "onboardingStatusChanged", { onboardingStatus: "active" });
+    emitToRoom("admin:global", "onboardingCompleted", { riderId: rider._id, riderName: rider.fullName });
+
+    // Send persistent notification to Rider
+    await RiderNotification.create({
+      deliveryBoyId: rider._id,
+      title: "Account Activated! 🚀",
+      message: "Congratulations! Your account is active. You can now toggle online and start accepting deliveries.",
+      type: "onboarding"
+    });
+
+    res.status(200).json({ success: true, message: "Agreement signed. Account activated!", rider });
+  } catch (error) {
+    console.error("Sign Agreement Error:", error);
+    res.status(500).json({ success: false, message: "Server Error" });
+  }
+};
+
+// Fetch Notifications List
+export const getNotifications = async (req, res) => {
+  try {
+    const notifications = await RiderNotification.find({ deliveryBoyId: req.deliveryBoy._id })
+      .sort({ createdAt: -1 })
+      .limit(50);
+    res.status(200).json({ success: true, notifications });
+  } catch (error) {
+    console.error("Get Notifications Error:", error);
+    res.status(500).json({ success: false, message: "Server Error" });
+  }
+};
+
+// Mark Notification as Read
+export const markNotificationRead = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const notification = await RiderNotification.findOneAndUpdate(
+      { _id: id, deliveryBoyId: req.deliveryBoy._id },
+      { read: true },
+      { new: true }
+    );
+    if (!notification) {
+      return res.status(404).json({ success: false, message: "Notification not found" });
+    }
+    res.status(200).json({ success: true, notification });
+  } catch (error) {
+    console.error("Mark Notification Read Error:", error);
+    res.status(500).json({ success: false, message: "Server Error" });
+  }
+};
+
+// Toggle Availability Online/Offline
+export const toggleOnlineStatus = async (req, res) => {
+  try {
+    const { isOnline } = req.body;
+    const rider = await DeliveryBoy.findById(req.deliveryBoy._id);
+    if (rider.onboardingStatus !== "active") {
+      return res.status(400).json({ success: false, message: "Onboarding must be active to toggle status" });
+    }
+
+    rider.isOnline = !!isOnline;
+    await rider.save();
+
+    res.status(200).json({ success: true, message: `Rider is now ${isOnline ? "online" : "offline"}`, rider });
+  } catch (error) {
+    console.error("Toggle Online Status Error:", error);
     res.status(500).json({ success: false, message: "Server Error" });
   }
 };

@@ -6,11 +6,11 @@ const MAX_SIZE = 5 * 1024 * 1024;
 const storage = multer.memoryStorage();
 
 const fileFilter = (req, file, cb) => {
-  const allowedMimeTypes = ["image/jpeg", "image/jpg", "image/png", "image/webp"];
+  const allowedMimeTypes = ["image/jpeg", "image/jpg", "image/png", "image/webp", "application/pdf"];
   if (allowedMimeTypes.includes(file.mimetype)) {
     cb(null, true);
   } else {
-    cb(new Error("Invalid file type. Only JPG, JPEG, PNG, and WEBP images are allowed!"), false);
+    cb(new Error("Invalid file type. Only JPG, JPEG, PNG, WEBP images and PDF files are allowed!"), false);
   }
 };
 
