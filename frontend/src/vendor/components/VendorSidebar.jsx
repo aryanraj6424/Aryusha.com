@@ -69,9 +69,16 @@ export default function VendorSidebar({ isOpen, setIsOpen }) {
       `}>
         {/* Logo and close button on mobile */}
         <div className="flex items-center justify-between mb-6">
-          <div>
-            <h1 className="text-2xl font-bold text-purple-100 font-sans tracking-wide">Aryusha.com</h1>
-            <p className="text-xs text-purple-200 mt-1">Vendor Panel</p>
+          <div className="flex items-center gap-3">
+            <img
+              src="/aryushalogo.png"
+              alt="Aryusha Logo"
+              className="w-10 h-10 object-contain rounded-xl bg-white p-1"
+            />
+            <div>
+              <h1 className="text-2xl font-bold text-purple-100 font-sans tracking-wide">Aryusha.com</h1>
+              <p className="text-xs text-purple-200 mt-0.5">Vendor Panel</p>
+            </div>
           </div>
           <button
             onClick={() => setIsOpen(false)}

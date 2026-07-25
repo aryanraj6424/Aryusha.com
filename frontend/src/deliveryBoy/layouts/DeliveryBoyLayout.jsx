@@ -106,10 +106,12 @@ export default function DeliveryBoyLayout() {
         
         {/* Top Status Header */}
         <header className="bg-[#6d28d9] text-white px-5 py-4 flex items-center justify-between sticky top-0 z-30 shadow-md">
-          <div className="flex items-center gap-2">
-            <div className="p-1 bg-white/10 rounded-lg">
-              <Shield size={20} className="text-purple-200" />
-            </div>
+          <div className="flex items-center gap-2.5">
+            <img
+              src="/aryushalogo.png"
+              alt="Aryusha Rider Logo"
+              className="w-8 h-8 object-contain rounded-lg bg-white p-0.5"
+            />
             <div>
               <h1 className="text-md font-black tracking-wide">QuickKart Rider</h1>
               <p className="text-[10px] text-purple-200 font-bold -mt-0.5">Delivery Partner</p>

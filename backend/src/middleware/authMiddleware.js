@@ -30,10 +30,17 @@ const protect = async (
         process.env.JWT_SECRET
       );
 
-    req.user =
-      await User.findById(
-        decoded.id
-      );
+    const user = await User.findById(
+      decoded.id
+    );
+
+    if (!user) {
+      return res.status(401).json({
+        message: "User Account Not Found",
+      });
+    }
+
+    req.user = user;
 
     next();
 

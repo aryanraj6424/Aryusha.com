@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Trash2, ShoppingCart, Plus, Minus, ArrowLeft, Ticket, Percent, Coins, Check, X, ShieldCheck } from "lucide-react";
 import axios from "axios";
 import { useToast } from "../../components/Toast";
+import SEO from "../../components/SEO";
 
 export default function CartPage() {
   const navigate = useNavigate();
@@ -313,6 +314,7 @@ export default function CartPage() {
   if (cart.length === 0) {
     return (
       <div className="max-w-md mx-auto py-16 px-4 text-center space-y-6">
+        <SEO title="Shopping Cart | Aryusha" noindex={true} />
         <div className="w-24 h-24 bg-purple-50 rounded-full flex items-center justify-center mx-auto text-purple-600 shadow-inner">
           <ShoppingCart size={40} />
         </div>
@@ -336,6 +338,7 @@ export default function CartPage() {
 
   return (
     <div className="max-w-5xl mx-auto py-8 px-4 space-y-8 font-semibold text-slate-700">
+      <SEO title="Shopping Cart | Aryusha" noindex={true} />
       {/* Back button */}
       <button
         onClick={() => navigate(-1)}

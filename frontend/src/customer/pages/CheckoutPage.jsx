@@ -5,6 +5,7 @@ import { getUserAddresses } from "../../services/addressApi";
 import { ArrowLeft, MapPin, Truck, Check, Loader2, Calendar, Clock, CreditCard, Sparkles, Plus, Minus, ShoppingBag, Trash2 } from "lucide-react";
 import { useToast } from "../../components/Toast";
 import { getSocket, joinRoom, leaveRoom } from "../../services/socket";
+import SEO from "../../components/SEO";
 
 export default function CheckoutPage() {
   const navigate = useNavigate();
@@ -501,7 +502,8 @@ export default function CheckoutPage() {
   }
 
   return (
-    <div className="max-w-5xl mx-auto py-8 px-4 space-y-6 pb-24 font-semibold text-slate-700">
+    <div className="max-w-6xl mx-auto py-8 px-4 space-y-6 select-none font-semibold text-slate-700">
+      <SEO title="Checkout | Aryusha" noindex={true} />
       
       {/* Mock Payment Processing Modal */}
       {mockPaymentLoading && (

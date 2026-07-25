@@ -104,14 +104,18 @@ export default function CustomerLayout() {
     }
   }, [location.pathname, navigate]);
 
-  // Hide Mobile Top Navbar on Profile Related Pages
+  // Hide Mobile Top Navbar on Profile & Location Pages
   const hideMobileTopNavbar = [
     "/customer/profile",
     "/customer/account",
     "/customer/orders",
     "/customer/wishlist",
     "/customer/support",
+    "/customer/location",
   ].includes(location.pathname);
+
+  // Hide Mobile Bottom Navbar on Location Page
+  const hideMobileBottomNavbar = location.pathname === "/customer/location";
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -150,9 +154,11 @@ export default function CustomerLayout() {
       <Footer />
 
       {/* Mobile Bottom Navigation */}
-      <div className="md:hidden">
-        <MobileBottomNavbar />
-      </div>
+      {!hideMobileBottomNavbar && (
+        <div className="md:hidden">
+          <MobileBottomNavbar />
+        </div>
+      )}
 
     </div>
   );

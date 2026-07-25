@@ -1,11 +1,16 @@
+import { useEffect } from "react";
 import { Routes, Route, Outlet, Navigate } from "react-router-dom";
+import { HelmetProvider } from "react-helmet-async";
 import { ToastProvider, ToastContainer } from "./components/Toast";
+import ScrollToTop from "./components/ScrollToTop";
 
 import LoginPage from "./pages/auth/LoginPage";
 import SignupPage from "./pages/auth/SignupPage";
 import ForgotPasswordPage from "./pages/auth/ForgotPasswordPage";
 import OTPVerificationPage from "./pages/auth/OTPVerificationPage";
 import ResetPasswordPage from "./pages/auth/ResetPasswordPage";
+
+import CustomerProtectedRoute from "./customer/components/CustomerProtectedRoute";
 
 // Customer imports
 import CustomerLayout from "./customer/layouts/CustomerLayout";
@@ -74,111 +79,129 @@ import DeliveryBoyProfile from "./deliveryBoy/pages/profile/DeliveryBoyProfile";
 import Support from "./deliveryBoy/pages/support/Support";
 
 function App() {
+  useEffect(() => {
+    document.title = "Aryusha";
+    let iconLink = document.querySelector("link[rel*='icon']");
+    if (!iconLink) {
+      iconLink = document.createElement("link");
+      iconLink.rel = "icon";
+      document.head.appendChild(iconLink);
+    }
+    iconLink.type = "image/png";
+    iconLink.href = "/favicon.png";
+  }, []);
+
   return (
-    <ToastProvider>
-      <ToastContainer />
-      <Routes>
-      {/* Public routes */}
-      <Route path="/login" element={<LoginPage />} />
-      <Route path="/signup" element={<SignupPage />} />
-      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-      <Route path="/verify-otp" element={<OTPVerificationPage />} />
-      <Route path="/reset-password" element={<ResetPasswordPage />} />
+    <HelmetProvider>
+      <ToastProvider>
+        <ScrollToTop />
+        <ToastContainer />
+        <Routes>
+        {/* Public routes */}
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/signup" element={<SignupPage />} />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        <Route path="/verify-otp" element={<OTPVerificationPage />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
 
-      {/* Homepage — CustomerLayout wraps the root route so guests get the full store navbar */}
-      <Route path="/" element={<CustomerLayout />}>
-        <Route index element={<CustomerDashboard />} />
-      </Route>
-
-      {/* Customer routes */}
-      <Route path="/customer" element={<CustomerLayout />}>
-        <Route path="dashboard" element={<CustomerDashboard />} />
-        <Route path="categories" element={<CustomerDashboard />} />
-        <Route path="trending" element={<CustomerDashboard />} />
-        <Route path="product/:id" element={<ProductDetailsPage />} />
-        <Route path="location" element={<LocationPage />} />
-        <Route path="cart" element={<CartPage />} />
-        <Route path="checkout" element={<CheckoutPage />} />
-
-        <Route path="profile" element={<CustomerProfilePage />} />
-        <Route path="account" element={<AccountPage />} />
-        <Route path="orders" element={<OrdersPage />} />
-        <Route path="orders/:id/track" element={<CustomerOrderTracking />} />
-        <Route path="wishlist" element={<WishlistPage />} />
-        <Route path="support" element={<HelpSupportPage />} />
-        <Route path="page/:slug" element={<StaticPageViewer />} />
-
-        <Route path="addresses" element={<AddressesPage />} />
-        <Route path="refunds" element={<RefundsPage />} />
-        <Route path="settings" element={<SettingsPage />} />
-      </Route>
-
-      {/* Vendor routes */}
-      <Route path="/vendor/login" element={<VendorLogin />} />
-      <Route path="/vendor/register" element={<VendorRegister />} />
-      <Route path="/vendor/pending-approval" element={<PendingApproval />} />
-      <Route path="/vendor/forgot-password" element={<VendorForgotPassword />} />
-      <Route path="/vendor/login-otp" element={<VendorLoginOtp />} />
-      <Route path="/vendor/verify-login-otp" element={<VendorVerifyLoginOtp />} />
-      <Route path="/vendor/verify-otp" element={<VendorOtpVerification />} />
-      <Route path="/vendor/reset-password" element={<VendorResetPassword />} />
-
-      <Route
-        path="/vendor"
-        element={
-          <VendorProvider>
-            <VendorProtectedRoute>
-              <VendorLayout />
-            </VendorProtectedRoute>
-          </VendorProvider>
-        }
-      >
-        <Route index element={<Navigate to="dashboard" replace />} />
-        <Route path="dashboard" element={<VendorDashboard />} />
-        <Route path="products" element={<VendorPermissionProtectedRoute module="product" action="view"><ProductList /></VendorPermissionProtectedRoute>} />
-        <Route path="products/add" element={<VendorPermissionProtectedRoute module="product" action="add"><AddProduct /></VendorPermissionProtectedRoute>} />
-        <Route path="products/edit/:id" element={<VendorPermissionProtectedRoute module="product" action="edit"><EditProduct /></VendorPermissionProtectedRoute>} />
-        <Route path="products/:id" element={<VendorPermissionProtectedRoute module="product" action="view"><ProductDetails /></VendorPermissionProtectedRoute>} />
-        <Route path="products/:id/variants" element={<VendorPermissionProtectedRoute module="product" action="edit"><ManageVariants /></VendorPermissionProtectedRoute>} />
-        <Route path="assigned-area" element={<VendorAssignedArea />} />
-        <Route path="orders" element={<VendorOrderList />} />
-        <Route path="profile" element={<VendorProfile />} />
-        <Route path="finance" element={<VendorFinance />} />
-        <Route path="customers" element={<VendorCustomerList />} />
-      </Route>
-
-      {/* Admin routes */}
-      <Route path="/admin/*" element={<AdminRoutes />} />
-
-      {/* Delivery Boy routes */}
-      <Route
-        path="/delivery-boy"
-        element={
-          <DeliveryBoyProvider>
-            <Outlet />
-          </DeliveryBoyProvider>
-        }
-      >
-        <Route path="login" element={<DeliveryBoyLogin />} />
-        <Route path="register" element={<DeliveryBoyRegister />} />
-        <Route path="forgot-password" element={<DeliveryBoyForgotPassword />} />
-        <Route path="otp-verify" element={<DeliveryBoyOtpVerification />} />
-        <Route path="reset-password" element={<DeliveryBoyResetPassword />} />
-
-        <Route element={<DeliveryBoyLayout />}>
-          <Route path="dashboard" element={<DeliveryBoyDashboard />} />
-          <Route path="orders" element={<AssignedOrders />} />
-          <Route path="orders/:id" element={<OrderDetail />} />
-          <Route path="orders/:id/map" element={<OnTheWay />} />
-          <Route path="orders/:id/verify" element={<EnterOtp />} />
-          <Route path="orders/:id/success" element={<DeliveredSuccess />} />
-          <Route path="earnings" element={<Earnings />} />
-          <Route path="profile" element={<DeliveryBoyProfile />} />
-          <Route path="support" element={<Support />} />
+        {/* Homepage — CustomerLayout wraps the root route so guests get the full store navbar */}
+        <Route path="/" element={<CustomerLayout />}>
+          <Route index element={<CustomerDashboard />} />
         </Route>
-      </Route>
-    </Routes>
-    </ToastProvider>
+
+        {/* Customer routes */}
+        <Route path="/customer" element={<CustomerLayout />}>
+          <Route path="dashboard" element={<CustomerDashboard />} />
+          <Route path="categories" element={<CustomerDashboard />} />
+          <Route path="category/slug/:slug" element={<CustomerDashboard />} />
+          <Route path="categories/slug/:slug" element={<CustomerDashboard />} />
+          <Route path="trending" element={<CustomerDashboard />} />
+          <Route path="product/:id" element={<ProductDetailsPage />} />
+          <Route path="product/slug/:slug" element={<ProductDetailsPage />} />
+          <Route path="location" element={<LocationPage />} />
+          <Route path="cart" element={<CartPage />} />
+          <Route path="support" element={<HelpSupportPage />} />
+          <Route path="page/:slug" element={<StaticPageViewer />} />
+
+          {/* Protected Customer Routes */}
+          <Route path="checkout" element={<CustomerProtectedRoute><CheckoutPage /></CustomerProtectedRoute>} />
+          <Route path="profile" element={<CustomerProtectedRoute><CustomerProfilePage /></CustomerProtectedRoute>} />
+          <Route path="account" element={<CustomerProtectedRoute><AccountPage /></CustomerProtectedRoute>} />
+          <Route path="orders" element={<CustomerProtectedRoute><OrdersPage /></CustomerProtectedRoute>} />
+          <Route path="orders/:id/track" element={<CustomerProtectedRoute><CustomerOrderTracking /></CustomerProtectedRoute>} />
+          <Route path="wishlist" element={<CustomerProtectedRoute><WishlistPage /></CustomerProtectedRoute>} />
+          <Route path="addresses" element={<CustomerProtectedRoute><AddressesPage /></CustomerProtectedRoute>} />
+          <Route path="refunds" element={<CustomerProtectedRoute><RefundsPage /></CustomerProtectedRoute>} />
+          <Route path="settings" element={<CustomerProtectedRoute><SettingsPage /></CustomerProtectedRoute>} />
+        </Route>
+
+        {/* Vendor routes */}
+        <Route path="/vendor/login" element={<VendorLogin />} />
+        <Route path="/vendor/register" element={<VendorRegister />} />
+        <Route path="/vendor/pending-approval" element={<PendingApproval />} />
+        <Route path="/vendor/forgot-password" element={<VendorForgotPassword />} />
+        <Route path="/vendor/login-otp" element={<VendorLoginOtp />} />
+        <Route path="/vendor/verify-login-otp" element={<VendorVerifyLoginOtp />} />
+        <Route path="/vendor/verify-otp" element={<VendorOtpVerification />} />
+        <Route path="/vendor/reset-password" element={<VendorResetPassword />} />
+
+        <Route
+          path="/vendor"
+          element={
+            <VendorProvider>
+              <VendorProtectedRoute>
+                <VendorLayout />
+              </VendorProtectedRoute>
+            </VendorProvider>
+          }
+        >
+          <Route index element={<Navigate to="dashboard" replace />} />
+          <Route path="dashboard" element={<VendorDashboard />} />
+          <Route path="products" element={<VendorPermissionProtectedRoute module="product" action="view"><ProductList /></VendorPermissionProtectedRoute>} />
+          <Route path="products/add" element={<VendorPermissionProtectedRoute module="product" action="add"><AddProduct /></VendorPermissionProtectedRoute>} />
+          <Route path="products/edit/:id" element={<VendorPermissionProtectedRoute module="product" action="edit"><EditProduct /></VendorPermissionProtectedRoute>} />
+          <Route path="products/:id" element={<VendorPermissionProtectedRoute module="product" action="view"><ProductDetails /></VendorPermissionProtectedRoute>} />
+          <Route path="products/:id/variants" element={<VendorPermissionProtectedRoute module="product" action="edit"><ManageVariants /></VendorPermissionProtectedRoute>} />
+          <Route path="assigned-area" element={<VendorAssignedArea />} />
+          <Route path="orders" element={<VendorOrderList />} />
+          <Route path="profile" element={<VendorProfile />} />
+          <Route path="finance" element={<VendorFinance />} />
+          <Route path="customers" element={<VendorCustomerList />} />
+        </Route>
+
+        {/* Admin routes */}
+        <Route path="/admin/*" element={<AdminRoutes />} />
+
+        {/* Delivery Boy routes */}
+        <Route
+          path="/delivery-boy"
+          element={
+            <DeliveryBoyProvider>
+              <Outlet />
+            </DeliveryBoyProvider>
+          }
+        >
+          <Route path="login" element={<DeliveryBoyLogin />} />
+          <Route path="register" element={<DeliveryBoyRegister />} />
+          <Route path="forgot-password" element={<DeliveryBoyForgotPassword />} />
+          <Route path="otp-verify" element={<DeliveryBoyOtpVerification />} />
+          <Route path="reset-password" element={<DeliveryBoyResetPassword />} />
+
+          <Route element={<DeliveryBoyLayout />}>
+            <Route path="dashboard" element={<DeliveryBoyDashboard />} />
+            <Route path="orders" element={<AssignedOrders />} />
+            <Route path="orders/:id" element={<OrderDetail />} />
+            <Route path="orders/:id/map" element={<OnTheWay />} />
+            <Route path="orders/:id/verify" element={<EnterOtp />} />
+            <Route path="orders/:id/success" element={<DeliveredSuccess />} />
+            <Route path="earnings" element={<Earnings />} />
+            <Route path="profile" element={<DeliveryBoyProfile />} />
+            <Route path="support" element={<Support />} />
+          </Route>
+        </Route>
+      </Routes>
+      </ToastProvider>
+    </HelmetProvider>
   );
 }
 

@@ -1,4 +1,5 @@
 import express from "express";
+import { protectAdmin } from "../middleware/adminAuthMiddleware.js";
 import {
   getAttributes,
   getAttribute,
@@ -8,6 +9,8 @@ import {
 } from "../controllers/attributeController.js";
 
 const router = express.Router();
+
+router.use(protectAdmin);
 
 // Get all attributes
 router.get("/all", getAttributes);

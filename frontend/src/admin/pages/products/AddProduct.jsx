@@ -4,19 +4,18 @@ import { createProduct } from "../../services/productApi";
 import BasicInformation from "./BasicInformation";
 import Description from "./Description";
 import Images from "./Images";
+import SEO from "./SEO";
 
 /**
- * AddProduct — 3-step wizard
+ * AddProduct — 4-step wizard
  *
  * Step 1: Basic Information  (category cascade, name, brand, unit, status)
  * Step 2: Description        (long description text)
  * Step 3: Images             (Cloudinary-backed multi-image upload)
- *
- * On save: product is created; admin is redirected to
- * /admin/products/:id/variants to add pack-size variants.
+ * Step 4: SEO Settings       (meta title, meta description)
  */
 
-const STEPS = ["Basic Information", "Description", "Images"];
+const STEPS = ["Basic Information", "Description", "Images", "SEO Settings"];
 
 const INITIAL_FORM = {
   // Catalog hierarchy
@@ -33,6 +32,9 @@ const INITIAL_FORM = {
   description: "",
   // Images (array of URL strings)
   images: [],
+  // SEO
+  metaTitle: "",
+  metaDescription: "",
 };
 
 export default function AddProduct() {
@@ -83,6 +85,8 @@ export default function AddProduct() {
         isReturnable:  form.isReturnable,
         description:   form.description.trim(),
         images:        form.images,
+        metaTitle:       form.metaTitle ? form.metaTitle.trim() : "",
+        metaDescription: form.metaDescription ? form.metaDescription.trim() : "",
       };
 
       const res = await createProduct(payload);
@@ -151,6 +155,9 @@ export default function AddProduct() {
           )}
           {step === 3 && (
             <Images formData={form} setFormData={setForm} />
+          )}
+          {step === 4 && (
+            <SEO data={form} setData={setForm} />
           )}
         </div>
 

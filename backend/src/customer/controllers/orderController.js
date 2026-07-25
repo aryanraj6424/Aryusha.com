@@ -27,17 +27,12 @@ export const placeOrder = async (req, res) => {
   try {
     let resultOrder = null;
     await runInTransaction(async (session) => {
+      const customerId = req.user._id;
       const {
-        customerId,
         vendorId,
         items,
         deliveryAddress,
-        totalAmount,
-        deliveryCharge,
-        taxAmount,
-        grandTotal,
         couponCode,
-        couponDiscount,
         paymentMethod,
         deliverySlot,
         customerLiveLocation,
@@ -48,11 +43,88 @@ export const placeOrder = async (req, res) => {
         throw new Error("Missing required order fields.");
       }
 
-      // 1. Prevent duplicate/double order submission (within 15 seconds window)
+      // 1. Resolve actual item prices from DB and calculate server totalAmount
+      let serverTotalAmount = 0;
+      const resolvedItems = [];
+      for (const item of items) {
+        let price = Number(item.price || 0);
+        const listing = await VendorListing.findOne({
+          vendorId,
+          variantId: item.variantId,
+        }).session(session);
+
+        if (listing) {
+          price = listing.sellingPrice;
+        } else {
+          const vpLink = await VendorProduct.findOne({
+            vendorId,
+            masterProductId: item.productId,
+          }).session(session);
+
+          if (vpLink) {
+            price = vpLink.price;
+          }
+        }
+
+        const qty = Number(item.qty || 1);
+        serverTotalAmount += price * qty;
+        resolvedItems.push({
+          ...item,
+          price,
+          qty,
+        });
+      }
+
+      // 2. Recalculate coupon discount server-side if couponCode is provided
+      let serverCouponDiscount = 0;
+      if (couponCode) {
+        const Coupon = mongoose.model("Coupon");
+        const codeUpper = String(couponCode).toUpperCase().trim();
+        const coupon = await Coupon.findOne({ code: codeUpper }).session(session);
+
+        if (coupon && coupon.status === "active" && new Date() >= coupon.startDate && new Date() <= coupon.expiryDate && serverTotalAmount >= coupon.minCartValue) {
+          let valid = true;
+          if (coupon.usageLimit !== null && coupon.usedCount >= coupon.usageLimit) {
+            valid = false;
+          }
+          if (valid && customerId && coupon.perCustomerLimit !== null) {
+            const count = await CustomerOrder.countDocuments({ customerId, couponCode: codeUpper }).session(session);
+            if (count >= coupon.perCustomerLimit) {
+              valid = false;
+            }
+          }
+          if (valid) {
+            if (coupon.discountType === "flat") {
+              serverCouponDiscount = Math.min(coupon.discountValue, serverTotalAmount);
+            } else if (coupon.discountType === "percentage") {
+              let discount = (serverTotalAmount * coupon.discountValue) / 100;
+              if (coupon.maxDiscountCap !== null) {
+                discount = Math.min(discount, coupon.maxDiscountCap);
+              }
+              serverCouponDiscount = Math.min(discount, serverTotalAmount);
+            }
+          }
+        }
+      }
+
+      // 3. Recalculate fees server-side based on customer city/zone and total
+      const zoneId = deliveryAddress.city || "";
+      const { breakdown, totalFees } = await calculateOrderFees(serverTotalAmount, zoneId);
+
+      const finalHandlingFee = breakdown.find(f => f.feeType === "handling")?.amount || 0;
+      const finalSmallCartFee = breakdown.find(f => f.feeType === "small_cart")?.amount || 0;
+      const finalDeliveryFee = breakdown.find(f => f.feeType === "delivery_partner")?.amount || 0;
+      const finalGst = breakdown.find(f => f.feeType === "gst")?.amount || 0;
+      const finalRainFee = breakdown.find(f => f.feeType === "rain")?.amount || 0;
+
+      const totalCalculatedFees = finalHandlingFee + finalSmallCartFee + finalDeliveryFee + finalGst + finalRainFee;
+      const finalGrandTotal = Math.max(0, serverTotalAmount - serverCouponDiscount + totalCalculatedFees);
+
+      // Prevent duplicate/double order submission (within 15 seconds window)
       const duplicateWindow = new Date(Date.now() - 15 * 1000);
       const potentialDuplicate = await CustomerOrder.findOne({
         customerId,
-        grandTotal,
+        grandTotal: finalGrandTotal,
         createdAt: { $gte: duplicateWindow },
       }).session(session);
 
@@ -60,10 +132,9 @@ export const placeOrder = async (req, res) => {
         throw new Error("Duplicate order submission detected. Please wait 15 seconds.");
       }
 
-      // 2. Validate stock availability for each item and decrement stock
+      // 4. Validate stock availability for each item and decrement stock
       const operationsToExecute = [];
-      for (const item of items) {
-        // Check standard VendorListing first
+      for (const item of resolvedItems) {
         const listing = await VendorListing.findOne({
           vendorId,
           variantId: item.variantId,
@@ -79,7 +150,6 @@ export const placeOrder = async (req, res) => {
             update: { $inc: { "stock.quantity": -item.qty } },
           });
         } else {
-          // Fallback: Check VendorProduct link
           const vpLink = await VendorProduct.findOne({
             vendorId,
             masterProductId: item.productId,
@@ -109,24 +179,11 @@ export const placeOrder = async (req, res) => {
         }
       }
 
-      // 3. Generate Unique Order ID
+      // 5. Generate Unique Order ID
       const orderId = await generateUniqueId("QK", CustomerOrder, "orderId");
 
-      // 4. Recalculate fees server-side based on customer city/zone and total
-      const zoneId = deliveryAddress.city || "";
-      const { breakdown, totalFees } = await calculateOrderFees(totalAmount, zoneId);
-
-      const finalHandlingFee = breakdown.find(f => f.feeType === "handling")?.amount || 0;
-      const finalSmallCartFee = breakdown.find(f => f.feeType === "small_cart")?.amount || 0;
-      const finalDeliveryFee = breakdown.find(f => f.feeType === "delivery_partner")?.amount || 0;
-      const finalGst = breakdown.find(f => f.feeType === "gst")?.amount || 0;
-      const finalRainFee = breakdown.find(f => f.feeType === "rain")?.amount || 0;
-
-      const totalCalculatedFees = finalHandlingFee + finalSmallCartFee + finalDeliveryFee + finalGst + finalRainFee;
-      const finalGrandTotal = Math.max(0, totalAmount - couponDiscount + totalCalculatedFees);
-
       // Calculate and lock the commission at order time
-      const commissionDetails = await calculateVendorOrderCommission({ items }, vendorId);
+      const commissionDetails = await calculateVendorOrderCommission({ items: resolvedItems }, vendorId);
 
       // Create the CustomerOrder record
       const [order] = await CustomerOrder.create([
@@ -145,7 +202,7 @@ export const placeOrder = async (req, res) => {
             commissionRateApplied: item.commissionRateApplied,
             commissionResolutionLevel: item.commissionResolutionLevel
           })),
-          totalAmount,
+          totalAmount: serverTotalAmount,
           deliveryCharge: finalDeliveryFee,
           taxAmount: finalGst,
           handlingFee: finalHandlingFee,
@@ -154,7 +211,7 @@ export const placeOrder = async (req, res) => {
           feeBreakdown: breakdown.map(f => ({ feeType: f.feeType, label: f.label, amount: f.amount })),
           grandTotal: finalGrandTotal,
           couponCode: couponCode || null,
-          couponDiscount: couponDiscount || 0,
+          couponDiscount: serverCouponDiscount,
           paymentMethod: paymentMethod || "COD",
           paymentStatus: paymentMethod === "Online" ? "Paid" : "Pending",
           orderStatus: "Pending",
@@ -171,8 +228,7 @@ export const placeOrder = async (req, res) => {
         }
       ], { session });
 
-      if (couponCode) {
-        // Lazy load/lookup the Coupon model to update its usage count
+      if (couponCode && serverCouponDiscount > 0) {
         const Coupon = mongoose.model("Coupon");
         await Coupon.updateOne(
           { code: couponCode.toUpperCase() },
@@ -186,7 +242,6 @@ export const placeOrder = async (req, res) => {
       resultOrder = order;
     });
 
-    // Clean cart notification/confirmation simulation
     console.log(`Notification sent to Customer: Order placed successfully!`);
     const serializedOrder = serializeCustomerOrder(resultOrder);
 
@@ -206,7 +261,7 @@ export const placeOrder = async (req, res) => {
 // @access  Public (Customer)
 export const getCustomerOrders = async (req, res) => {
   try {
-    const orders = await CustomerOrder.find({ customerId: req.params.userId })
+    const orders = await CustomerOrder.find({ customerId: req.user._id })
       .select("-vendorCommission")
       .populate("vendorId", "shopName phone")
       .sort({ createdAt: -1 });
@@ -237,6 +292,11 @@ export const getOrderById = async (req, res) => {
       return res.status(404).json({ success: false, message: "Order not found." });
     }
 
+    const orderCustId = order.customerId._id ? order.customerId._id.toString() : order.customerId.toString();
+    if (orderCustId !== req.user._id.toString()) {
+      return res.status(403).json({ success: false, message: "Unauthorized access to order details." });
+    }
+
     const serializedOrder = serializeCustomerOrder(order);
 
     res.status(200).json({
@@ -260,6 +320,11 @@ export const downloadInvoice = async (req, res) => {
 
     if (!order) {
       return res.status(404).json({ success: false, message: "Order not found." });
+    }
+
+    const orderCustId = order.customerId._id ? order.customerId._id.toString() : order.customerId.toString();
+    if (orderCustId !== req.user._id.toString()) {
+      return res.status(403).json({ success: false, message: "Unauthorized access to invoice." });
     }
 
     if (order.orderStatus !== "Delivered") {

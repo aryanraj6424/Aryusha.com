@@ -216,10 +216,12 @@ function DesktopNavbar() {
     syncUser();
     updateCartCount();
     window.addEventListener("cart-updated", updateCartCount);
+    window.addEventListener("location-updated", syncUser);
     window.addEventListener("auth-updated", syncUser);
     window.addEventListener("storage", syncUser);
     return () => {
       window.removeEventListener("cart-updated", updateCartCount);
+      window.removeEventListener("location-updated", syncUser);
       window.removeEventListener("auth-updated", syncUser);
       window.removeEventListener("storage", syncUser);
     };
@@ -253,19 +255,11 @@ function DesktopNavbar() {
             onClick={() => navigate("/")}
             className="cursor-pointer flex items-center gap-2 lg:gap-3 flex-shrink-0"
           >
-            <div className="w-10 h-10 lg:w-12 lg:h-12 bg-purple-600 rounded-2xl flex items-center justify-center text-white text-lg lg:text-xl font-bold">
-              Q
-            </div>
-
-            <div>
-              <h1 className="text-xl lg:text-2xl font-bold text-purple-700">
-                QuickCart
-              </h1>
-
-              <p className="text-xs text-gray-500 hidden lg:block">
-                Delivery in 10 mins ⚡
-              </p>
-            </div>
+            <img
+              src="/aryushalogo.png"
+              alt="Aryusha"
+              className="h-10 lg:h-12 w-auto object-contain"
+            />
           </div>
 
           {/* Location */}

@@ -5,9 +5,11 @@ import { ShoppingBag, ShoppingCart, Heart, Info, CheckCircle, AlertTriangle, Tru
 import { useToast } from "../../components/Toast";
 import DOMPurify from "dompurify";
 import useProductVariant from "../hooks/useProductVariant";
+import SEO from "../../components/SEO";
 
 export default function ProductDetailsPage() {
-  const { id } = useParams();
+  const { id, slug } = useParams();
+  const targetParam = slug || id;
   const navigate = useNavigate();
   const { showToast } = useToast();
   
@@ -35,6 +37,14 @@ export default function ProductDetailsPage() {
   const [isWishlisted, setIsWishlisted] = useState(false);
   const [similarProducts, setSimilarProducts] = useState([]);
   const [similarLoading, setSimilarLoading] = useState(true);
+  const [selectedAddress, setSelectedAddress] = useState(() => {
+    try {
+      const stored = localStorage.getItem("selectedAddress");
+      return stored ? JSON.parse(stored) : null;
+    } catch {
+      return null;
+    }
+  });
 
   const fetchSimilarProducts = async () => {
     if (!product?.categoryId?._id) return;
@@ -299,7 +309,6 @@ export default function ProductDetailsPage() {
     }
   };
 
-
   useEffect(() => {
     const fetchProduct = async () => {
       try {
@@ -315,10 +324,21 @@ export default function ProductDetailsPage() {
 
         const res = await axios.get(`${import.meta.env.VITE_API_URL}/products`, { params });
         const prods = res.data.products || [];
-        const found = prods.find((p) => p._id === id);
+        
+        const isObjectId = /^[0-9a-fA-F]{24}$/.test(targetParam);
+        const found = prods.find((p) => 
+          isObjectId 
+            ? p._id === targetParam 
+            : p.slug === targetParam || (p.name && p.name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') === targetParam)
+        );
 
         if (found) {
           setProduct(found);
+
+          // 301 Client Redirect from raw ID URL to canonical slug URL
+          if (isObjectId && found.slug) {
+            navigate(`/customer/product/slug/${found.slug}`, { replace: true });
+          }
           
           // Fetch product family details to load country of origin, shelf life, FSSAI, SEO, etc.
           const famId = found.familyId?._id || found.familyId;
@@ -341,19 +361,19 @@ export default function ProductDetailsPage() {
       }
     };
     fetchProduct();
-  }, [id, navigate]);
+  }, [id, slug, targetParam, navigate]);
 
   // SEO Rendering & JSON-LD Injection
   useEffect(() => {
     if (!product) return;
 
-    // Resolve fallbacks dynamically at render time as required
-    const seoTitle = family?.metaTitle || cleanName || product.name;
-    const seoDescription = family?.metaDescription || product.description || cleanName || product.name;
-    const seoCanonical = family?.canonicalUrl || window.location.href;
-    const seoOgImage = family?.ogImage || selectedImage || (product.images?.[0] || "");
+    // Resolve fallbacks with exact priority order: Product -> ProductFamily -> Product Name/Description
+    const seoTitle = product.metaTitle || family?.metaTitle || cleanName || product.name;
+    const seoDescription = product.metaDescription || family?.metaDescription || product.description || cleanName || product.name;
+    const seoCanonical = product.canonicalUrl || family?.canonicalUrl || window.location.href;
+    const seoOgImage = product.ogImage || family?.ogImage || selectedImage || (product.images?.[0] || "");
 
-    document.title = `${seoTitle} | Aryusha.com`;
+    document.title = `${seoTitle} | Aryusha`;
 
     const setMetaTag = (name, property, content) => {
       if (!content) return;
@@ -441,10 +461,49 @@ export default function ProductDetailsPage() {
     allImages.push("https://via.placeholder.com/400");
   }
 
-  const selectedAddress = JSON.parse(localStorage.getItem("selectedAddress") || "null");
+  const currentTitle = `${family?.metaTitle || cleanName || product.name} | Aryusha`;
+  const currentDesc = family?.metaDescription || product.description || `Buy ${cleanName || product.name} online at best prices with fast delivery on Aryusha.`;
+  const currentOgImg = family?.ogImage || selectedImage || (product.images?.[0] || "https://aryusha.in/aryushalogo.png");
+
+  const productLd = {
+    "@context": "https://schema.org",
+    "@type": "Product",
+    "name": cleanName || product.name,
+    "image": currentOgImg,
+    "description": currentDesc,
+    "offers": {
+      "@type": "Offer",
+      "priceCurrency": "INR",
+      "price": displayPrice || product.primaryPrice || 0,
+      "itemCondition": "https://schema.org/NewCondition",
+      "availability": isOutOfStock ? "https://schema.org/OutOfStock" : "https://schema.org/InStock",
+      "url": window.location.href,
+    }
+  };
+
+  const categorySlug = product.categoryId?.slug || (product.categoryId?.name ? product.categoryId.name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') : null);
+  const categoryUrl = categorySlug
+    ? `https://aryusha.in/customer/category/slug/${categorySlug}`
+    : (product.categoryId?._id ? `https://aryusha.in/customer/dashboard?category=${product.categoryId._id}` : "https://aryusha.in/customer/categories");
+
+  const breadcrumbLd = {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    "itemListElement": [
+      { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://aryusha.in" },
+      ...(product.categoryId?.name ? [{ "@type": "ListItem", "position": 2, "name": product.categoryId.name, "item": categoryUrl }] : []),
+      { "@type": "ListItem", "position": product.categoryId?.name ? 3 : 2, "name": cleanName || product.name, "item": window.location.href }
+    ]
+  };
 
   return (
     <>
+      <SEO
+        title={currentTitle}
+        description={currentDesc}
+        ogImage={currentOgImg}
+        jsonLd={[productLd, breadcrumbLd]}
+      />
       {/* MOBILE ONLY VIEW (Scoped to < 768px viewports) */}
       <div className="block md:hidden w-full px-4 pb-24 pt-3 bg-white space-y-4 select-none">
         {/* Breadcrumb Navigation */}
@@ -1227,7 +1286,7 @@ function ProductCard({ product }) {
       <div>
         {/* Product Image */}
         <div 
-          onClick={() => navigate(`/customer/product/${product._id}`)}
+          onClick={() => navigate(product.slug ? `/customer/product/slug/${product.slug}` : `/customer/product/${product._id}`)}
           className="h-28 sm:h-36 md:h-40 w-full rounded-xl bg-slate-50 flex items-center justify-center overflow-hidden mb-2 cursor-pointer hover:opacity-90 transition p-1"
         >
           <img
@@ -1250,7 +1309,7 @@ function ProductCard({ product }) {
           )}
         </div>
         <h3 
-          onClick={() => navigate(`/customer/product/${product._id}`)}
+          onClick={() => navigate(product.slug ? `/customer/product/slug/${product.slug}` : `/customer/product/${product._id}`)}
           className="font-bold text-slate-800 text-xs sm:text-sm line-clamp-2 min-h-[32px] sm:min-h-[40px] cursor-pointer hover:text-purple-650 transition leading-tight mb-1"
         >
           {cleanName || product.name}

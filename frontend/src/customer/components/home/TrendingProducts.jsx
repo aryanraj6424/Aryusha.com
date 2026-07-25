@@ -93,7 +93,7 @@ function ProductCard({ product }) {
       <div>
         {/* Product Image */}
         <div 
-          onClick={() => navigate(`/customer/product/${product._id}`)}
+          onClick={() => navigate(product.slug ? `/customer/product/slug/${product.slug}` : `/customer/product/${product._id}`)}
           className="h-28 sm:h-36 md:h-40 w-full rounded-xl bg-slate-50 flex items-center justify-center overflow-hidden mb-2 cursor-pointer hover:opacity-90 transition p-1"
         >
           <img
@@ -116,7 +116,7 @@ function ProductCard({ product }) {
           )}
         </div>
         <h3 
-          onClick={() => navigate(`/customer/product/${product._id}`)}
+          onClick={() => navigate(product.slug ? `/customer/product/slug/${product.slug}` : `/customer/product/${product._id}`)}
           className="font-bold text-slate-800 text-xs sm:text-sm line-clamp-2 min-h-[32px] sm:min-h-[40px] cursor-pointer hover:text-purple-650 transition leading-tight mb-1"
         >
           {cleanName || product.name}

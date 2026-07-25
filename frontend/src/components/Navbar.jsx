@@ -32,19 +32,11 @@ function Navbar() {
               onClick={() => navigate("/")}
               className="cursor-pointer flex items-center gap-3"
             >
-              <div className="w-12 h-12 bg-purple-600 rounded-2xl flex items-center justify-center text-white font-bold text-xl">
-                Q
-              </div>
-
-              <div>
-                <h1 className="text-2xl font-bold text-purple-700">
-                  QuickCart
-                </h1>
-
-                <p className="text-xs text-gray-500">
-                  Delivery in 10 mins ⚡
-                </p>
-              </div>
+              <img
+                src="/aryushalogo.png"
+                alt="Aryusha"
+                className="h-10 lg:h-12 w-auto object-contain"
+              />
             </div>
 
             {/* Delivery Location */}
