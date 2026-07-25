@@ -172,12 +172,11 @@ export default function Footer() {
               onClick={() => navigate("/")}
               className="cursor-pointer flex items-center gap-3 w-fit"
             >
-              <div className="w-10 h-10 bg-purple-600 rounded-2xl flex items-center justify-center text-white text-lg font-bold shadow-md shadow-purple-100">
-                Q
-              </div>
-              <h1 className="text-xl font-bold text-purple-700 tracking-tight">
-                QuickCart
-              </h1>
+              <img
+                src="/aryushalogo.png"
+                alt="Aryusha"
+                className="h-10 w-auto object-contain"
+              />
             </div>
             
             <p className="text-xs text-slate-500 font-medium leading-relaxed max-w-xs">
@@ -290,7 +289,7 @@ export default function Footer() {
       <div className="bg-slate-50 border-t border-purple-50 py-6">
         <div className="max-w-[1400px] mx-auto px-4 lg:px-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs font-semibold text-slate-500 text-center sm:text-left">
           <p>
-            © 2025 <span className="text-purple-600 font-bold">QuickCart</span>. All rights reserved.
+            © 2025 <span className="text-purple-600 font-bold">Aryusha</span>. All rights reserved.
           </p>
           <p className="flex items-center gap-1 bg-white px-3 py-1.5 rounded-full border border-purple-100 shadow-sm w-fit mx-auto sm:mx-0">
             <span>Proudly made for our customers</span>

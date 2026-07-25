@@ -142,7 +142,11 @@ export const createProduct = async (req, res) => {
       mrp,
       sellingPrice,
       sku,
-      isReturnable
+      isReturnable,
+      metaTitle,
+      metaDescription,
+      canonicalUrl,
+      ogImage
     } = req.body;
 
     if (!categoryId || !subCategoryId || !familyId || !name || !unitType) {
@@ -191,6 +195,10 @@ export const createProduct = async (req, res) => {
       unitType: normalizedUnitType,
       status: initialStatus,
       isReturnable: isReturnable === true || isReturnable === "true",
+      metaTitle: metaTitle ? metaTitle.trim() : "",
+      metaDescription: metaDescription ? metaDescription.trim() : "",
+      canonicalUrl: canonicalUrl ? canonicalUrl.trim() : "",
+      ogImage: ogImage ? ogImage.trim() : "",
       createdBy: creatorId,
       creatorModel,
       approvalHistory: [
@@ -266,7 +274,11 @@ export const updateProduct = async (req, res) => {
       description,
       images,
       status,
-      isReturnable
+      isReturnable,
+      metaTitle,
+      metaDescription,
+      canonicalUrl,
+      ogImage
     } = req.body;
 
     if (name) product.name = name;
@@ -285,6 +297,10 @@ export const updateProduct = async (req, res) => {
     if (isReturnable !== undefined) {
       product.isReturnable = isReturnable === true || isReturnable === "true";
     }
+    if (metaTitle !== undefined) product.metaTitle = metaTitle;
+    if (metaDescription !== undefined) product.metaDescription = metaDescription;
+    if (canonicalUrl !== undefined) product.canonicalUrl = canonicalUrl;
+    if (ogImage !== undefined) product.ogImage = ogImage;
     
     // Status update
     if (status) {

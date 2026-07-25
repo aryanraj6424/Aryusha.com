@@ -1,16 +1,18 @@
 import { useState, useEffect, useCallback } from "react";
-import { useSearchParams, useNavigate, useLocation } from "react-router-dom";
+import { useSearchParams, useNavigate, useLocation, useParams } from "react-router-dom";
 import axios from "axios";
 import { MapPin, Navigation, Search as SearchIcon } from "lucide-react";
 import HeroBanner from "../components/home/HeroBanner";
 import CategorySection from "../components/home/CategorySection";
 import TrendingProducts from "../components/home/TrendingProducts";
 import ComingSoon from "../components/location/ComingSoon";
+import SEO from "../../components/SEO";
 import { getAddressFromCoords } from "../../services/locationApi";
 
 function CustomerDashboard() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
+  const { slug: routeSlug } = useParams();
   const [address, setAddress] = useState(null);
   const [products, setProducts] = useState([]);
   const [groupedProducts, setGroupedProducts] = useState({});
@@ -24,7 +26,7 @@ function CustomerDashboard() {
 
   // Search parameters for filters (URL search is the single source of truth)
   const [searchParams, setSearchParams] = useSearchParams();
-  const category = searchParams.get("category") || "all";
+  const category = routeSlug || searchParams.get("category") || "all";
   const searchQuery = searchParams.get("search") || "";
   const subCategory = searchParams.get("subCategory") || "all";
 
@@ -271,8 +273,57 @@ function CustomerDashboard() {
     );
   }
 
+  const homeSchemas = [
+    {
+      "@context": "https://schema.org",
+      "@type": "Organization",
+      "name": "Aryusha",
+      "url": "https://aryusha.in",
+      "logo": "https://aryusha.in/aryushalogo.png",
+      "sameAs": []
+    },
+    {
+      "@context": "https://schema.org",
+      "@type": "WebSite",
+      "name": "Aryusha",
+      "url": "https://aryusha.in",
+      "potentialAction": {
+        "@type": "SearchAction",
+        "target": "https://aryusha.in/?search={search_term_string}",
+        "query-input": "required name=search_term_string"
+      }
+    }
+  ];
+
+  const isHomePage = pathname === "/";
+  const isCategoryPage = pathname === "/customer/categories";
+
+  const renderSEO = () => {
+    if (isHomePage) {
+      return (
+        <SEO 
+          title="Aryusha - Quick Grocery Delivery | Fresh & Reliable"
+          description="Order fresh groceries, dairy, bakery, and daily essentials online with Aryusha. Fast same day delivery at best prices."
+          canonicalUrl="https://aryusha.in/"
+          jsonLd={homeSchemas}
+        />
+      );
+    }
+    if (isCategoryPage) {
+      return (
+        <SEO 
+          title="Browse Categories | Aryusha Grocery Delivery"
+          description="Explore a wide range of fresh groceries, dairy, bakery, snacks, and personal care products on Aryusha."
+          canonicalUrl="https://aryusha.in/customer/categories"
+        />
+      );
+    }
+    return <SEO title="Customer Dashboard | Aryusha" noindex={true} />;
+  };
+
   return (
     <div className="py-4 space-y-6">
+      {renderSEO()}
       {loading || geoStatus === "requesting" ? (
         /* Loading State */
         <div className="flex flex-col items-center justify-center py-20 bg-white rounded-3xl border border-slate-50 shadow-sm">

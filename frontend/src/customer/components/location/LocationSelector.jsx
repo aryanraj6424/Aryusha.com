@@ -65,6 +65,12 @@ function LocationSelector() {
 
   useEffect(() => {
     loadSavedAddresses();
+
+    // Lock body scroll while location picker is active
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = "";
+    };
   }, []);
 
   // Initialize Map
@@ -108,6 +114,13 @@ function LocationSelector() {
     if (!hasStored) {
       handleCurrentLocation();
     }
+
+    // Invalidate map size after mounting to handle mobile modal dimensions
+    setTimeout(() => {
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.invalidateSize();
+      }
+    }, 250);
 
     return () => {
       if (mapInstanceRef.current) {
@@ -211,6 +224,8 @@ function LocationSelector() {
       city: address.city,
     };
     localStorage.setItem("selectedAddress", JSON.stringify(currentAddress));
+    window.dispatchEvent(new Event("location-updated"));
+    window.dispatchEvent(new Event("storage"));
     showToast({ type: "success", message: "Location Selected Successfully" });
     navigate("/");
   };
@@ -233,12 +248,14 @@ function LocationSelector() {
       fullAddress: savedAddr.fullAddress || `${savedAddr.houseNo || ""}, ${savedAddr.area || ""}, ${savedAddr.city || ""}, ${savedAddr.state || ""}`.replace(/^,|,$/g, "").trim(),
     };
     localStorage.setItem("selectedAddress", JSON.stringify(sessionAddr));
+    window.dispatchEvent(new Event("location-updated"));
+    window.dispatchEvent(new Event("storage"));
     showToast({ type: "success", message: "Address Selected Successfully" });
     navigate("/");
   };
 
   return (
-    <div className="max-w-md mx-auto bg-white rounded-3xl shadow-lg overflow-hidden flex flex-col relative h-[680px]">
+    <div className="fixed inset-0 z-[100] md:relative md:z-auto w-full md:max-w-xl md:mx-auto bg-white md:rounded-3xl shadow-2xl flex flex-col h-full md:h-[650px] overflow-hidden pt-[env(safe-area-inset-top,0px)] pb-[env(safe-area-inset-bottom,0px)]">
       {/* Header */}
       <div className="p-4 border-b flex justify-between items-center bg-white z-10 flex-shrink-0">
         <div>

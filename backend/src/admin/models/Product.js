@@ -88,6 +88,11 @@ const productSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    slug: { type: String, lowercase: true, trim: true },
+    metaTitle: { type: String, default: "" },
+    metaDescription: { type: String, default: "" },
+    canonicalUrl: { type: String, default: "" },
+    ogImage: { type: String, default: "" },
   },
   {
     timestamps: true,

@@ -27,12 +27,18 @@ export const protectAdmin =
           process.env.JWT_SECRET
         );
 
-      req.admin =
-        await Admin.findById(
-          decoded.id
-        ).select(
-          "-password"
-        );
+      const admin = await Admin.findById(
+        decoded.id
+      ).select("-password");
+
+      if (!admin) {
+        return res.status(401).json({
+          success: false,
+          message: "Admin Account Not Found",
+        });
+      }
+
+      req.admin = admin;
 
       next();
     } catch (error) {

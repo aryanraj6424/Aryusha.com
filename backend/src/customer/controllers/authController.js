@@ -10,6 +10,15 @@ import { generateAdminToken } from "../../admin/utils/generateAdminToken.js";
 import { getFirebaseAdmin } from "../../config/firebase.js";
 import { verifyGoogleToken } from "../../config/googleOAuth.js";
 
+const sanitizeUser = (user) => {
+  if (!user) return null;
+  const obj = user.toObject ? user.toObject() : { ...user };
+  delete obj.password;
+  delete obj.otp;
+  delete obj.otpExpires;
+  return obj;
+};
+
 /*
 |--------------------------------------------------------------------------
 | Signup
@@ -28,7 +37,7 @@ export const signup = async (req, res) => {
     const user = await User.create({ fullName, phoneNumber, email, password: hashedPassword });
     const token = generateToken(user._id);
 
-    res.status(201).json({ success: true, message: "Account Created Successfully", user, token });
+    res.status(201).json({ success: true, message: "Account Created Successfully", user: sanitizeUser(user), token });
   } catch (error) {
     console.error("SIGNUP ERROR:", error);
     res.status(500).json({ success: false, message: error.message });
@@ -55,7 +64,7 @@ export const login = async (req, res) => {
     }
 
     const token = generateToken(user._id);
-    res.status(200).json({ success: true, message: "Login Successful", user, token });
+    res.status(200).json({ success: true, message: "Login Successful", user: sanitizeUser(user), token });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -104,7 +113,7 @@ export const googleLogin = async (req, res) => {
     }
 
     const token = generateToken(user._id);
-    res.status(200).json({ success: true, message: "Google login successful", user, token });
+    res.status(200).json({ success: true, message: "Google login successful", user: sanitizeUser(user), token });
   } catch (error) {
     console.error("Google Login Error:", error);
     res.status(401).json({
@@ -133,7 +142,9 @@ export const forgotPassword = async (req, res) => {
     user.otpExpires = Date.now() + 30 * 60 * 1000;
     await user.save();
 
-    console.log("Generated OTP:", otp);
+    if (process.env.NODE_ENV === "development") {
+      console.log("Generated OTP:", otp);
+    }
     res.status(200).json({ success: true, message: "OTP Sent Successfully" });
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -162,8 +173,12 @@ export const verifyOtp = async (req, res) => {
       return res.status(400).json({ message: "OTP Expired" });
     }
 
+    user.otp = "VERIFIED";
+    user.otpExpires = new Date(Date.now() + 15 * 60 * 1000);
+    await user.save();
+
     const token = generateToken(user._id);
-    res.status(200).json({ success: true, message: "OTP Verified", user, token });
+    res.status(200).json({ success: true, message: "OTP Verified", user: sanitizeUser(user), token });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -181,6 +196,10 @@ export const resetPassword = async (req, res) => {
     const user = await User.findOne({ phoneNumber });
     if (!user) {
       return res.status(404).json({ message: "User not found" });
+    }
+
+    if (user.otp !== "VERIFIED" || !user.otpExpires || user.otpExpires.getTime() < Date.now()) {
+      return res.status(400).json({ message: "OTP verification required before resetting password." });
     }
 
     user.password = await bcrypt.hash(password, 10);
@@ -218,7 +237,7 @@ export const updateProfile = async (req, res) => {
       { new: true, runValidators: false }
     );
 
-    res.status(200).json({ success: true, message: "Profile updated successfully.", user: updated });
+    res.status(200).json({ success: true, message: "Profile updated successfully.", user: sanitizeUser(updated) });
   } catch (error) {
     console.error("Update Profile Error:", error);
     res.status(500).json({ success: false, message: error.message });
@@ -262,7 +281,7 @@ export const firebaseLogin = async (req, res) => {
         });
       }
       const token = generateToken(user._id);
-      return res.status(200).json({ success: true, message: "Login successful", token, user });
+      return res.status(200).json({ success: true, message: "Login successful", token, user: sanitizeUser(user) });
     }
 
     if (role === "vendor") {
@@ -277,7 +296,9 @@ export const firebaseLogin = async (req, res) => {
       if (vendor.accountStatus === "deactivated") return res.status(403).json({ success: false, message: "Your account has been deactivated." });
 
       const token = generateVendorToken(vendor._id);
-      return res.status(200).json({ success: true, message: "Login successful", token, vendor });
+      const vendorObj = vendor.toObject ? vendor.toObject() : { ...vendor };
+      delete vendorObj.password;
+      return res.status(200).json({ success: true, message: "Login successful", token, vendor: vendorObj });
     }
 
     if (role === "delivery-boy") {
@@ -289,7 +310,9 @@ export const firebaseLogin = async (req, res) => {
       if (deliveryBoy.accountStatus !== "active") return res.status(403).json({ success: false, message: `Your account is ${deliveryBoy.accountStatus}.` });
 
       const token = generateToken(deliveryBoy._id);
-      return res.status(200).json({ success: true, message: "Login successful", token, deliveryBoy });
+      const dbObj = deliveryBoy.toObject ? deliveryBoy.toObject() : { ...deliveryBoy };
+      delete dbObj.password;
+      return res.status(200).json({ success: true, message: "Login successful", token, deliveryBoy: dbObj });
     }
 
     if (role === "admin") {
@@ -298,7 +321,11 @@ export const firebaseLogin = async (req, res) => {
         return res.status(404).json({ success: false, message: `Admin account not found for phone number: ${verifiedPhone}` });
       }
       const token = generateAdminToken(adminUser._id);
-      return res.status(200).json({ success: true, message: "Login successful", token, admin: adminUser });
+      const adminObj = adminUser.toObject ? adminUser.toObject() : { ...adminUser };
+      delete adminObj.password;
+      delete adminObj.otp;
+      delete adminObj.otpExpiry;
+      return res.status(200).json({ success: true, message: "Login successful", token, admin: adminObj });
     }
 
     return res.status(400).json({ success: false, message: "Invalid role specified." });

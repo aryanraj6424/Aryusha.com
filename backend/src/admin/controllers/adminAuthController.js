@@ -4,6 +4,15 @@ import bcrypt from "bcryptjs";
 import { generateAdminOtp } from "../utils/generateAdminOtp.js";
 import { generateAdminToken } from "../utils/generateAdminToken.js";
 
+const sanitizeAdmin = (admin) => {
+  if (!admin) return null;
+  const obj = admin.toObject ? admin.toObject() : { ...admin };
+  delete obj.password;
+  delete obj.otp;
+  delete obj.otpExpiry;
+  return obj;
+};
+
 // =========================
 // Login Admin
 // =========================
@@ -53,7 +62,7 @@ export const loginAdmin =
         message:
           "Login Successful",
         token,
-        admin,
+        admin: sanitizeAdmin(admin),
       });
     } catch (error) {
       console.log(error);
@@ -100,18 +109,11 @@ export const forgotPassword =
 
       await admin.save();
 
-      console.log(
-        "=================="
-      );
-
-      console.log(
-        "ADMIN OTP:",
-        otp
-      );
-
-      console.log(
-        "=================="
-      );
+      if (process.env.NODE_ENV === "development") {
+        console.log("==================");
+        console.log("ADMIN OTP:", otp);
+        console.log("==================");
+      }
 
       res.status(200).json({
         success: true,
@@ -175,6 +177,10 @@ export const verifyOtp =
         });
       }
 
+      admin.otp = "VERIFIED";
+      admin.otpExpiry = new Date(Date.now() + 15 * 60 * 1000);
+      await admin.save();
+
       res.status(200).json({
         success: true,
         message:
@@ -213,6 +219,13 @@ export const resetPassword =
           success: false,
           message:
             "Admin not found",
+        });
+      }
+
+      if (admin.otp !== "VERIFIED" || !admin.otpExpiry || new Date() > admin.otpExpiry) {
+        return res.status(400).json({
+          success: false,
+          message: "OTP verification required before resetting password.",
         });
       }
 

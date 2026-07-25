@@ -1,8 +1,37 @@
 import express from "express";
+import jwt from "jsonwebtoken";
+import User from "../customer/models/User.js";
+import Admin from "../admin/models/Admin.js";
+import Vendor from "../vendor/models/Vendor.js";
+import DeliveryBoy from "../deliveryBoy/models/DeliveryBoy.js";
 import { uploadMiddleware } from "../middleware/uploadMiddleware.js";
 import { uploadToCloudinary, deleteFromCloudinary } from "../utils/imageUpload.js";
 
 const router = express.Router();
+
+// Middleware to protect upload & delete for any authenticated user
+const protectUpload = async (req, res, next) => {
+  try {
+    const token = req.headers.authorization?.split(" ")[1];
+    if (!token) {
+      return res.status(401).json({ success: false, message: "Unauthorized - No Token Provided" });
+    }
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const user = (await User.findById(decoded.id)) ||
+                 (await Admin.findById(decoded.id)) ||
+                 (await Vendor.findById(decoded.id)) ||
+                 (await DeliveryBoy.findById(decoded.id));
+    if (!user) {
+      return res.status(401).json({ success: false, message: "Account Not Found" });
+    }
+    req.user = user;
+    next();
+  } catch (error) {
+    return res.status(401).json({ success: false, message: "Token Invalid or Expired" });
+  }
+};
+
+router.use(protectUpload);
 
 // Upload endpoint
 router.post("/", uploadMiddleware.single("file"), async (req, res) => {

@@ -28,6 +28,7 @@
 
 
 import express from "express";
+import { protectAdmin } from "../middleware/adminAuthMiddleware.js";
 
 import {
   getPendingVendors,
@@ -52,6 +53,8 @@ import {
 
 const router =
   express.Router();
+
+router.use(protectAdmin);
 
 // Dashboard Stats
 router.get(

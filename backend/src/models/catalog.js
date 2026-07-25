@@ -241,7 +241,12 @@ const productSchema = new Schema(
       }
     ],
     averageRating: { type: Number, default: 0 },
-    totalReviews: { type: Number, default: 0 }
+    totalReviews: { type: Number, default: 0 },
+    // SEO fields
+    metaTitle: { type: String, default: "" },
+    metaDescription: { type: String, default: "" },
+    canonicalUrl: { type: String, default: "" },
+    ogImage: { type: String, default: "" }
   },
   { timestamps: true }
 );

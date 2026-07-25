@@ -474,8 +474,11 @@ function AddressesPage() {
       const user = JSON.parse(
         localStorage.getItem("user")
       );
+      const token =
+        localStorage.getItem("userToken") ||
+        localStorage.getItem("token");
 
-      if (!user) return;
+      if (!user || !token) return;
 
       const response =
         await getUserAddresses(user._id);
@@ -484,7 +487,13 @@ function AddressesPage() {
         response.addresses || []
       );
     } catch (error) {
-      console.error(error);
+      if (error.response?.status === 401) {
+        localStorage.removeItem("userToken");
+        localStorage.removeItem("token");
+        localStorage.removeItem("user");
+      } else {
+        console.error("Load addresses error:", error);
+      }
     }
   };
 

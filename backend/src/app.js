@@ -35,6 +35,7 @@ import customerCartRoutes from "./customer/routes/cartRoutes.js";
 import customerWishlistRoutes from "./customer/routes/wishlistRoutes.js";
 import deliveryBoyAuthRoutes from "./deliveryBoy/routes/deliveryBoyAuthRoutes.js";
 import deliveryBoyRoutes from "./deliveryBoy/routes/deliveryBoyRoutes.js";
+import sitemapRoutes from "./routes/sitemapRoutes.js";
 const app = express();
 
 /*
@@ -189,6 +190,9 @@ app.use("/api/location", locationRoutes);
 
 // Catalog Routes (mounted at the bottom to prevent intercepting other /api routes)
 app.use("/api", catalogRoutes);
+
+// Sitemap & SEO Routes
+app.use("/", sitemapRoutes);
 
 
 

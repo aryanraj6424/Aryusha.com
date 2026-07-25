@@ -9,6 +9,8 @@ import axios from "axios";
 
 const API_BASE = "http://localhost:5000/api";
 
+import SEO from "../../components/SEO";
+
 /* ─── validation ──────────────────────────────────────────── */
 function validate(formData) {
   const errors = {};
@@ -87,17 +89,18 @@ export default function LoginPage() {
 
   return (
     <AuthLayout>
+      <SEO title="Login | Aryusha" noindex={true} />
       {/* Headline */}
-      <div className="mb-6">
-        <h2 className="text-2xl font-black text-[#1F2937] tracking-tight">Welcome Back 👋</h2>
-        <p className="text-sm text-[#6B7280] mt-1 font-medium">Login to continue shopping</p>
+      <div className="mb-5 sm:mb-6">
+        <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">Welcome Back 👋</h2>
+        <p className="text-sm text-slate-500 mt-1 font-medium">Login to continue shopping on Aryusha</p>
       </div>
 
       {/* Form */}
       <form onSubmit={handleSubmit} noValidate className="space-y-4">
         <InputField
           id="login-phone"
-          label="Phone Number / Email"
+          label="PHONE NUMBER / EMAIL"
           type="text"
           name="phoneNumber"
           value={formData.phoneNumber}
@@ -107,44 +110,45 @@ export default function LoginPage() {
           error={errors.phoneNumber}
         />
 
-        <InputField
-          id="login-password"
-          label="Password"
-          type={showPassword ? "text" : "password"}
-          name="password"
-          value={formData.password}
-          onChange={handleChange}
-          placeholder="Enter your password"
-          icon={Lock}
-          error={errors.password}
-          rightElement={
-            <PasswordToggle
-              show={showPassword}
-              onToggle={() => setShowPassword((v) => !v)}
-            />
-          }
-        />
-
-        <div className="flex justify-end -mt-1">
-          <button
-            type="button"
-            onClick={() => navigate("/forgot-password")}
-            className="text-xs font-bold text-[#6B21D9] hover:underline cursor-pointer"
-          >
-            Forgot Password?
-          </button>
+        <div>
+          <InputField
+            id="login-password"
+            label="PASSWORD"
+            type={showPassword ? "text" : "password"}
+            name="password"
+            value={formData.password}
+            onChange={handleChange}
+            placeholder="Enter your password"
+            icon={Lock}
+            error={errors.password}
+            rightElement={
+              <PasswordToggle
+                show={showPassword}
+                onToggle={() => setShowPassword((v) => !v)}
+              />
+            }
+          />
+          <div className="flex justify-end mt-1.5">
+            <button
+              type="button"
+              onClick={() => navigate("/forgot-password")}
+              className="text-xs font-extrabold text-[#6B21D9] hover:text-purple-800 hover:underline cursor-pointer"
+            >
+              Forgot Password?
+            </button>
+          </div>
         </div>
 
         <button
           type="submit"
           id="login-submit-btn"
           disabled={loading}
-          className="w-full py-3.5 rounded-[14px] bg-[#6B21D9] hover:bg-[#5B18C2] active:scale-[0.98] text-white text-sm font-bold flex items-center justify-center gap-2 shadow-lg shadow-purple-300/40 focus:outline-none focus:ring-4 focus:ring-[#6B21D9]/20 transition-all duration-200 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+          className="w-full py-3.5 sm:py-4 rounded-2xl bg-gradient-to-r from-[#6B21D9] via-[#7C3AED] to-[#6B21D9] hover:from-[#5B18C2] hover:to-[#6D28D9] active:scale-[0.99] text-white text-sm sm:text-base font-extrabold flex items-center justify-center gap-2 shadow-lg shadow-purple-600/25 focus:outline-none focus:ring-4 focus:ring-[#6B21D9]/20 transition-all duration-200 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed mt-5"
         >
           {loading ? (
-            <><Loader2 size={16} className="animate-spin" /> Logging In...</>
+            <><Loader2 size={18} className="animate-spin" /> Logging In...</>
           ) : (
-            <>Login <ArrowRight size={16} /></>
+            <>Login <ArrowRight size={18} /></>
           )}
         </button>
       </form>
@@ -152,11 +156,11 @@ export default function LoginPage() {
       <Divider />
       <GoogleButton onClick={handleGoogleLogin} disabled={googleLoading || loading} />
 
-      <p className="text-center mt-6 text-sm text-[#6B7280] font-medium">
-        New to Aryusha.com?{" "}
+      <p className="text-center mt-5 sm:mt-6 text-sm text-slate-500 font-semibold">
+        New to Aryusha?{" "}
         <span
           onClick={() => navigate("/signup")}
-          className="text-[#6B21D9] font-bold cursor-pointer hover:underline"
+          className="text-[#6B21D9] font-extrabold cursor-pointer hover:underline ml-1"
         >
           Sign Up
         </span>

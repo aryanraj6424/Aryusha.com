@@ -746,7 +746,7 @@ export default function ProductList() {
                         key={idx}
                         href={imgUrl}
                         target="_blank"
-                        rel="noreferrer"
+                        rel="noopener noreferrer"
                         className="aspect-square bg-slate-50 border rounded-2xl overflow-hidden flex items-center justify-center hover:border-purple-600 transition"
                       >
                         <img src={imgUrl} alt={`Product ${idx}`} className="w-full h-full object-cover" />

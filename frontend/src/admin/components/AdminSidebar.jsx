@@ -110,9 +110,16 @@ export default function AdminSidebar({ isOpen, setIsOpen }) {
       `}>
         {/* Logo and Mobile Close Button */}
         <div className="flex items-center justify-between mb-6">
-          <div>
-            <h1 className="text-2xl font-bold text-green-100">Aryusha.com</h1>
-            <p className="text-xs text-green-200 mt-1">Super Admin Panel</p>
+          <div className="flex items-center gap-3">
+            <img
+              src="/aryushalogo.png"
+              alt="Aryusha Logo"
+              className="w-10 h-10 object-contain rounded-xl bg-white p-1"
+            />
+            <div>
+              <h1 className="text-2xl font-bold text-green-100">Aryusha.com</h1>
+              <p className="text-xs text-green-200 mt-0.5">Super Admin Panel</p>
+            </div>
           </div>
           <button
             onClick={() => setIsOpen(false)}

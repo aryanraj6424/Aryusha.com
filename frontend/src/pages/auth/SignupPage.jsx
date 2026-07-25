@@ -9,6 +9,8 @@ import axios from "axios";
 
 const API_BASE = "http://localhost:5000/api";
 
+import SEO from "../../components/SEO";
+
 /* ─── validation ──────────────────────────────────────────── */
 function validate(formData) {
   const errors = {};
@@ -96,17 +98,18 @@ export default function SignupPage() {
 
   return (
     <AuthLayout>
+      <SEO title="Sign Up | Aryusha" noindex={true} />
       {/* Headline */}
-      <div className="mb-6">
-        <h2 className="text-2xl font-black text-[#1F2937] tracking-tight">Create Account 👋</h2>
-        <p className="text-sm text-[#6B7280] mt-1 font-medium">Sign up to start shopping</p>
+      <div className="mb-4 sm:mb-5">
+        <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">Create Account ✨</h2>
+        <p className="text-xs sm:text-sm text-slate-500 mt-0.5 font-medium">Sign up to start shopping on Aryusha</p>
       </div>
 
       {/* Form */}
-      <form onSubmit={handleSubmit} noValidate className="space-y-4">
+      <form onSubmit={handleSubmit} noValidate className="space-y-3 sm:space-y-3.5">
         <InputField
           id="signup-name"
-          label="Full Name"
+          label="FULL NAME"
           type="text"
           name="fullName"
           value={formData.fullName}
@@ -118,7 +121,7 @@ export default function SignupPage() {
 
         <InputField
           id="signup-phone"
-          label="Phone Number / Email"
+          label="PHONE NUMBER / EMAIL"
           type="text"
           name="phoneNumber"
           value={formData.phoneNumber}
@@ -130,7 +133,7 @@ export default function SignupPage() {
 
         <InputField
           id="signup-password"
-          label="Password"
+          label="PASSWORD"
           type={showPassword ? "text" : "password"}
           name="password"
           value={formData.password}
@@ -148,7 +151,7 @@ export default function SignupPage() {
 
         <InputField
           id="signup-confirm-password"
-          label="Confirm Password"
+          label="CONFIRM PASSWORD"
           type={showConfirm ? "text" : "password"}
           name="confirmPassword"
           value={formData.confirmPassword}
@@ -169,12 +172,12 @@ export default function SignupPage() {
           type="submit"
           id="signup-submit-btn"
           disabled={loading}
-          className="w-full py-3.5 rounded-[14px] bg-[#6B21D9] hover:bg-[#5B18C2] active:scale-[0.98] text-white text-sm font-bold flex items-center justify-center gap-2 shadow-lg shadow-purple-300/40 focus:outline-none focus:ring-4 focus:ring-[#6B21D9]/20 transition-all duration-200 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+          className="w-full py-3.5 sm:py-4 rounded-2xl bg-gradient-to-r from-[#6B21D9] via-[#7C3AED] to-[#6B21D9] hover:from-[#5B18C2] hover:to-[#6D28D9] active:scale-[0.99] text-white text-sm sm:text-base font-extrabold flex items-center justify-center gap-2 shadow-lg shadow-purple-600/25 focus:outline-none focus:ring-4 focus:ring-[#6B21D9]/20 transition-all duration-200 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed mt-4"
         >
           {loading ? (
-            <><Loader2 size={16} className="animate-spin" /> Creating Account...</>
+            <><Loader2 size={18} className="animate-spin" /> Creating Account...</>
           ) : (
-            <>Sign Up <ArrowRight size={16} /></>
+            <>Sign Up <ArrowRight size={18} /></>
           )}
         </button>
       </form>
@@ -182,11 +185,11 @@ export default function SignupPage() {
       <Divider />
       <GoogleButton onClick={handleGoogleSignup} disabled={googleLoading || loading} />
 
-      <p className="text-center mt-6 text-sm text-[#6B7280] font-medium">
+      <p className="text-center mt-4 sm:mt-5 text-sm text-slate-500 font-semibold">
         Already have an account?{" "}
         <span
           onClick={() => navigate("/login")}
-          className="text-[#6B21D9] font-bold cursor-pointer hover:underline"
+          className="text-[#6B21D9] font-extrabold cursor-pointer hover:underline ml-1"
         >
           Login
         </span>

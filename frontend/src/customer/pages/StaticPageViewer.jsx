@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import axios from "axios";
 import { ArrowLeft, BookOpen, Clock, ShieldAlert } from "lucide-react";
+import SEO from "../../components/SEO";
 
 export default function StaticPageViewer() {
   const { slug } = useParams();
@@ -68,6 +69,11 @@ export default function StaticPageViewer() {
 
   return (
     <div className="max-w-4xl mx-auto py-8 px-4 sm:px-6 w-full overflow-hidden">
+      <SEO 
+        title={`${page.title} | Aryusha`}
+        description={`Read official ${page.title} information and policies on Aryusha.`}
+        canonicalUrl={`https://aryusha.in/customer/page/${slug}`}
+      />
       <style>{`
         .cms-content p, 
         .cms-content span, 
