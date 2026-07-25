@@ -40,10 +40,15 @@ export default function VendorDetails() {
   const [saState, setSaState] = useState("");
   const [editingSaIndex, setEditingSaIndex] = useState(null); // null if adding, number if editing
 
+  const getAuthHeaders = () => {
+    const token = localStorage.getItem("adminToken");
+    return token ? { headers: { Authorization: `Bearer ${token}` } } : {};
+  };
+
   const fetchVendorDetails = async () => {
     try {
       setLoading(true);
-      const res = await axios.get(`${import.meta.env.VITE_API_URL}/admin/vendors/${id}`);
+      const res = await axios.get(`${import.meta.env.VITE_API_URL}/admin/vendors/${id}`, getAuthHeaders());
       setVendor(res.data.vendor);
       setLatInput(res.data.vendor.latitude ?? "");
       setLngInput(res.data.vendor.longitude ?? "");
@@ -59,7 +64,7 @@ export default function VendorDetails() {
 
       // Fetch global commission settings
       try {
-        const settingsRes = await axios.get(`${import.meta.env.VITE_API_URL}/admin/fee-settings`);
+        const settingsRes = await axios.get(`${import.meta.env.VITE_API_URL}/admin/fee-settings`, getAuthHeaders());
         if (settingsRes.data?.success) {
           setPlatformSettings(settingsRes.data.data);
         }
@@ -75,7 +80,9 @@ export default function VendorDetails() {
   };
 
   useEffect(() => {
-    fetchVendorDetails();
+    if (id) {
+      fetchVendorDetails();
+    }
   }, [id]);
 
   useEffect(() => {
@@ -95,13 +102,10 @@ export default function VendorDetails() {
         return;
       }
       
-      const token = localStorage.getItem("adminToken");
       await axios.put(`${import.meta.env.VITE_API_URL}/admin/finance/vendors/${id}`, {
         commissionType,
         commissionValue: commVal
-      }, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      }, getAuthHeaders());
 
       showToast({ type: "success", message: "Commission settings saved successfully." });
       fetchVendorDetails();
@@ -166,7 +170,7 @@ export default function VendorDetails() {
 
   const handleStatusAction = async (action) => {
     try {
-      await axios.put(`${import.meta.env.VITE_API_URL}/admin/vendors/${action}/${id}`);
+      await axios.put(`${import.meta.env.VITE_API_URL}/admin/vendors/${action}/${id}`, {}, getAuthHeaders());
       showToast({ type: "success", message: `Vendor account status changed to ${action} successfully.` });
       fetchVendorDetails();
     } catch (error) {
@@ -189,7 +193,7 @@ export default function VendorDetails() {
     try {
       await axios.put(`${import.meta.env.VITE_API_URL}/admin/vendors/permissions/${id}`, {
         permissions,
-      });
+      }, getAuthHeaders());
       showToast({ type: "success", message: "Permissions updated successfully." });
       fetchVendorDetails();
     } catch (error) {
@@ -220,7 +224,7 @@ export default function VendorDetails() {
         latitude: latVal,
         longitude: lngVal,
         radiusKm: radiusVal
-      });
+      }, getAuthHeaders());
 
       showToast({ type: "success", message: "Vendor location settings updated successfully." });
       setIsEditingLocation(false);
@@ -263,7 +267,7 @@ export default function VendorDetails() {
     try {
       await axios.put(`${import.meta.env.VITE_API_URL}/admin/vendors/${id}`, {
         serviceAreas: currentAreas
-      });
+      }, getAuthHeaders());
       
       showToast({ type: "success", message: editingSaIndex !== null ? "Service area updated successfully." : "Service area added successfully." });
       setSaPincode("");
@@ -288,7 +292,7 @@ export default function VendorDetails() {
         try {
           await axios.put(`${import.meta.env.VITE_API_URL}/admin/vendors/${id}`, {
             serviceAreas: currentAreas
-          });
+          }, getAuthHeaders());
           showToast({ type: "success", message: "Service area removed successfully." });
           fetchVendorDetails();
         } catch (error) {

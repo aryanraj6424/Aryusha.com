@@ -33,7 +33,9 @@ export default function EditVendor() {
     const fetchVendor = async () => {
       try {
         setLoading(true);
-        const res = await axios.get(`${import.meta.env.VITE_API_URL}/admin/vendors/${id}`);
+        const token = localStorage.getItem("adminToken");
+        const headers = token ? { headers: { Authorization: `Bearer ${token}` } } : {};
+        const res = await axios.get(`${import.meta.env.VITE_API_URL}/admin/vendors/${id}`, headers);
         const v = res.data.vendor;
         setFormData({
           businessName: v.shopName || "",
@@ -103,7 +105,9 @@ export default function EditVendor() {
         },
       };
 
-      await axios.put(`${import.meta.env.VITE_API_URL}/admin/vendors/${id}`, payload);
+      const token = localStorage.getItem("adminToken");
+      const headers = token ? { headers: { Authorization: `Bearer ${token}` } } : {};
+      await axios.put(`${import.meta.env.VITE_API_URL}/admin/vendors/${id}`, payload, headers);
       showToast({ type: "success", message: "Vendor updated successfully." });
       navigate("/admin/vendors");
     } catch (error) {

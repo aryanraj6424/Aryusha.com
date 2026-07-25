@@ -86,7 +86,9 @@ export default function AddVendor() {
         },
       };
 
-      await axios.post(`${import.meta.env.VITE_API_URL}/admin/vendors`, payload);
+      const token = localStorage.getItem("adminToken");
+      const headers = token ? { headers: { Authorization: `Bearer ${token}` } } : {};
+      await axios.post(`${import.meta.env.VITE_API_URL}/admin/vendors`, payload, headers);
       showToast({ type: "success", message: "Vendor added successfully." });
       navigate("/admin/vendors");
     } catch (error) {

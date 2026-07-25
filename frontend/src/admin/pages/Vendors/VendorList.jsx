@@ -20,10 +20,15 @@ export default function VendorList() {
   const [assignRadius, setAssignRadius] = useState("");
   const [deleteModal, setDeleteModal] = useState(false);
 
+  const getAuthHeaders = () => {
+    const token = localStorage.getItem("adminToken");
+    return token ? { headers: { Authorization: `Bearer ${token}` } } : {};
+  };
+
   const fetchVendors = async () => {
     try {
       setLoading(true);
-      const response = await axios.get(`${API}/all`);
+      const response = await axios.get(`${API}/all`, getAuthHeaders());
       setVendors(response.data.vendors || []);
     } catch (error) {
       console.log(error);
@@ -39,7 +44,7 @@ export default function VendorList() {
 
   const handleApprove = async (id) => {
     try {
-      await axios.put(`${API}/approve/${id}`);
+      await axios.put(`${API}/approve/${id}`, {}, getAuthHeaders());
       showToast({ type: "success", message: "Vendor approved successfully." });
       fetchVendors();
     } catch (error) {
@@ -50,7 +55,7 @@ export default function VendorList() {
 
   const handleReject = async (id) => {
     try {
-      await axios.put(`${API}/reject/${id}`);
+      await axios.put(`${API}/reject/${id}`, {}, getAuthHeaders());
       showToast({ type: "success", message: "Vendor rejected successfully." });
       fetchVendors();
     } catch (error) {
@@ -63,7 +68,7 @@ export default function VendorList() {
     try {
       await axios.put(`${API}/account-status/${id}`, {
         accountStatus: status,
-      });
+      }, getAuthHeaders());
       fetchVendors();
     } catch (error) {
       console.log(error);
@@ -84,7 +89,7 @@ export default function VendorList() {
       await axios.put(`${API}/assign-area/${selectedVendor._id}`, {
         assignedArea: assignArea,
         assignedRadius: Number(assignRadius),
-      });
+      }, getAuthHeaders());
       showToast({ type: "success", message: "Vendor area assigned successfully." });
       setShowAreaModal(false);
       setSelectedVendor(null);
@@ -100,7 +105,7 @@ export default function VendorList() {
   const handleDelete = async () => {
     if (!selectedVendor) return;
     try {
-      await axios.delete(`${API}/${selectedVendor._id}`);
+      await axios.delete(`${API}/${selectedVendor._id}`, getAuthHeaders());
       showToast({ type: "success", message: "Vendor deleted successfully." });
       setDeleteModal(false);
       setSelectedVendor(null);
