@@ -185,7 +185,7 @@ export default function Footer() {
             
             <div className="flex items-center gap-3 mt-1">
               {[
-                { icon: Instagram, url: "https://instagram.com", name: "Instagram" },
+                { icon: Instagram, url: "https://instagram.com/aryusha.in", name: "Instagram" },
                 { icon: Twitter, url: "https://twitter.com", name: "Twitter" },
                 { icon: Facebook, url: "https://facebook.com", name: "Facebook" },
                 { icon: Linkedin, url: "https://linkedin.com", name: "LinkedIn" }
