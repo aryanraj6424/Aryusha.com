@@ -25,5 +25,5 @@ Disallow: /reset-password
 Disallow: /verify-otp
 
 # Host & Sitemap Specification
-Host: https://aryusha.in
+# Host: https://aryusha.in
 Sitemap: https://www.aryusha.in/sitemap.xml
