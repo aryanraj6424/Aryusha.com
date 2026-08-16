@@ -3,6 +3,7 @@ import { useNavigate, useParams, Link } from "react-router-dom";
 import { ArrowLeft, Phone, MapPin, Store, ShoppingCart, IndianRupee, AlertCircle, Play, Navigation, CheckCircle } from "lucide-react";
 import axios from "axios";
 import { useToast } from "../../../components/Toast";
+import { getSocket, joinRoom, leaveRoom } from "../../../services/socket";
 
 export default function OrderDetail() {
   const navigate = useNavigate();
@@ -30,6 +31,24 @@ export default function OrderDetail() {
 
   useEffect(() => {
     fetchOrderDetails();
+
+    const rider = JSON.parse(localStorage.getItem("deliveryBoy") || "{}");
+    const riderId = rider._id;
+    if (riderId) {
+      const socket = getSocket();
+      joinRoom(`deliveryBoy:${riderId}`);
+
+      const handlePayoutUpdate = () => {
+        fetchOrderDetails();
+      };
+
+      socket.on("payout:updated", handlePayoutUpdate);
+
+      return () => {
+        socket.off("payout:updated", handlePayoutUpdate);
+        leaveRoom(`deliveryBoy:${riderId}`);
+      };
+    }
   }, [id]);
 
   const handleUpdateStatus = async (nextStatus) => {
@@ -65,6 +84,29 @@ export default function OrderDetail() {
     }
   };
 
+  const handleVendorPickup = async (targetVendorId) => {
+    try {
+      setUpdating(true);
+      const token = localStorage.getItem("deliveryBoyToken");
+      const headers = { Authorization: `Bearer ${token}` };
+      const res = await axios.put(
+        `${import.meta.env.VITE_API_URL}/delivery-boy/orders/${id}/pickup-vendor`,
+        { targetVendorId, status: "PICKED" },
+        { headers }
+      );
+
+      if (res.data.success) {
+        setOrder(res.data.order);
+        showToast({ type: "success", message: res.data.message });
+      }
+    } catch (err) {
+      console.error(err);
+      showToast({ type: "error", message: err.response?.data?.message || "Failed to update vendor pickup" });
+    } finally {
+      setUpdating(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -78,12 +120,15 @@ export default function OrderDetail() {
       <div className="bg-white rounded-3xl p-6 border border-slate-100 text-center shadow-sm space-y-4">
         <AlertCircle className="mx-auto text-rose-500" size={32} />
         <h3 className="font-extrabold text-slate-800">Assignment Not Found</h3>
-        <button onClick={() => navigate("/delivery-boy/dashboard")} className="px-4 py-2 bg-[#6d28d9] text-white rounded-xl text-xs font-bold font-sans">
+        <button onClick={() => navigate("/delivery-boy/dashboard")} className="px-4 py-2 bg-[#0B2214] text-white rounded-xl text-xs font-bold font-sans">
           Back Dashboard
         </button>
       </div>
     );
   }
+
+  const subOrders = order.vendorSubOrders || [];
+  const isMultiVendor = subOrders.length > 1;
 
   return (
     <div className="space-y-6 pb-6">
@@ -113,41 +158,123 @@ export default function OrderDetail() {
           <div className="flex gap-4 pt-3 border-t border-slate-50 text-xs font-bold text-slate-500">
             <div>
               <span className="text-[8px] text-slate-400 uppercase tracking-wider block font-bold">Payout</span>
-              <span className="text-slate-700 font-black">₹{order.deliveryCharge || 35}</span>
+              <span className="text-slate-700 font-black">₹{order.riderPayout || order.deliveryCharge || 35}</span>
             </div>
             <div>
               <span className="text-[8px] text-slate-400 uppercase tracking-wider block font-bold font-sans">Items</span>
-              <span className="text-slate-700 font-black">{order.items.reduce((sum, i) => sum + i.qty, 0)} items</span>
+              <span className="text-slate-700 font-black">{order.items?.reduce((sum, i) => sum + i.qty, 0) || 0} items</span>
             </div>
-          </div>
-        </div>
-
-        {/* Pickup Location details */}
-        <div className="bg-white border border-slate-100 rounded-3xl p-5 shadow-sm space-y-3">
-          <div className="flex items-center gap-2.5">
-            <div className="p-2 bg-purple-50 text-[#6d28d9] rounded-xl">
-              <Store size={18} />
-            </div>
-            <div>
-              <h4 className="text-xs font-black text-slate-800">Pickup Store</h4>
-              <p className="text-[10px] text-slate-400 font-bold">Collect parcels from here</p>
-            </div>
-          </div>
-
-          <div className="text-xs font-semibold text-slate-600 pl-1">
-            <p className="font-extrabold text-slate-800">{order.vendorId?.shopName}</p>
-            <p className="mt-1 leading-relaxed">{order.vendorId?.address?.village || "Merchant Address"}, {order.vendorId?.address?.district || "Store District"}</p>
-            
-            {order.vendorId?.phone && (
-              <a 
-                href={`tel:${order.vendorId.phone}`}
-                className="mt-3 inline-flex items-center gap-1.5 text-purple-700 font-black border border-purple-200 px-3 py-1.5 rounded-xl hover:bg-purple-50 transition cursor-pointer"
-              >
-                <Phone size={12} /> Contact Merchant
-              </a>
+            {isMultiVendor && (
+              <div>
+                <span className="text-[8px] text-purple-600 uppercase tracking-wider block font-bold font-sans">Stores</span>
+                <span className="text-purple-700 font-extrabold">{subOrders.filter(s => s.pickupStatus === "PICKED").length}/{subOrders.length} Picked</span>
+              </div>
             )}
           </div>
         </div>
+
+        {/* Multi-Vendor Pickup Checklist / Single Pickup Location */}
+        {isMultiVendor ? (
+          <div className="bg-white border border-purple-100 rounded-3xl p-5 shadow-sm space-y-4">
+            <div className="flex items-center justify-between border-b pb-3 border-slate-100">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-purple-50 text-[#0B2214] rounded-xl">
+                  <Store size={18} />
+                </div>
+                <div>
+                  <h4 className="text-xs font-black text-slate-800">Multi-Vendor Pickup Checklist</h4>
+                  <p className="text-[10px] text-purple-600 font-bold">Collect parcels from {subOrders.length} stores before delivery</p>
+                </div>
+              </div>
+              <span className="text-xs font-black bg-purple-100 text-purple-800 px-2.5 py-1 rounded-full">
+                {subOrders.filter(s => s.pickupStatus === "PICKED").length}/{subOrders.length} Completed
+              </span>
+            </div>
+
+            <div className="space-y-4">
+              {subOrders.map((sub, idx) => {
+                const vendorObj = sub.vendorId || {};
+                const isPicked = sub.pickupStatus === "PICKED";
+                return (
+                  <div key={idx} className={`p-4 rounded-2xl border ${isPicked ? "bg-emerald-50/60 border-emerald-200" : "bg-slate-50 border-slate-200"} space-y-3 transition`}>
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Pickup Stop #{idx + 1}</span>
+                        <p className="font-extrabold text-slate-800 text-sm">{vendorObj.shopName || "Merchant Store"}</p>
+                        <p className="text-xs text-slate-500 font-medium mt-0.5">
+                          {vendorObj.address?.village ? `${vendorObj.address.village}, ` : ""}
+                          {vendorObj.address?.district || "Store Address"}
+                        </p>
+                      </div>
+                      <span className={`text-[10px] font-black px-2.5 py-1 rounded-full ${isPicked ? "bg-emerald-100 text-emerald-800 border border-emerald-300" : "bg-amber-100 text-amber-800 border border-amber-300"}`}>
+                        {isPicked ? "✓ PICKED UP" : "PENDING PICKUP"}
+                      </span>
+                    </div>
+
+                    {/* Sub-order items */}
+                    <div className="bg-white rounded-xl p-2.5 border text-xs space-y-1">
+                      <p className="text-[10px] font-extrabold text-slate-400 uppercase">Items to collect:</p>
+                      {sub.items.map((it, itemIdx) => (
+                        <div key={itemIdx} className="flex justify-between text-slate-700 font-semibold text-xs">
+                          <span>{it.name} <span className="text-slate-400">x{it.qty}</span></span>
+                          <span className="font-bold text-slate-800">₹{(it.price * it.qty).toFixed(2)}</span>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="flex items-center justify-between pt-1">
+                      {vendorObj.phone ? (
+                        <a
+                          href={`tel:${vendorObj.phone}`}
+                          className="inline-flex items-center gap-1 text-xs text-purple-700 font-bold border border-purple-200 px-2.5 py-1 rounded-lg bg-white hover:bg-purple-50"
+                        >
+                          <Phone size={11} /> Call Merchant
+                        </a>
+                      ) : <div />}
+
+                      {!isPicked && (
+                        <button
+                          type="button"
+                          disabled={updating}
+                          onClick={() => handleVendorPickup(vendorObj._id || sub.vendorId)}
+                          className="px-3.5 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-bold text-xs shadow-xs transition cursor-pointer"
+                        >
+                          {updating ? "Updating..." : "Mark Store Picked Up"}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ) : (
+          <div className="bg-white border border-slate-100 rounded-3xl p-5 shadow-sm space-y-3">
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 bg-purple-50 text-[#0B2214] rounded-xl">
+                <Store size={18} />
+              </div>
+              <div>
+                <h4 className="text-xs font-black text-slate-800">Pickup Store</h4>
+                <p className="text-[10px] text-slate-400 font-bold">Collect parcels from here</p>
+              </div>
+            </div>
+
+            <div className="text-xs font-semibold text-slate-600 pl-1">
+              <p className="font-extrabold text-slate-800">{order.vendorId?.shopName}</p>
+              <p className="mt-1 leading-relaxed">{order.vendorId?.address?.village || "Merchant Address"}, {order.vendorId?.address?.district || "Store District"}</p>
+              
+              {order.vendorId?.phone && (
+                <a 
+                  href={`tel:${order.vendorId.phone}`}
+                  className="mt-3 inline-flex items-center gap-1.5 text-purple-700 font-black border border-purple-200 px-3 py-1.5 rounded-xl hover:bg-purple-50 transition cursor-pointer"
+                >
+                  <Phone size={12} /> Contact Merchant
+                </a>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Dropoff customer location */}
         <div className="bg-white border border-slate-100 rounded-3xl p-5 shadow-sm space-y-3">
@@ -247,7 +374,7 @@ export default function OrderDetail() {
           <button
             onClick={() => handleUpdateStatus("Picked_Up")}
             disabled={updating}
-            className="w-full py-4 bg-[#6d28d9] hover:bg-[#5b21b6] text-white rounded-2xl font-bold transition shadow-lg shadow-purple-200 flex items-center justify-center gap-2 cursor-pointer"
+            className="w-full py-4 bg-[#0B2214] hover:bg-[#153e25] text-white rounded-2xl font-bold transition shadow-lg shadow-purple-200 flex items-center justify-center gap-2 cursor-pointer"
           >
             <Play size={18} /> {updating ? "Processing..." : "Confirm Pickup Order"}
           </button>
@@ -274,7 +401,7 @@ export default function OrderDetail() {
             <button
               onClick={() => handleUpdateStatus("Reached_Customer")}
               disabled={updating}
-              className="w-full py-4.5 bg-[#6d28d9] hover:bg-[#5b21b6] text-white rounded-2xl font-bold transition shadow-lg flex items-center justify-center gap-2 cursor-pointer"
+              className="w-full py-4.5 bg-[#0B2214] hover:bg-[#153e25] text-white rounded-2xl font-bold transition shadow-lg flex items-center justify-center gap-2 cursor-pointer"
             >
               <CheckCircle size={18} /> {updating ? "Processing..." : "I have Reached Customer"}
             </button>

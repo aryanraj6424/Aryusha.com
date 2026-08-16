@@ -1,24 +1,46 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, PhoneCall, HelpCircle, Send, MessageSquare, CheckCircle2 } from "lucide-react";
+import axios from "axios";
+import { useToast } from "../../../components/Toast";
 
 export default function Support() {
   const navigate = useNavigate();
+  const { showToast } = useToast();
   const [category, setCategory] = useState("App Issues");
   const [description, setDescription] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
 
-  const handleSubmit = (e) => {
+  // NOTE: Placeholder hotline number stored in VITE_SUPPORT_HOTLINE env var.
+  // MUST BE UPDATED with real support hotline phone number before production launch.
+  const hotline = import.meta.env.VITE_SUPPORT_HOTLINE || "1800-000-0000";
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!description) return;
 
-    setSubmitting(true);
-    setTimeout(() => {
+    try {
+      setSubmitting(true);
+      const token = localStorage.getItem("deliveryBoyToken");
+      const headers = { Authorization: `Bearer ${token}` };
+      const res = await axios.post(
+        `${import.meta.env.VITE_API_URL}/delivery-boy/support-ticket`,
+        { category, description },
+        { headers }
+      );
+
+      if (res.data.success) {
+        setSuccess(true);
+        setDescription("");
+        showToast({ type: "success", message: "Support ticket submitted successfully!" });
+      }
+    } catch (error) {
+      console.error("Support ticket error:", error);
+      showToast({ type: "error", message: error.response?.data?.message || "Failed to submit support ticket." });
+    } finally {
       setSubmitting(false);
-      setSuccess(true);
-      setDescription("");
-    }, 1000);
+    }
   };
 
   return (
@@ -51,27 +73,27 @@ export default function Support() {
         <div className="space-y-2.5 text-xs font-semibold">
           
           <a 
-            href="tel:18001111" 
+            href={`tel:${hotline}`} 
             className="flex items-center justify-between p-3.5 bg-slate-50 border border-slate-150 rounded-2xl hover:bg-slate-100 transition cursor-pointer"
           >
             <div className="flex items-center gap-3">
               <PhoneCall size={16} className="text-purple-650" />
               <div>
-                <p className="font-black text-slate-800 text-xs">Rider Support Line</p>
+                <p className="font-black text-slate-800 text-xs">Rider Support Line ({hotline})</p>
                 <p className="text-[10px] text-slate-400 font-semibold mt-0.5">Available 24x7 for active deliveries</p>
               </div>
             </div>
-            <span className="text-[#6d28d9] font-bold text-xs uppercase">Call</span>
+            <span className="text-[#0B2214] font-bold text-xs uppercase">Call</span>
           </a>
 
           <a 
-            href="tel:18002222" 
+            href={`tel:${hotline}`} 
             className="flex items-center justify-between p-3.5 bg-rose-50/50 border border-rose-100 rounded-2xl hover:bg-rose-50 transition cursor-pointer"
           >
             <div className="flex items-center gap-3">
               <MessageSquare size={16} className="text-rose-600" />
               <div>
-                <p className="font-black text-rose-800 text-xs">Accident & Emergency Desk</p>
+                <p className="font-black text-rose-800 text-xs">Accident & Emergency Desk ({hotline})</p>
                 <p className="text-[10px] text-rose-400 font-semibold mt-0.5">Report route accidents or vehicle breakdown</p>
               </div>
             </div>
@@ -118,7 +140,7 @@ export default function Support() {
           <button
             type="submit"
             disabled={submitting}
-            className="w-full py-4 bg-[#6d28d9] hover:bg-[#5b21b6] text-white rounded-2xl font-bold transition shadow-lg shadow-purple-200 flex items-center justify-center gap-2 cursor-pointer"
+            className="w-full py-4 bg-[#0B2214] hover:bg-[#153e25] text-white rounded-2xl font-bold transition shadow-lg shadow-purple-200 flex items-center justify-center gap-2 cursor-pointer"
           >
             <Send size={14} /> {submitting ? "Sending Inquiry..." : "Submit Ticket"}
           </button>

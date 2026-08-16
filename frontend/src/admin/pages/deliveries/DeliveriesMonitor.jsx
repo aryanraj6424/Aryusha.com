@@ -239,7 +239,7 @@ export default function DeliveriesMonitor() {
                     <td className="px-6 py-4 font-extrabold text-slate-800">#{del.orderId}</td>
                     <td className="px-6 py-4 text-slate-700 font-medium">{del.vendorId?.shopName || "N/A"}</td>
                     <td className="px-6 py-4 text-slate-700">{del.customerId?.fullName || del.deliveryAddress?.fullName}</td>
-                    <td className="px-6 py-4 font-bold text-[#6d28d9]">
+                    <td className="px-6 py-4 font-bold text-[#0B2214]">
                       {del.deliveryBoyId?.fullName || "Unassigned"}
                     </td>
                     <td className="px-6 py-4">

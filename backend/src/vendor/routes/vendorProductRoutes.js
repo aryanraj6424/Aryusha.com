@@ -8,7 +8,8 @@ import {
   bulkImportVendorProducts,
   bulkUpdateVendorProducts,
   bulkDeleteVendorProducts,
-  exportVendorProducts
+  exportVendorProducts,
+  getTopSellingProducts
 } from "../controllers/vendorProductController.js";
 import {
   getVariantsByProduct,
@@ -23,6 +24,7 @@ const router = express.Router();
 router.use(protectVendor);
 
 // Product CRUD
+router.get("/top-selling", getTopSellingProducts);
 router.get("/all", getVendorProducts);
 router.get("/:id", getVendorProductById);
 router.post("/create", createVendorProduct);

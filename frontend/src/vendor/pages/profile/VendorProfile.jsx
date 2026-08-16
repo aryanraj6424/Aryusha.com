@@ -510,6 +510,32 @@ export default function VendorProfile() {
                     />
                   </div>
                   <div>
+                    <label className="text-xs block text-slate-500 mb-1">Owner Mobile</label>
+                    <input
+                      type="text"
+                      value={profileData.ownerDetails.mobileNumber}
+                      onChange={(e) => setProfileData({
+                        ...profileData,
+                        ownerDetails: { ...profileData.ownerDetails, mobileNumber: e.target.value }
+                      })}
+                      className="w-full px-3 py-2 border rounded-xl outline-none focus:border-purple-600 font-medium"
+                      placeholder="e.g. 9876543210"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs block text-slate-500 mb-1">Owner Email</label>
+                    <input
+                      type="email"
+                      value={profileData.ownerDetails.email}
+                      onChange={(e) => setProfileData({
+                        ...profileData,
+                        ownerDetails: { ...profileData.ownerDetails, email: e.target.value }
+                      })}
+                      className="w-full px-3 py-2 border rounded-xl outline-none focus:border-purple-600 font-medium"
+                      placeholder="e.g. owner@example.com"
+                    />
+                  </div>
+                  <div>
                     <label className="text-xs block text-slate-500 mb-1 font-semibold">Store Logo / Banner Image</label>
                     <div className="flex items-center gap-2 mt-1">
                       {profileData.storeDetails.storeLogo && (
@@ -530,7 +556,7 @@ export default function VendorProfile() {
               {/* Business Address */}
               <div className="space-y-3">
                 <h4 className="text-xs uppercase tracking-widest text-slate-400 border-b pb-1.5 font-extrabold">Store Address</h4>
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
                   <div>
                     <label className="text-xs block text-slate-500 mb-1">City / Town</label>
                     <input
@@ -595,103 +621,91 @@ export default function VendorProfile() {
                 </div>
               </div>
 
-              {/* GST / Business Docs */}
+              {/* GST / Business Docs (Read-only for Vendor) */}
               <div className="space-y-3">
-                <h4 className="text-xs uppercase tracking-widest text-slate-400 border-b pb-1.5 font-extrabold">GST / Registration</h4>
+                <div className="flex items-center justify-between border-b pb-1.5">
+                  <h4 className="text-xs uppercase tracking-widest text-slate-400 font-extrabold">GST / Registration</h4>
+                  <span className="text-[10px] font-bold bg-amber-50 text-amber-700 px-2 py-0.5 rounded-md border border-amber-200">
+                    🔒 Admin Verified Document
+                  </span>
+                </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="text-xs block text-slate-500 mb-1">GST Number</label>
+                    <label className="text-xs block text-slate-400 mb-1">GST Number</label>
                     <input
                       type="text"
-                      value={profileData.documents.gstNumber}
-                      onChange={(e) => setProfileData({
-                        ...profileData,
-                        documents: { ...profileData.documents, gstNumber: e.target.value }
-                      })}
-                      className="w-full px-3 py-2 border rounded-xl outline-none focus:border-purple-600 uppercase font-medium"
-                      placeholder="e.g. 22AAAAA0000A1Z5"
+                      disabled
+                      value={profileData.documents.gstNumber || "N/A"}
+                      className="w-full px-3 py-2 border rounded-xl bg-slate-100 text-slate-500 uppercase font-bold cursor-not-allowed text-xs"
+                      title="GST Number can only be updated by Admin"
                     />
                   </div>
                   <div>
-                    <label className="text-xs block text-slate-500 mb-1">Business Registration No</label>
+                    <label className="text-xs block text-slate-400 mb-1">Business Registration No</label>
                     <input
                       type="text"
-                      value={profileData.documents.businessRegNo}
-                      onChange={(e) => setProfileData({
-                        ...profileData,
-                        documents: { ...profileData.documents, businessRegNo: e.target.value }
-                      })}
-                      className="w-full px-3 py-2 border rounded-xl outline-none focus:border-purple-600 font-medium"
+                      disabled
+                      value={profileData.documents.businessRegNo || "N/A"}
+                      className="w-full px-3 py-2 border rounded-xl bg-slate-100 text-slate-500 font-bold cursor-not-allowed text-xs"
+                      title="Business Registration Number can only be updated by Admin"
                     />
                   </div>
                 </div>
               </div>
 
-              {/* Bank payout Details */}
+              {/* Bank payout Details (Read-only for Vendor) */}
               <div className="space-y-3">
-                <h4 className="text-xs uppercase tracking-widest text-slate-400 border-b pb-1.5 font-extrabold">Bank Payout Account</h4>
+                <div className="flex items-center justify-between border-b pb-1.5">
+                  <h4 className="text-xs uppercase tracking-widest text-slate-400 font-extrabold">Bank Payout Account</h4>
+                  <span className="text-[10px] font-bold bg-amber-50 text-amber-700 px-2 py-0.5 rounded-md border border-amber-200">
+                    🔒 Admin Managed Financial Details
+                  </span>
+                </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="text-xs block text-slate-500 mb-1">Account Holder</label>
+                    <label className="text-xs block text-slate-400 mb-1">Account Holder</label>
                     <input
                       type="text"
-                      value={profileData.documents.bankDetails.accountHolder}
-                      onChange={(e) => setProfileData({
-                        ...profileData,
-                        documents: {
-                          ...profileData.documents,
-                          bankDetails: { ...profileData.documents.bankDetails, accountHolder: e.target.value }
-                        }
-                      })}
-                      className="w-full px-3 py-2 border rounded-xl outline-none focus:border-purple-600 font-medium"
+                      disabled
+                      value={profileData.documents.bankDetails.accountHolder || "N/A"}
+                      className="w-full px-3 py-2 border rounded-xl bg-slate-100 text-slate-500 font-bold cursor-not-allowed text-xs"
+                      title="Bank Account Holder can only be updated by Admin"
                     />
                   </div>
                   <div>
-                    <label className="text-xs block text-slate-500 mb-1">Bank Name</label>
+                    <label className="text-xs block text-slate-400 mb-1">Bank Name</label>
                     <input
                       type="text"
-                      value={profileData.documents.bankDetails.bankName}
-                      onChange={(e) => setProfileData({
-                        ...profileData,
-                        documents: {
-                          ...profileData.documents,
-                          bankDetails: { ...profileData.documents.bankDetails, bankName: e.target.value }
-                        }
-                      })}
-                      className="w-full px-3 py-2 border rounded-xl outline-none focus:border-purple-600 font-medium"
+                      disabled
+                      value={profileData.documents.bankDetails.bankName || "N/A"}
+                      className="w-full px-3 py-2 border rounded-xl bg-slate-100 text-slate-500 font-bold cursor-not-allowed text-xs"
+                      title="Bank Name can only be updated by Admin"
                     />
                   </div>
                   <div>
-                    <label className="text-xs block text-slate-500 mb-1">Account Number</label>
+                    <label className="text-xs block text-slate-400 mb-1">Account Number</label>
                     <input
                       type="text"
-                      value={profileData.documents.bankDetails.accountNumber}
-                      onChange={(e) => setProfileData({
-                        ...profileData,
-                        documents: {
-                          ...profileData.documents,
-                          bankDetails: { ...profileData.documents.bankDetails, accountNumber: e.target.value }
-                        }
-                      })}
-                      className="w-full px-3 py-2 border rounded-xl outline-none focus:border-purple-600 font-medium"
+                      disabled
+                      value={profileData.documents.bankDetails.accountNumber || "N/A"}
+                      className="w-full px-3 py-2 border rounded-xl bg-slate-100 text-slate-500 font-bold cursor-not-allowed text-xs"
+                      title="Account Number can only be updated by Admin"
                     />
                   </div>
                   <div>
-                    <label className="text-xs block text-slate-500 mb-1">IFSC Code</label>
+                    <label className="text-xs block text-slate-400 mb-1">IFSC Code</label>
                     <input
                       type="text"
-                      value={profileData.documents.bankDetails.ifsc}
-                      onChange={(e) => setProfileData({
-                        ...profileData,
-                        documents: {
-                          ...profileData.documents,
-                          bankDetails: { ...profileData.documents.bankDetails, ifsc: e.target.value }
-                        }
-                      })}
-                      className="w-full px-3 py-2 border rounded-xl outline-none focus:border-purple-600 uppercase font-medium"
+                      disabled
+                      value={profileData.documents.bankDetails.ifsc || "N/A"}
+                      className="w-full px-3 py-2 border rounded-xl bg-slate-100 text-slate-500 uppercase font-bold cursor-not-allowed text-xs"
+                      title="IFSC Code can only be updated by Admin"
                     />
                   </div>
                 </div>
+                <p className="text-[10px] text-slate-400 font-medium italic mt-1">
+                  * Note: Bank details and verification documents are locked for vendor safety. Contact platform admin to request updates.
+                </p>
               </div>
 
               {/* Submit Buttons */}

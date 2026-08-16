@@ -120,7 +120,7 @@ export default function DeliveryLogs() {
             <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Order ID</label>
             <input
               type="text"
-              placeholder="e.g. QK-1234"
+              placeholder="e.g. AR-1234 or QK-1234"
               value={orderId}
               onChange={(e) => { setOrderId(e.target.value); setPage(1); }}
               className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-green-500"

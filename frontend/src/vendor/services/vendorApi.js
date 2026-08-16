@@ -4,7 +4,7 @@ const API = `${import.meta.env.VITE_API_URL}/vendor`;
 
 // Get auth token
 const getAuthHeader = () => {
-  const token = localStorage.getItem("vendorToken");
+  const token = localStorage.getItem("vendorToken") || localStorage.getItem("adminToken");
   return token ? { Authorization: `Bearer ${token}` } : {};
 };
 
@@ -54,8 +54,8 @@ export const getRecentOrders = async () => {
   return response.data;
 };
 
-export const getTopSellingProducts = async () => {
-  const response = await axios.get(`${API}/dashboard/top-products`, {
+export const getTopSellingProducts = async (limit = 5) => {
+  const response = await axios.get(`${API}/product/top-selling?limit=${limit}`, {
     headers: getAuthHeader()
   });
   return response.data;

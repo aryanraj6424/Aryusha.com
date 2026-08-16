@@ -56,7 +56,7 @@ export default function DeliveryBoyRegister() {
         
         {/* Header */}
         <div className="text-center space-y-2 mb-6">
-          <div className="w-16 h-16 bg-purple-100 text-[#6d28d9] rounded-2xl flex items-center justify-center mx-auto shadow-inner">
+          <div className="w-16 h-16 bg-purple-100 text-[#0B2214] rounded-2xl flex items-center justify-center mx-auto shadow-inner">
             <Shield size={32} />
           </div>
           <h2 className="text-2xl font-black text-slate-800 tracking-tight">Rider Registration</h2>
@@ -152,7 +152,7 @@ export default function DeliveryBoyRegister() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-3.5 mt-2 bg-[#6d28d9] hover:bg-[#5b21b6] text-white rounded-2xl font-bold transition shadow-lg shadow-purple-200 flex items-center justify-center gap-2 cursor-pointer"
+            className="w-full py-3.5 mt-2 bg-[#0B2214] hover:bg-[#153e25] text-white rounded-2xl font-bold transition shadow-lg shadow-purple-200 flex items-center justify-center gap-2 cursor-pointer"
           >
             {loading ? "Registering..." : "Submit Registration"} <ArrowRight size={18} />
           </button>
@@ -160,7 +160,7 @@ export default function DeliveryBoyRegister() {
 
         <div className="mt-6 pt-5 border-t border-slate-100 text-center text-xs font-semibold text-slate-400">
           Already registered?{" "}
-          <Link to="/delivery-boy/login" className="text-[#6d28d9] hover:text-[#5b21b6] font-black underline">
+          <Link to="/delivery-boy/login" className="text-[#0B2214] hover:text-[#153e25] font-black underline">
             Login Here
           </Link>
         </div>

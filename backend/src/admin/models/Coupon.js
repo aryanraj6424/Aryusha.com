@@ -8,76 +8,97 @@ const couponSchema = new mongoose.Schema(
       required: true,
       unique: true,
       uppercase: true,
-      trim: true
+      trim: true,
     },
     // Type of discount: flat amount or percentage rate
-    discountType: {
+    discount_type: {
       type: String,
       enum: ["flat", "percentage"],
       required: true,
-      default: "flat"
+      default: "flat",
+      alias: "discountType",
     },
     // Discount value (flat amount in ₹ or percentage value 0-100)
-    discountValue: {
+    discount_value: {
       type: Number,
       required: true,
-      min: 0
+      min: 0,
+      alias: "discountValue",
     },
     // Minimum cart subtotal required to apply the coupon
-    minCartValue: {
+    min_order_value: {
       type: Number,
       default: 0,
-      min: 0
+      min: 0,
+      alias: "minCartValue",
     },
-    // Maximum discount limit cap (only relevant for percentage type)
-    maxDiscountCap: {
+    // Maximum discount limit cap (global upper limit on discount amount)
+    max_discount_cap: {
       type: Number,
       default: null,
-      min: 0
+      alias: "maxDiscountCap",
     },
     // Validity start date
-    startDate: {
+    valid_from: {
       type: Date,
-      required: true
+      required: true,
+      alias: "startDate",
     },
     // Expiry date
-    expiryDate: {
+    valid_to: {
       type: Date,
-      required: true
-    },
-    // Maximum total overall uses allowed across all customers
-    usageLimit: {
-      type: Number,
-      default: null,
-      min: 0
+      required: true,
+      alias: "expiryDate",
     },
     // Maximum uses allowed per unique customer account
-    perCustomerLimit: {
+    usage_limit_per_user: {
       type: Number,
       default: 1,
-      min: 1
+      min: 1,
+      alias: "perCustomerLimit",
+    },
+    // Maximum total overall uses allowed across all customers
+    total_usage_limit: {
+      type: Number,
+      default: null,
+      alias: "usageLimit",
     },
     // Status of coupon: Active or Inactive
     status: {
       type: String,
       enum: ["active", "inactive"],
-      default: "active"
+      default: "active",
+    },
+    // Admin ID who created the coupon
+    created_by: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Admin",
+      default: null,
+      alias: "createdBy",
     },
     // Track how many times this coupon has been used in orders
     usedCount: {
       type: Number,
       default: 0,
-      min: 0
-    }
+      min: 0,
+    },
   },
   {
-    timestamps: { createdAt: "created_at", updatedAt: "updated_at" }
+    strict: false, // Allow reading older schema documents smoothly
+    timestamps: { createdAt: "created_at", updatedAt: "updated_at" },
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true },
   }
 );
 
+// Index for querying active, non-expired coupons efficiently
+couponSchema.index({ status: 1, valid_to: 1 });
+
 // Virtual check to verify if the coupon is expired
 couponSchema.virtual("isExpired").get(function () {
-  return new Date() > this.expiryDate;
+  return new Date() > (this.valid_to || this.expiryDate);
 });
 
-export default mongoose.model("Coupon", couponSchema);
+const Coupon = mongoose.models.Coupon || mongoose.model("Coupon", couponSchema);
+
+export default Coupon;

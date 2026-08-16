@@ -61,7 +61,7 @@ export default function DeliveryBoyProfile() {
 
       {/* Profile Header Summary */}
       <div className="bg-white border border-slate-100 rounded-3xl p-5 shadow-sm space-y-4 text-center">
-        <div className="w-20 h-20 bg-purple-100 text-[#6d28d9] rounded-full flex items-center justify-center mx-auto shadow-inner border border-purple-200">
+        <div className="w-20 h-20 bg-purple-100 text-[#0B2214] rounded-full flex items-center justify-center mx-auto shadow-inner border border-purple-200">
           <User size={36} />
         </div>
 
@@ -163,7 +163,7 @@ export default function DeliveryBoyProfile() {
             <button
               type="submit"
               disabled={loading}
-              className="flex-1 py-3 bg-[#6d28d9] hover:bg-[#5b21b6] text-white rounded-xl font-bold text-xs shadow-md transition cursor-pointer"
+              className="flex-1 py-3 bg-[#0B2214] hover:bg-[#153e25] text-white rounded-xl font-bold text-xs shadow-md transition cursor-pointer"
             >
               {loading ? "Saving..." : "Save"}
             </button>

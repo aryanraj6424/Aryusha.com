@@ -35,6 +35,8 @@ export default function EditProduct() {
           unitType: prod.unitType || "",
           description: prod.description || "",
           status: prod.status || "pending",
+          coupon_allowed: prod.coupon_allowed || false,
+          max_discount_amount: prod.max_discount_amount !== undefined && prod.max_discount_amount !== null ? prod.max_discount_amount : ""
         });
         setCategories(cats || []);
       } catch (err) {
@@ -81,6 +83,10 @@ export default function EditProduct() {
     e.preventDefault();
     if (!form.name.trim()) { setError("Product name is required."); return; }
     if (!form.unitType) { setError("Unit type is required."); return; }
+    if (form.coupon_allowed && (!form.max_discount_amount || Number(form.max_discount_amount) < 0)) {
+      setError("Please enter a valid Max discount allowed amount when coupon is allowed.");
+      return;
+    }
 
     try {
       setSaving(true);
@@ -93,8 +99,10 @@ export default function EditProduct() {
         subCategoryId: form.subCategoryId,
         familyId: form.familyId,
         unitType: form.unitType,
-        description: form.description.trim(),
-        status: form.status === "draft" ? "draft" : "pending", // send draft or pending
+        description: form.description.replace(/&nbsp;|\u00a0/g, " ").trim(),
+        status: form.status === "draft" ? "draft" : "pending",
+        coupon_allowed: form.coupon_allowed,
+        max_discount_amount: form.coupon_allowed && form.max_discount_amount ? Number(form.max_discount_amount) : null
       });
       setSuccess(true);
       setTimeout(() => navigate(`/vendor/products`), 1200);
@@ -130,7 +138,7 @@ export default function EditProduct() {
         <form onSubmit={handleSubmit} className="space-y-5">
 
           {/* Category cascade */}
-          <div className="grid md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
               <label className="block text-xs uppercase tracking-wider text-slate-400 mb-2">Category</label>
               <select
@@ -193,7 +201,7 @@ export default function EditProduct() {
           </div>
 
           {/* Brand + Unit Type */}
-          <div className="grid md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs uppercase tracking-wider text-slate-400 mb-2">Brand</label>
               <input
@@ -238,6 +246,58 @@ export default function EditProduct() {
               <option value="approved">Approved</option>
               <option value="rejected">Rejected</option>
             </select>
+          </div>
+
+          {/* Coupon Settings */}
+          <div className="p-4 border rounded-xl bg-slate-50 space-y-3">
+            <h4 className="font-bold text-slate-800 text-sm">Coupon Settings</h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs uppercase tracking-wider text-slate-400 mb-2">
+                  Coupon applicable on this product? *
+                </label>
+                <div className="flex gap-4 items-center h-10">
+                  <label className="flex items-center gap-2 cursor-pointer font-bold text-sm">
+                    <input
+                      type="radio"
+                      name="edit_coupon_allowed"
+                      checked={form.coupon_allowed === true || form.coupon_allowed === "true"}
+                      onChange={() => setForm((prev) => ({ ...prev, coupon_allowed: true }))}
+                      className="accent-purple-600"
+                    />
+                    Yes
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer font-bold text-sm">
+                    <input
+                      type="radio"
+                      name="edit_coupon_allowed"
+                      checked={form.coupon_allowed === false || form.coupon_allowed === "false" || !form.coupon_allowed}
+                      onChange={() => setForm((prev) => ({ ...prev, coupon_allowed: false, max_discount_amount: "" }))}
+                      className="accent-purple-600"
+                    />
+                    No
+                  </label>
+                </div>
+              </div>
+
+              {(form.coupon_allowed === true || form.coupon_allowed === "true") && (
+                <div>
+                  <label className="block text-xs uppercase tracking-wider text-slate-400 mb-2">
+                    Max discount allowed on this product (₹) *
+                  </label>
+                  <input
+                    type="number"
+                    required={form.coupon_allowed === true || form.coupon_allowed === "true"}
+                    min="0"
+                    step="any"
+                    value={form.max_discount_amount !== undefined && form.max_discount_amount !== null ? form.max_discount_amount : ""}
+                    onChange={(e) => setForm((prev) => ({ ...prev, max_discount_amount: e.target.value }))}
+                    placeholder="e.g. 50"
+                    className="w-full px-4 py-2 border rounded-xl focus:ring-2 focus:ring-purple-500 outline-none font-medium text-sm bg-white"
+                  />
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Description */}

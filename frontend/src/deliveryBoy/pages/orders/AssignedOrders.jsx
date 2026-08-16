@@ -63,11 +63,17 @@ export default function AssignedOrders() {
         fetchOrdersSilent();
       };
 
+      const handlePayoutUpdate = () => {
+        fetchOrdersSilent();
+      };
+
       socket.on("order:assigned", handleAssigned);
+      socket.on("payout:updated", handlePayoutUpdate);
 
       return () => {
         clearInterval(timer);
         socket.off("order:assigned", handleAssigned);
+        socket.off("payout:updated", handlePayoutUpdate);
         leaveRoom(`deliveryBoy:${riderId}`);
       };
     }
@@ -115,7 +121,7 @@ export default function AssignedOrders() {
             onClick={() => setActiveTab(tab.id)}
             className={`flex-1 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
               activeTab === tab.id
-                ? "bg-white text-[#6d28d9] shadow-sm font-extrabold"
+                ? "bg-white text-[#0B2214] shadow-sm font-extrabold"
                 : "text-slate-500 hover:text-slate-700"
             }`}
           >
@@ -127,7 +133,7 @@ export default function AssignedOrders() {
       {/* Orders List */}
       {loading ? (
         <div className="flex items-center justify-center min-h-[40vh]">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#6d28d9]"></div>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#0B2214]"></div>
         </div>
       ) : orders.length === 0 ? (
         <div className="bg-white rounded-3xl p-8 border border-slate-100 text-center shadow-sm space-y-3">
@@ -166,7 +172,7 @@ export default function AssignedOrders() {
                   <p className="truncate">
                     <span className="font-bold text-slate-400">Customer:</span> {order.deliveryAddress?.fullName}
                   </p>
-                  <p className="truncate flex items-center gap-0.5 text-[#6d28d9]">
+                  <p className="truncate flex items-center gap-0.5 text-[#0B2214]">
                     <MapPin size={10} />
                     <span>Drop: {order.deliveryAddress?.area}, {order.deliveryAddress?.city}</span>
                   </p>
@@ -177,7 +183,7 @@ export default function AssignedOrders() {
               <div className="flex flex-col items-end gap-1.5 text-right self-stretch justify-between py-0.5">
                 <div>
                   <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest block">Payout</span>
-                  <span className="font-black text-slate-800 text-sm">₹{order.deliveryCharge || 35}</span>
+                  <span className="font-black text-slate-800 text-sm">₹{order.riderPayout || order.deliveryCharge || 35}</span>
                 </div>
                 <div className="bg-slate-50 text-slate-400 p-1.5 rounded-lg border border-slate-150">
                   <ChevronRight size={14} />

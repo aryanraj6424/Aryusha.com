@@ -126,11 +126,10 @@ export default function ProductDetails() {
 
           {/* Status badges */}
           <div className="flex flex-wrap gap-2">
-            <span className={`text-xs font-semibold px-3 py-1 rounded-full ${
-              product.status === "active" ? "bg-green-50 text-green-700" :
-              product.status === "draft" ? "bg-amber-50 text-amber-700" :
-              "bg-gray-100 text-gray-500"
-            }`}>
+            <span className={`text-xs font-semibold px-3 py-1 rounded-full ${product.status === "active" ? "bg-green-50 text-green-700" :
+                product.status === "draft" ? "bg-amber-50 text-amber-700" :
+                  "bg-gray-100 text-gray-500"
+              }`}>
               {product.status}
             </span>
             <span className="inline-flex items-center gap-1 text-xs bg-indigo-50 text-indigo-700 px-3 py-1 rounded-full font-semibold">
@@ -159,7 +158,7 @@ export default function ProductDetails() {
           {product.description && (
             <div>
               <p className="text-sm font-medium text-gray-700 mb-1">Description</p>
-              <div 
+              <div
                 className="text-gray-600 text-sm leading-relaxed whitespace-pre-wrap"
                 dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(product.description) }}
               />

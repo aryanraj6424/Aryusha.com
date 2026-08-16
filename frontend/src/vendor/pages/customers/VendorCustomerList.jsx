@@ -15,144 +15,382 @@ import {
   Users,
 } from "lucide-react";
 import { useToast } from "../../../components/Toast";
+import { generatePrintInvoiceHTML } from "../../../utils/printInvoiceHelper";
 
 // ─── Invoice Modal ─────────────────────────────────────────────────────────────
 function InvoiceModal({ order, onClose }) {
   const invoiceRef = useRef();
 
   const handlePrint = () => {
-    const content = invoiceRef.current.innerHTML;
-    const printWin = window.open("", "_blank", "width=800,height=600");
-    printWin.document.write(`
-      <html><head><title>Invoice ${order.orderId}</title>
-      <style>
-        body { font-family: Arial, sans-serif; padding: 24px; color: #1e293b; }
-        table { width: 100%; border-collapse: collapse; margin-top: 16px; }
-        th, td { border: 1px solid #e2e8f0; padding: 8px 12px; text-align: left; font-size: 13px; }
-        th { background: #f1f5f9; font-weight: 700; }
-        .header { display: flex; justify-content: space-between; margin-bottom: 24px; }
-        .total-row { font-weight: 700; background: #f8fafc; }
-        .badge { display: inline-block; padding: 2px 10px; border-radius: 9999px; font-size: 12px; font-weight: 600; }
-      </style>
-      </head><body>${content}</body></html>
-    `);
+    const htmlContent = generatePrintInvoiceHTML(order, { isAdmin: false });
+    const printWin = window.open("", "_blank", "width=850,height=750");
+    printWin.document.write(htmlContent);
     printWin.document.close();
-    printWin.print();
+    printWin.focus();
+    setTimeout(() => { printWin.print(); }, 250);
   };
 
   const statusColors = {
     Pending: "#f59e0b",
     Accepted: "#3b82f6",
-    Packed: "#8b5cf6",
+    Packed: "#1c4d2e",
     Out_for_Delivery: "#f97316",
     Delivered: "#22c55e",
     Cancelled: "#ef4444",
     Rejected: "#ef4444",
   };
 
+  const itemSubtotal = (order.items || []).reduce((sum, item) => sum + ((item.price || 0) * (item.qty || 0)), 0);
+  
+  // Platform fee extraction (pulling real order fee fields or residual fee)
+  const computedPlatformFee = (order.handlingFee || 0) + (order.smallCartFee || 0) + (order.rainFee || 0);
+  const residualFee = Number(order.grandTotal || 0) - (itemSubtotal - Number(order.couponDiscount || 0) + Number(order.deliveryCharge || 0) + Number(order.taxAmount || 0));
+  const platformFee = computedPlatformFee > 0 ? computedPlatformFee : Math.max(0, residualFee);
+
+  const vendorComm = order.vendorCommission || order.vendorSubOrders?.[0]?.vendorCommission || {};
+  const commAmount = vendorComm.amount ?? 0;
+  const commType = vendorComm.commissionType || "percentage";
+  const commRate = vendorComm.rate ?? 0;
+
+  let commLabel = "";
+  if (commType === "flat") {
+    commLabel = `₹${Number(commRate).toFixed(2)} flat`;
+  } else if (commType === "percentage" || commRate > 0) {
+    commLabel = `${commRate}%`;
+  } else if (itemSubtotal > 0 && commAmount > 0) {
+    const effectiveRate = ((commAmount / itemSubtotal) * 100);
+    commLabel = effectiveRate % 1 === 0 ? `${effectiveRate.toFixed(0)}%` : `${effectiveRate.toFixed(1)}%`;
+  } else {
+    commLabel = `${commRate || 0}%`;
+  }
+
+  const vendorNetPayout = Math.max(0, itemSubtotal - commAmount);
+
+  // Per-item calculations with exact mathematical reconciliation
+  const rawItems = order.items || [];
+  let allocatedCouponSum = 0;
+  let allocatedCommSum = 0;
+
+  const itemsWithBreakdown = rawItems.map((item, idx) => {
+    const lineSubtotal = (Number(item.price) || 0) * (Number(item.qty) || 0);
+    
+    // 1. Coupon Discount Share
+    let itemCoupon = 0;
+    if (item.couponDiscount !== undefined && item.couponDiscount !== null && item.couponDiscount >= 0 && order.couponDiscount > 0) {
+      itemCoupon = item.couponDiscount;
+    } else if (order.couponDiscount > 0 && itemSubtotal > 0) {
+      if (idx === rawItems.length - 1) {
+        itemCoupon = Math.max(0, Math.round((order.couponDiscount - allocatedCouponSum + Number.EPSILON) * 100) / 100);
+      } else {
+        itemCoupon = Math.round(((lineSubtotal / itemSubtotal) * order.couponDiscount + Number.EPSILON) * 100) / 100;
+        allocatedCouponSum += itemCoupon;
+      }
+    }
+
+    // 2. Platform Commission
+    let itemComm = 0;
+    if (item.calculatedCommissionAmount !== undefined && item.calculatedCommissionAmount !== null && item.calculatedCommissionAmount > 0) {
+      itemComm = item.calculatedCommissionAmount;
+    } else if (commAmount > 0 && itemSubtotal > 0) {
+      if (commType === "percentage") {
+        itemComm = lineSubtotal * (commRate / 100);
+      } else {
+        itemComm = (lineSubtotal / itemSubtotal) * commAmount;
+      }
+    }
+
+    // Check last item residual to match total commAmount exactly
+    if (idx === rawItems.length - 1 && commAmount > 0) {
+      itemComm = Math.max(0, Math.round((commAmount - allocatedCommSum + Number.EPSILON) * 100) / 100);
+    } else {
+      itemComm = Math.round((itemComm + Number.EPSILON) * 100) / 100;
+      allocatedCommSum += itemComm;
+    }
+
+    // Resolved Commission Label
+    let itemCommLabel = "";
+    const type = item.commissionType || commType;
+    const val = item.commissionValue ?? item.commissionRateApplied ?? commRate;
+
+    if (type === "flat") {
+      itemCommLabel = `Flat ₹${Number(val).toFixed(2)} per item: −₹${itemComm.toFixed(2)}`;
+    } else if (type === "percentage" || val > 0) {
+      itemCommLabel = `${val}% of ₹${lineSubtotal.toFixed(2)}: −₹${itemComm.toFixed(2)}`;
+    } else if (lineSubtotal > 0 && itemComm > 0) {
+      const effRate = ((itemComm / lineSubtotal) * 100).toFixed(1);
+      itemCommLabel = `${effRate}% of ₹${lineSubtotal.toFixed(2)}: −₹${itemComm.toFixed(2)}`;
+    } else {
+      itemCommLabel = `Platform Commission: −₹${itemComm.toFixed(2)}`;
+    }
+
+    // Net Item Earning
+    const itemNetEarning = Math.max(0, lineSubtotal - itemComm);
+
+    return {
+      ...item,
+      lineSubtotal,
+      itemCoupon,
+      itemComm,
+      itemCommLabel,
+      itemNetEarning
+    };
+  });
+
+  const formatVendorAddress = (addr) => {
+    if (!addr) return "N/A";
+    if (typeof addr === "string") return addr;
+    if (typeof addr === "object") {
+      const parts = [
+        addr.shopAddress,
+        addr.village,
+        addr.area,
+        addr.city || addr.district,
+        addr.state,
+        addr.pincode
+      ].filter(Boolean);
+      return parts.length > 0 ? parts.join(", ") : "N/A";
+    }
+    return "N/A";
+  };
+
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
-        <div className="flex items-center justify-between p-5 border-b">
-          <h2 className="text-lg font-bold text-slate-800">
-            Invoice — <span className="text-purple-600">{order.orderId}</span>
-          </h2>
-          <div className="flex gap-2">
+    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 overflow-y-auto">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col border border-slate-100 overflow-hidden my-auto min-w-0">
+        {/* Top Control Bar */}
+        <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-slate-100 bg-slate-50/50 min-w-0">
+          <div className="flex items-center gap-2 min-w-0 flex-1">
+            <span className="font-bold text-slate-800 whitespace-nowrap">Tax Invoice</span>
+            <span className="font-mono text-xs px-2 py-0.5 rounded bg-purple-100 text-purple-700 font-bold truncate">
+              {order.invoiceNumber || "AR-000001"}
+            </span>
+          </div>
+          <div className="flex gap-2 flex-shrink-0">
             <button
               onClick={handlePrint}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 text-white rounded-lg text-sm font-semibold hover:bg-green-700 transition"
+              className="flex items-center gap-1.5 px-3.5 py-1.5 bg-purple-700 text-white rounded-xl text-xs font-bold hover:bg-purple-800 transition shadow-sm cursor-pointer whitespace-nowrap"
             >
-              <Printer size={14} /> Print
+              <Printer size={14} /> Print Invoice
             </button>
-            <button onClick={onClose} className="p-1.5 hover:bg-slate-100 rounded-lg transition">
+            <button onClick={onClose} className="p-1.5 hover:bg-slate-200/60 text-slate-500 rounded-xl transition cursor-pointer">
               <X size={18} />
             </button>
           </div>
         </div>
 
-        <div className="overflow-y-auto p-6" ref={invoiceRef}>
+        {/* Invoice Body */}
+        <div className="overflow-y-auto p-4 sm:p-8 space-y-6 min-w-0" ref={invoiceRef}>
+          {/* Print-Only Context Running Header */}
+          <div className="hidden print:flex justify-between items-center text-[10px] text-slate-400 font-mono border-b border-slate-200 pb-1 mb-2">
+            <span>Tax Invoice: {order.invoiceNumber || order.orderId}</span>
+            <span>Aryusha — Tax Invoice / Bill of Supply</span>
+          </div>
           {/* Header */}
-          <div className="flex justify-between mb-6">
-            <div>
-              <h3 className="text-xl font-black text-purple-700">QuickCart</h3>
-              <p className="text-xs text-slate-500">Tax Invoice / Bill of Supply</p>
+          <div className="flex flex-col sm:flex-row justify-between items-start gap-4 border-b border-slate-100 pb-5 min-w-0">
+            <div className="min-w-0">
+              <h3 className="text-2xl sm:text-3xl font-black text-purple-700 tracking-tight break-words">Aryusha</h3>
+              <p className="text-xxs font-bold text-slate-400 uppercase tracking-widest mt-0.5">Tax Invoice / Bill of Supply</p>
             </div>
-            <div className="text-right text-sm text-slate-600">
-              <p className="font-bold">{order.orderId}</p>
-              <p>{new Date(order.createdAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}</p>
-              <span
-                className="badge"
-                style={{ background: (statusColors[order.orderStatus] || "#94a3b8") + "22", color: statusColors[order.orderStatus] || "#94a3b8" }}
-              >
-                {order.orderStatus}
-              </span>
+            <div className="text-left sm:text-right text-xs space-y-1 min-w-0 break-words">
+              <p className="font-mono font-bold text-slate-900 text-sm break-all">
+                <span className="text-slate-400 font-medium text-xs">Invoice No: </span>
+                <span className="text-purple-700">{order.invoiceNumber || "AR-000001"}</span>
+              </p>
+              <p className="font-mono text-slate-600 break-all">
+                <span className="text-slate-400 font-medium">Order ID: </span>
+                {order.orderId}
+              </p>
+              <p className="text-slate-500">
+                <span className="text-slate-400 font-medium">Date: </span>
+                {new Date(order.createdAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
+              </p>
+              <div className="pt-1">
+                <span
+                  className="badge"
+                  style={{ background: (statusColors[order.orderStatus] || "#94a3b8") + "22", color: statusColors[order.orderStatus] || "#94a3b8" }}
+                >
+                  {order.orderStatus}
+                </span>
+              </div>
             </div>
+          </div>
+
+          {/* Business Compliance Block (Udyam Registration only) */}
+          <div className="bg-purple-50/60 border border-purple-100 rounded-xl p-3.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-xs min-w-0">
+            <span className="font-bold text-slate-700 whitespace-nowrap">Udyam Registration No.</span>
+            <span className="font-mono font-black text-purple-800 tracking-wide bg-white px-2.5 py-1 rounded-md border border-purple-200 break-all">
+              UDYAM-BR-30-0092390
+            </span>
           </div>
 
           {/* Customer & Vendor Info */}
-          <div className="grid grid-cols-2 gap-4 mb-6 text-sm">
-            <div className="bg-slate-50 p-3 rounded-xl">
-              <p className="font-bold text-slate-700 mb-1">Billed To</p>
-              <p className="font-semibold">{order.deliveryAddress?.fullName || order.customerId?.fullName}</p>
-              <p className="text-slate-500">{order.deliveryAddress?.phoneNumber}</p>
-              <p className="text-slate-500">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs min-w-0">
+            <div className="bg-slate-50/80 border border-slate-100 p-4 rounded-xl space-y-1 min-w-0 overflow-hidden break-words">
+              <p className="font-bold text-slate-400 uppercase tracking-wider text-xxs mb-1">Billed To</p>
+              <p className="font-bold text-slate-800 text-sm break-words">{order.deliveryAddress?.fullName || order.customerId?.fullName}</p>
+              <p className="text-slate-600 font-mono break-all">{order.deliveryAddress?.phoneNumber || order.customerId?.phoneNumber}</p>
+              <p className="text-slate-500 leading-relaxed break-words">
                 {order.deliveryAddress?.houseNo} {order.deliveryAddress?.area}, {order.deliveryAddress?.city} — {order.deliveryAddress?.pincode}
               </p>
+              <div className="mt-2 pt-2 border-t border-slate-200/60 text-xxs">
+                <span className="font-bold text-slate-500">Delivery Slot: </span>
+                <span className="font-extrabold text-purple-700">
+                  {order.deliverySlot?.time
+                    ? `${order.deliverySlot.date ? order.deliverySlot.date + " (" + order.deliverySlot.time + ")" : order.deliverySlot.time}`
+                    : "Standard Delivery"}
+                </span>
+              </div>
             </div>
-            <div className="bg-slate-50 p-3 rounded-xl">
-              <p className="font-bold text-slate-700 mb-1">Fulfilled By</p>
-              <p className="font-semibold">{order.vendorId?.shopName || "N/A"}</p>
-              <p className="text-slate-500">{order.vendorId?.phone}</p>
-              <p className="text-slate-500">{order.vendorId?.address?.city}</p>
+
+            <div className="bg-slate-50/80 border border-slate-100 p-4 rounded-xl space-y-1 min-w-0 overflow-hidden break-words">
+              <p className="font-bold text-slate-400 uppercase tracking-wider text-xxs mb-1">Fulfilled By</p>
+              <p className="font-bold text-slate-800 text-sm break-words">{order.vendorId?.shopName || "N/A"}</p>
+              <p className="text-slate-600 font-mono break-all">{order.vendorId?.phone || "N/A"}</p>
+              <p className="text-slate-500 break-words">{formatVendorAddress(order.vendorId?.address)}</p>
             </div>
           </div>
 
-          {/* Items Table */}
-          <table>
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>Item</th>
-                <th>Qty</th>
-                <th>Unit Price</th>
-                <th>Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(order.items || []).map((item, i) => (
-                <tr key={i}>
-                  <td>{i + 1}</td>
-                  <td>{item.name}</td>
-                  <td>{item.qty}</td>
-                  <td>₹{item.price?.toFixed(2)}</td>
-                  <td>₹{(item.price * item.qty)?.toFixed(2)}</td>
-                </tr>
-              ))}
-            </tbody>
-            <tfoot>
-              {order.couponDiscount > 0 && (
-                <tr>
-                  <td colSpan={4} className="text-right font-semibold text-green-600">Coupon Discount ({order.couponCode})</td>
-                  <td className="text-green-600 font-semibold">- ₹{order.couponDiscount?.toFixed(2)}</td>
-                </tr>
-              )}
-              <tr>
-                <td colSpan={4} className="text-right font-semibold">Delivery Charge</td>
-                <td>₹{(order.deliveryCharge || 0).toFixed(2)}</td>
-              </tr>
-              <tr className="total-row">
-                <td colSpan={4} className="text-right font-bold">Grand Total</td>
-                <td className="font-bold text-purple-700">₹{order.grandTotal?.toFixed(2)}</td>
-              </tr>
-            </tfoot>
-          </table>
+          {/* Itemized Breakdown Cards */}
+          <div className="space-y-3 min-w-0">
+            <div className="flex justify-between items-center px-1 min-w-0">
+              <span className="text-xs font-black text-slate-700 uppercase tracking-wider">Itemized Breakdown</span>
+              <span className="text-xxs font-bold text-slate-400">{itemsWithBreakdown.length} Item{itemsWithBreakdown.length > 1 ? "s" : ""}</span>
+            </div>
 
-          {/* Payment Info */}
-          <div className="mt-4 flex justify-between text-sm text-slate-600">
-            <p>Payment Method: <strong>{order.paymentMethod}</strong></p>
-            <p>Payment Status: <strong>{order.paymentStatus}</strong></p>
+            {itemsWithBreakdown.map((item, i) => (
+              <div key={i} className="bg-slate-50/80 border border-slate-200/80 rounded-xl p-3.5 space-y-2 text-xs min-w-0 overflow-hidden">
+                {/* Item Main Info */}
+                <div className="flex justify-between items-start gap-2 min-w-0">
+                  <div className="space-y-0.5 min-w-0 flex-1">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="font-mono text-xxs font-bold text-slate-400 flex-shrink-0">#{i + 1}</span>
+                      <span className="font-bold text-slate-800 text-xs sm:text-sm break-words min-w-0">{item.name}</span>
+                    </div>
+                    <p className="text-xxs text-slate-500 font-mono">
+                      {item.qty} × ₹{Number(item.price || 0).toFixed(2)}
+                    </p>
+                  </div>
+                  <div className="text-right flex-shrink-0">
+                    <span className="text-xxs font-bold text-slate-400 block uppercase tracking-wider">Line Total</span>
+                    <span className="font-mono font-black text-slate-900 text-sm">₹{item.lineSubtotal.toFixed(2)}</span>
+                  </div>
+                </div>
+
+                {/* Item Deductions */}
+                <div className="pt-2 border-t border-slate-200/60 space-y-1 text-xxs sm:text-xs min-w-0">
+                  {/* Coupon Share */}
+                  <div className="flex justify-between items-center min-w-0 gap-2">
+                    <span className="text-slate-500 font-medium flex-shrink-0">Coupon Share:</span>
+                    {item.itemCoupon > 0 ? (
+                      <span className="font-mono font-bold text-emerald-600 truncate">
+                        {order.couponCode ? `${order.couponCode} discount` : "Coupon discount"}: −₹{item.itemCoupon.toFixed(2)}
+                      </span>
+                    ) : (
+                      <span className="font-mono text-slate-400 italic">No coupon on this item</span>
+                    )}
+                  </div>
+
+                  {/* Commission */}
+                  <div className="flex justify-between items-center min-w-0 gap-2">
+                    <span className="text-slate-500 font-medium flex-shrink-0">Platform Commission:</span>
+                    <span className="font-mono font-bold text-red-600 truncate">
+                      {item.itemCommLabel}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Net Earning Highlight Line */}
+                <div className="bg-purple-100/70 border border-purple-200/80 rounded-lg px-3 py-2 flex justify-between items-center min-w-0">
+                  <span className="font-bold text-purple-900 text-xxs sm:text-xs uppercase tracking-wider flex-shrink-0">
+                    You earn on this item
+                  </span>
+                  <span className="font-mono font-black text-purple-800 text-xs sm:text-sm">
+                    ₹{item.itemNetEarning.toFixed(2)}
+                  </span>
+                </div>
+              </div>
+            ))}
           </div>
-          <p className="mt-6 text-xs text-slate-400 text-center">
+
+          {/* Totals & Financial Breakdown Section */}
+          <div className="space-y-4 pt-2">
+            {/* Block 1: Customer Bill */}
+            <div className="bg-slate-50/90 border border-slate-200/80 rounded-xl p-4 space-y-2">
+              <div className="flex justify-between items-center pb-2 border-b border-slate-200/60">
+                <span className="text-xs font-black text-slate-700 uppercase tracking-wider">Customer Bill</span>
+                <span className="text-xxs font-bold text-slate-400">Payment Breakdown</span>
+              </div>
+              <div className="space-y-1.5 text-xs text-slate-600">
+                <div className="flex justify-between py-0.5">
+                  <span>Item Subtotal</span>
+                  <span className="font-mono font-semibold">₹{itemSubtotal.toFixed(2)}</span>
+                </div>
+                {order.couponDiscount > 0 && (
+                  <div className="flex justify-between py-0.5 text-emerald-600 font-medium">
+                    <span>Coupon Discount ({order.couponCode || "APPLIED"})</span>
+                    <span className="font-mono font-bold">- ₹{Number(order.couponDiscount).toFixed(2)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between py-0.5">
+                  <span>Delivery Charge</span>
+                  <span className="font-mono font-semibold">₹{Number(order.deliveryCharge || 0).toFixed(2)}</span>
+                </div>
+                {platformFee > 0 && (
+                  <div className="flex justify-between py-0.5">
+                    <span>Platform Fee</span>
+                    <span className="font-mono font-semibold">₹{platformFee.toFixed(2)}</span>
+                  </div>
+                )}
+                {order.taxAmount > 0 && (
+                  <div className="flex justify-between py-0.5">
+                    <span>Taxes & GST</span>
+                    <span className="font-mono font-semibold">₹{Number(order.taxAmount).toFixed(2)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between pt-2 text-sm font-extrabold text-slate-900 border-t border-slate-200">
+                  <span>Customer Grand Total</span>
+                  <span className="font-mono text-purple-700">₹{Number(order.grandTotal || 0).toFixed(2)}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Thin Visual Divider */}
+            <div className="relative flex py-1 items-center">
+              <div className="flex-grow border-t border-slate-200"></div>
+              <span className="flex-shrink mx-3 text-xxs font-bold text-slate-400 uppercase tracking-wider bg-white px-2">
+                Vendor Settlement
+              </span>
+              <div className="flex-grow border-t border-slate-200"></div>
+            </div>
+
+            {/* Block 2: Vendor Earning */}
+            <div className="bg-purple-50/70 border border-purple-200/70 rounded-xl p-4 space-y-2">
+              <div className="flex justify-between items-center pb-2 border-b border-purple-200/60">
+                <span className="text-xs font-black text-purple-900 uppercase tracking-wider">Vendor Earning</span>
+                <span className="text-xxs font-bold text-purple-600">Payout Breakdown</span>
+              </div>
+              <div className="space-y-1.5 text-xs text-slate-700">
+                <div className="flex justify-between items-center py-0.5">
+                  <span className="font-semibold text-slate-700">Vendor Item Subtotal</span>
+                  <span className="font-mono font-bold text-slate-900">₹{itemSubtotal.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between items-center py-0.5 text-red-600">
+                  <span className="font-semibold">Platform Commission ({commLabel})</span>
+                  <span className="font-mono font-bold">- ₹{commAmount.toFixed(2)}</span>
+                </div>
+                <div className="pt-2 border-t border-purple-200 flex justify-between items-center">
+                  <span className="text-xs font-black text-purple-900 uppercase tracking-wider">Your Net Earning</span>
+                  <span className="text-sm font-mono font-black text-purple-700">₹{vendorNetPayout.toFixed(2)}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div className="pt-4 border-t border-slate-100 flex flex-wrap justify-between items-center gap-2 text-xs text-slate-500">
+            <p>Payment Method: <strong className="text-slate-800 uppercase">{order.paymentMethod || "COD"}</strong></p>
+            <p>Payment Status: <strong className="text-slate-800 uppercase">{order.paymentStatus || "PENDING"}</strong></p>
+          </div>
+          <p className="text-xxs text-slate-400 text-center font-medium pt-2">
             This is a system-generated invoice. No signature required.
           </p>
         </div>

@@ -87,6 +87,7 @@ export async function calculateOrderFees(cartTotal, zoneId) {
         valueType: config.valueType,
         value: config.value,
         amount: amount,
+        condition: config.condition,
       });
 
       totalFees += amount;

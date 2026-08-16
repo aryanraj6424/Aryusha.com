@@ -22,6 +22,7 @@ export default function AddProductFamily() {
     status: "Active",
     tags: "",
     unitType: "weight",
+    unitId: "",
     shelfLife: "",
     storageInstructions: "",
     countryOfOrigin: "India",
@@ -93,14 +94,16 @@ export default function AddProductFamily() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [catsRes, subCatsRes, brandsRes] = await Promise.all([
+        const [catsRes, subCatsRes, brandsRes, unitsRes] = await Promise.all([
           axios.get(`${import.meta.env.VITE_API_URL}/categories`),
           axios.get(`${import.meta.env.VITE_API_URL}/sub-categories`),
-          axios.get(`${import.meta.env.VITE_API_URL}/brands`)
+          axios.get(`${import.meta.env.VITE_API_URL}/brands`),
+          axios.get(`${import.meta.env.VITE_API_URL}/admin/units/all`).catch(() => ({ data: {} }))
         ]);
         setCategories(catsRes.data.categories || []);
         setSubCategories(subCatsRes.data.subCategories || []);
         setBrands(brandsRes.data.brands || []);
+        setUnits(unitsRes.data.units || unitsRes.data.data || []);
       } catch (error) {
         console.error("Failed to load catalog attributes:", error);
       } finally {
@@ -413,6 +416,22 @@ export default function AddProductFamily() {
               <option value="weight">Weight (g, kg)</option>
               <option value="volume">Volume (ml, l)</option>
               <option value="count">Count (pcs, pack)</option>
+            </select>
+          </div>
+          <div>
+            <label className="font-semibold block mb-1 text-sm text-gray-700">Linked Unit Step Presets</label>
+            <select
+              name="unitId"
+              value={formData.unitId || ""}
+              onChange={handleChange}
+              className="w-full mt-1 border rounded-lg p-2.5 bg-white outline-none focus:border-green-500"
+            >
+              <option value="">None (Custom Free-text Pack Sizes)</option>
+              {units.map((u) => (
+                <option key={u._id} value={u._id}>
+                  {u.name} ({u.shortName}) — {u.stepOptions?.length || 0} Pack Steps
+                </option>
+              ))}
             </select>
           </div>
           <div>

@@ -8,6 +8,7 @@ import {
   updateVariant,
   deleteVariant,
 } from "../../services/vendorApi";
+import axios from "axios";
 
 const PACK_UNITS = ["g", "kg", "ml", "l", "pcs"];
 
@@ -28,6 +29,8 @@ export default function ManageVariants() {
   const [product, setProduct] = useState(null);
   const [variants, setVariants] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [presetSteps, setPresetSteps] = useState([]);
+  const [unitName, setUnitName] = useState("");
 
   // Form state
   const [showForm, setShowForm] = useState(false);
@@ -50,6 +53,22 @@ export default function ManageVariants() {
         ]);
         setProduct(prod);
         setVariants(vars || []);
+
+        // Fetch family unit step options if familyId exists
+        const famId = prod?.familyId?._id || prod?.familyId;
+        if (famId) {
+          try {
+            const famRes = await axios.get(`${import.meta.env.VITE_API_URL}/product-families/${famId}`);
+            const fam = famRes.data;
+            const unitObj = fam?.unitId;
+            if (unitObj && Array.isArray(unitObj.stepOptions) && unitObj.stepOptions.length > 0) {
+              setPresetSteps(unitObj.stepOptions);
+              setUnitName(unitObj.name || "");
+            }
+          } catch (e) {
+            console.error("Could not load family unit step options:", e);
+          }
+        }
       } catch (err) {
         console.error("Failed to load product/variants:", err);
       } finally {
@@ -282,7 +301,8 @@ export default function ManageVariants() {
         </div>
       ) : (
         <div className="bg-white border border-slate-100 rounded-2xl overflow-hidden shadow-sm">
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
             <thead>
               <tr className="bg-slate-50 text-slate-400 text-xs uppercase tracking-wide">
                 <th className="text-left px-5 py-3 font-bold">Variant</th>
@@ -345,6 +365,7 @@ export default function ManageVariants() {
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       )}
 
@@ -364,6 +385,53 @@ export default function ManageVariants() {
               </div>
 
               <div className="space-y-4">
+                {/* Preset Step Option Quick Picker */}
+                {presetSteps && presetSteps.length > 0 && (
+                  <div className="p-3.5 bg-purple-50 border border-purple-200 rounded-xl space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span className="text-[11px] font-bold text-purple-800 uppercase tracking-wider">
+                        Preset Pack Size Steps
+                      </span>
+                      {unitName && <span className="text-[10px] text-purple-600 font-semibold">{unitName}</span>}
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {presetSteps.map((step, idx) => {
+                        const isSelected = String(form.packSize.value) === String(step.value) && form.packSize.unit === step.unit;
+                        return (
+                          <button
+                            key={idx}
+                            type="button"
+                            onClick={() => {
+                              const lbl = step.label || `${step.value} ${step.unit}`;
+                              const newForm = {
+                                ...form,
+                                packSize: { value: String(step.value), unit: step.unit },
+                                variantLabel: lbl,
+                              };
+                              if (product && !form.sku) {
+                                const slugPart = (product.slug || product.name || "PROD")
+                                  .toUpperCase()
+                                  .replace(/[^A-Z0-9]/g, "")
+                                  .slice(0, 10);
+                                const suffix = `${step.value}${step.unit.toUpperCase()}`;
+                                newForm.sku = `${slugPart}-${suffix}`;
+                              }
+                              setForm(newForm);
+                            }}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1 ${
+                              isSelected
+                                ? "bg-purple-600 text-white shadow-sm"
+                                : "bg-white text-purple-700 border border-purple-200 hover:bg-purple-100"
+                            }`}
+                          >
+                            {step.label || `${step.value} ${step.unit}`}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
                 {/* Pack Size */}
                 <div>
                   <label className="block text-xs uppercase tracking-wider text-slate-400 mb-2">

@@ -25,7 +25,7 @@ export default function PendingApproval() {
 
         <p className="text-gray-600 mt-4 leading-relaxed">
           Thank you for registering as a vendor on
-          QuickCart.
+          Aryusha.
           <br />
           Our verification team is currently reviewing
           your business details and submitted documents.

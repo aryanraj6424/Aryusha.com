@@ -38,9 +38,51 @@ const orderItemSchema = new mongoose.Schema({
   },
   commissionResolutionLevel: {
     type: String,
-    enum: ["product", "vendor", "global", "none"],
+    enum: ["vendorProduct", "product", "vendor", "global", "none"],
     default: "none",
   },
+  commissionType: {
+    type: String,
+    enum: ["percentage", "flat", "inherit"],
+    default: "inherit",
+  },
+  commissionValue: {
+    type: Number,
+    default: null,
+  },
+  couponDiscount: {
+    type: Number,
+    default: 0,
+  },
+});
+
+const vendorSubOrderSchema = new mongoose.Schema({
+  vendorId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Vendor",
+    required: true,
+  },
+  items: [orderItemSchema],
+  subOrderStatus: {
+    type: String,
+    enum: ["Pending", "Accepted", "Packed", "Picked", "Delivered", "Rejected", "Cancelled"],
+    default: "Pending",
+  },
+  pickupStatus: {
+    type: String,
+    enum: ["PENDING", "READY_FOR_PICKUP", "PICKED"],
+    default: "PENDING",
+  },
+  vendorCommission: {
+    rate: { type: Number, default: 0 },
+    commissionType: { type: String, enum: ["percentage", "flat", "mixed"], default: "percentage" },
+    amount: { type: Number, default: 0 },
+    calculatedAt: { type: Date, default: null }
+  },
+  subtotal: {
+    type: Number,
+    default: 0
+  }
 });
 
 const customerOrderSchema = new mongoose.Schema(
@@ -50,6 +92,11 @@ const customerOrderSchema = new mongoose.Schema(
       required: true,
       unique: true,
     },
+    invoiceNumber: {
+      type: String,
+      unique: true,
+      sparse: true,
+    },
     customerId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
@@ -58,8 +105,9 @@ const customerOrderSchema = new mongoose.Schema(
     vendorId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Vendor",
-      required: true,
+      required: false,
     },
+    vendorSubOrders: [vendorSubOrderSchema],
     items: [orderItemSchema],
     totalAmount: {
       type: Number,
@@ -68,6 +116,10 @@ const customerOrderSchema = new mongoose.Schema(
     deliveryCharge: {
       type: Number,
       default: 0,
+    },
+    riderPayout: {
+      type: Number,
+      default: null,
     },
     taxAmount: {
       type: Number,
@@ -100,6 +152,7 @@ const customerOrderSchema = new mongoose.Schema(
       enum: [
         "Pending",
         "Accepted",
+        "Partially_Accepted",
         "Packed",
         "Out_for_Delivery",
         "Delivered",
@@ -189,7 +242,7 @@ const customerOrderSchema = new mongoose.Schema(
     },
     vendorCommission: {
       rate: { type: Number, default: 0 },
-      commissionType: { type: String, enum: ["percentage", "flat"], default: "percentage" },
+      commissionType: { type: String, enum: ["percentage", "flat", "mixed"], default: "percentage" },
       amount: { type: Number, default: 0 },
       calculatedAt: { type: Date, default: null }
     },
@@ -198,5 +251,12 @@ const customerOrderSchema = new mongoose.Schema(
     timestamps: true,
   }
 );
+
+customerOrderSchema.index({ vendorId: 1, createdAt: -1 });
+customerOrderSchema.index({ vendorId: 1, orderStatus: 1, createdAt: -1 });
+customerOrderSchema.index({ "vendorSubOrders.vendorId": 1, "vendorSubOrders.subOrderStatus": 1 });
+customerOrderSchema.index({ orderStatus: 1, createdAt: -1 });
+customerOrderSchema.index({ createdAt: -1 });
+customerOrderSchema.index({ invoiceNumber: 1 }, { unique: true, sparse: true });
 
 export default mongoose.model("CustomerOrder", customerOrderSchema);

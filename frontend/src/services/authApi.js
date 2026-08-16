@@ -153,7 +153,7 @@ import axios from "axios";
 //   },
 // });
 const API = axios.create({
-  baseURL: "http://localhost:5000/api",
+  baseURL: import.meta.env.VITE_API_URL,
   headers: {
     "Content-Type": "application/json",
   },
@@ -214,7 +214,7 @@ export const signupUser = async (userData) => {
 
 export const forgotPassword = async (data) => {
   const response = await API.post(
-    "/auth/forgot-password",
+    "/auth/forgot-password/send-otp",
     data
   );
 
@@ -229,7 +229,7 @@ export const forgotPassword = async (data) => {
 
 export const verifyOtp = async (data) => {
   const response = await API.post(
-    "/auth/verify-otp",
+    "/auth/forgot-password/verify-otp",
     data
   );
 
@@ -244,7 +244,7 @@ export const verifyOtp = async (data) => {
 
 export const resendOtp = async (data) => {
   const response = await API.post(
-    "/auth/resend-otp",
+    "/auth/forgot-password/send-otp",
     data
   );
 
@@ -259,7 +259,7 @@ export const resendOtp = async (data) => {
 
 export const resetPassword = async (data) => {
   const response = await API.post(
-    "/auth/reset-password",
+    "/auth/forgot-password/reset",
     data
   );
 

@@ -1,10 +1,15 @@
 import Vendor from "../vendor/models/Vendor.js";
 import PlatformFeeSettings from "../admin/models/PlatformFeeSettings.js";
-import { Product } from "../models/catalog.js";
+import { Product, VendorProduct } from "../models/catalog.js";
 
 /**
  * Calculates commission on the item/product subtotal for a vendor's items in the order.
- * Follows the hierarchy: Product-level override -> Vendor-level override -> Global platform default.
+ * Follows the 4-tier hierarchy:
+ * 1. Vendor Product override (specific listing override)
+ * 2. Product-level override (master product default)
+ * 3. Vendor-level override (vendor default)
+ * 4. Global platform default
+ * 
  * Excludes delivery charge, handling fee, GST, small cart fee, rain fee, etc.
  * 
  * @param {Object} order - The order document/object containing items (with productId, price, qty).
@@ -38,6 +43,7 @@ export const calculateVendorOrderCommission = async (order, vendorId) => {
   let itemSubtotal = 0;
   let totalCommissionAmount = 0;
   
+  let hasVendorProductOverride = false;
   let hasProductOverride = false;
   let hasVendorOverride = vendorOrGlobalLevel === "vendor";
 
@@ -45,23 +51,28 @@ export const calculateVendorOrderCommission = async (order, vendorId) => {
   let inheritedSubtotal = 0;
   const processedItems = [];
 
-  // Step 1: Identify product-level overrides and accumulate inherited items
+  // Step 1: Process per-item overrides (Tier 1: VendorProduct -> Tier 2: Product)
   for (const item of orderItems) {
     const itemQty = item.qty || item.quantity || 0;
     const itemPrice = item.price || 0;
     const subtotal = itemPrice * itemQty;
     itemSubtotal += subtotal;
 
-    // Fetch the product to check per-product commission rate
-    const product = await Product.findById(item.productId);
-    
-    if (product && product.commissionType !== "inherit" && product.commissionValue !== null && product.commissionValue !== undefined) {
-      hasProductOverride = true;
+    // Check Tier 1: VendorProduct override
+    let vpLink = null;
+    if (item.vendorProductId) {
+      vpLink = await VendorProduct.findById(item.vendorProductId);
+    } else if (vendorId && item.productId) {
+      vpLink = await VendorProduct.findOne({ vendorId, masterProductId: item.productId });
+    }
+
+    if (vpLink && vpLink.commissionType !== "inherit" && vpLink.commissionValue !== null && vpLink.commissionValue !== undefined) {
+      hasVendorProductOverride = true;
       let itemCommission = 0;
-      if (product.commissionType === "percentage") {
-        itemCommission = subtotal * (product.commissionValue / 100);
-      } else if (product.commissionType === "flat") {
-        itemCommission = product.commissionValue * itemQty; // Flat rate per unit sold
+      if (vpLink.commissionType === "percentage") {
+        itemCommission = subtotal * (vpLink.commissionValue / 100);
+      } else if (vpLink.commissionType === "flat") {
+        itemCommission = vpLink.commissionValue * itemQty;
       }
 
       processedItems.push({
@@ -72,25 +83,58 @@ export const calculateVendorOrderCommission = async (order, vendorId) => {
         qty: itemQty,
         img: item.img,
         calculatedCommissionAmount: Math.round((itemCommission + Number.EPSILON) * 100) / 100,
-        commissionRateApplied: product.commissionValue,
-        commissionResolutionLevel: "product"
+        commissionRateApplied: vpLink.commissionValue,
+        commissionResolutionLevel: "vendorProduct",
+        commissionType: vpLink.commissionType,
+        commissionValue: vpLink.commissionValue
       });
 
       totalCommissionAmount += itemCommission;
     } else {
-      inheritedSubtotal += subtotal;
-      processedItems.push({
-        productId: item.productId,
-        variantId: item.variantId,
-        name: item.name,
-        price: itemPrice,
-        qty: itemQty,
-        img: item.img,
-        // will calculate in second step
-        calculatedCommissionAmount: 0,
-        commissionRateApplied: vendorOrGlobalVal,
-        commissionResolutionLevel: vendorOrGlobalLevel
-      });
+      // Check Tier 2: Product override
+      const product = await Product.findById(item.productId);
+      
+      if (product && product.commissionType !== "inherit" && product.commissionValue !== null && product.commissionValue !== undefined) {
+        hasProductOverride = true;
+        let itemCommission = 0;
+        if (product.commissionType === "percentage") {
+          itemCommission = subtotal * (product.commissionValue / 100);
+        } else if (product.commissionType === "flat") {
+          itemCommission = product.commissionValue * itemQty; // Flat rate per unit sold
+        }
+
+        processedItems.push({
+          productId: item.productId,
+          variantId: item.variantId,
+          name: item.name,
+          price: itemPrice,
+          qty: itemQty,
+          img: item.img,
+          calculatedCommissionAmount: Math.round((itemCommission + Number.EPSILON) * 100) / 100,
+          commissionRateApplied: product.commissionValue,
+          commissionResolutionLevel: "product",
+          commissionType: product.commissionType,
+          commissionValue: product.commissionValue
+        });
+
+        totalCommissionAmount += itemCommission;
+      } else {
+        inheritedSubtotal += subtotal;
+        processedItems.push({
+          productId: item.productId,
+          variantId: item.variantId,
+          name: item.name,
+          price: itemPrice,
+          qty: itemQty,
+          img: item.img,
+          // will calculate in second step
+          calculatedCommissionAmount: 0,
+          commissionRateApplied: vendorOrGlobalVal,
+          commissionResolutionLevel: vendorOrGlobalLevel,
+          commissionType: vendorOrGlobalType,
+          commissionValue: vendorOrGlobalVal
+        });
+      }
     }
   }
 
@@ -108,7 +152,7 @@ export const calculateVendorOrderCommission = async (order, vendorId) => {
 
     // Distribute inherited commission among inherited items
     for (const item of processedItems) {
-      if (item.commissionResolutionLevel !== "product") {
+      if (item.commissionResolutionLevel !== "vendorProduct" && item.commissionResolutionLevel !== "product") {
         const itemSubtotal = item.price * item.qty;
         let itemCommission = 0;
         if (vendorOrGlobalType === "percentage") {
@@ -124,18 +168,47 @@ export const calculateVendorOrderCommission = async (order, vendorId) => {
 
   // Resolve overall order resolution level by priority hierarchy
   let resolvedLevel = "global";
-  if (hasProductOverride) {
+  if (hasVendorProductOverride) {
+    resolvedLevel = "vendorProduct";
+  } else if (hasProductOverride) {
     resolvedLevel = "product";
   } else if (hasVendorOverride) {
     resolvedLevel = "vendor";
+  }
+
+  // Determine overall order-level commission rate and type
+  let overallType = vendorOrGlobalType;
+  let overallRate = vendorOrGlobalVal;
+
+  if (hasVendorProductOverride || hasProductOverride) {
+    if (processedItems.length > 0) {
+      const firstItem = processedItems[0];
+      const firstType = firstItem.commissionType;
+      const firstVal = firstItem.commissionRateApplied ?? firstItem.commissionValue;
+
+      const allSame = processedItems.every(
+        it => it.commissionType === firstType && (it.commissionRateApplied ?? it.commissionValue) === firstVal
+      );
+
+      if (allSame && firstType && firstType !== "inherit") {
+        overallType = firstType;
+        overallRate = firstVal ?? 0;
+      } else {
+        overallType = "mixed";
+        overallRate = 0;
+      }
+    } else {
+      overallType = "mixed";
+      overallRate = 0;
+    }
   }
 
   totalCommissionAmount = Math.round((totalCommissionAmount + Number.EPSILON) * 100) / 100;
 
   return {
     commissionAmount: totalCommissionAmount,
-    rate: hasProductOverride ? 0 : vendorOrGlobalVal, // rate is mixed if per-product applies
-    type: hasProductOverride ? "mixed" : vendorOrGlobalType,
+    rate: overallRate,
+    type: overallType,
     itemSubtotal,
     resolutionLevel: resolvedLevel,
     items: processedItems
@@ -162,6 +235,10 @@ export const calculateCommissionSync = (order, commType, commVal) => {
     return Math.round((totalCommission + Number.EPSILON) * 100) / 100;
   }
 
+  if (order.vendorCommission && order.vendorCommission.amount !== undefined && order.vendorCommission.amount !== null) {
+    return Math.round((order.vendorCommission.amount + Number.EPSILON) * 100) / 100;
+  }
+
   // Fallback for legacy orders (prior to item-level commission tracking)
   let itemSubtotal = 0;
   for (const item of orderItems) {
@@ -179,3 +256,73 @@ export const calculateCommissionSync = (order, commType, commVal) => {
 
   return Math.round((commissionAmount + Number.EPSILON) * 100) / 100;
 };
+
+/**
+ * Exposes a read-only commission preview for a single product & vendor.
+ * Adheres strictly to 4-tier hierarchy: Vendor Product -> Product -> Vendor -> Platform default.
+ */
+export const getCommissionPreviewForProduct = async (productId, vendorId, vendorProductId = null) => {
+  // Tier 1: Check VendorProduct override
+  let vp = null;
+  if (vendorProductId) {
+    vp = await VendorProduct.findById(vendorProductId);
+  } else if (vendorId && productId) {
+    vp = await VendorProduct.findOne({ vendorId, masterProductId: productId });
+  }
+
+  if (vp && vp.commissionType !== "inherit" && vp.commissionValue !== null && vp.commissionValue !== undefined) {
+    const type = vp.commissionType;
+    const val = vp.commissionValue;
+    return {
+      commissionType: type,
+      commissionValue: val,
+      resolutionLevel: "vendorProduct",
+      displayText: `Listing override: ${type === "percentage" ? `${val}%` : `₹${val} flat`}`
+    };
+  }
+
+  // Tier 2: Check Product override
+  if (productId) {
+    const product = await Product.findById(productId);
+    if (product && product.commissionType !== "inherit" && product.commissionValue !== null && product.commissionValue !== undefined) {
+      const type = product.commissionType;
+      const val = product.commissionValue;
+      return {
+        commissionType: type,
+        commissionValue: val,
+        resolutionLevel: "product",
+        displayText: `Product override: ${type === "percentage" ? `${val}%` : `₹${val} flat`}`
+      };
+    }
+  }
+
+  // Tier 3: Check Vendor override
+  if (vendorId) {
+    const vendor = await Vendor.findById(vendorId);
+    if (vendor && vendor.commissionValue !== null && vendor.commissionValue !== undefined && vendor.commissionValue !== "" && Number(vendor.commissionValue) > 0) {
+      const type = vendor.commissionType || "percentage";
+      const val = vendor.commissionValue;
+      return {
+        commissionType: type,
+        commissionValue: val,
+        resolutionLevel: "vendor",
+        displayText: `Vendor override: ${type === "percentage" ? `${val}%` : `₹${val} flat`}`
+      };
+    }
+  }
+
+  // Tier 4: Platform global default
+  const platformSettings = await PlatformFeeSettings.findOne() || {
+    defaultCommissionType: "percentage",
+    defaultCommissionValue: 8
+  };
+  const type = platformSettings.defaultCommissionType || "percentage";
+  const val = platformSettings.defaultCommissionValue ?? 8;
+  return {
+    commissionType: type,
+    commissionValue: val,
+    resolutionLevel: "global",
+    displayText: `Platform default: ${type === "percentage" ? `${val}%` : `₹${val} flat`}`
+  };
+};
+

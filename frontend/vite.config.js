@@ -14,9 +14,11 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
+import basicSsl from '@vitejs/plugin-basic-ssl'
 
 export default defineConfig({
   plugins: [
+    basicSsl(),
     react(),
     tailwindcss(),
 
@@ -25,12 +27,12 @@ export default defineConfig({
       injectRegister: 'auto',
 
       manifest: {
-        name: 'Aryusha',
+        name: 'Aryusha - Quick Grocery Delivery',
         short_name: 'Aryusha',
-        description: 'Aryusha Quick Commerce',
+        description: 'Aryusha - Quick. Easy. Reliable. Same day grocery delivery.',
 
-        theme_color: '#0B5D1E',
-        background_color: '#FFFFFF',
+        theme_color: '#6B21D9',
+        background_color: '#FAF9FF',
 
         display: 'standalone',
         orientation: 'portrait',
@@ -39,13 +41,20 @@ export default defineConfig({
         icons: [
           {
             src: '/favicon.png',
-            sizes: '192x192',
+            sizes: '32x32',
             type: 'image/png',
           },
           {
-            src: '/aryushalogo.png',
+            src: '/logo192.png',
+            sizes: '192x192',
+            type: 'image/png',
+            purpose: 'any',
+          },
+          {
+            src: '/logo512.png',
             sizes: '512x512',
             type: 'image/png',
+            purpose: 'any',
           },
           {
             src: '/aryushalogo.png',
@@ -62,7 +71,7 @@ export default defineConfig({
       },
 
       devOptions: {
-        enabled: true,
+        enabled: false,
       },
     }),
   ],

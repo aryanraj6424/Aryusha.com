@@ -67,6 +67,7 @@ export default function AdminSidebar({ isOpen, setIsOpen }) {
         { path: "/admin/delivery-kyc", label: "Document Verification", icon: ChevronRight },
         { path: "/admin/delivery-assignment", label: "Vehicle & Store Assignment", icon: ChevronRight },
         { path: "/admin/delivery-payout-settings", label: "Payout Settings", icon: ChevronRight },
+        { path: "/admin/delivery-time", label: "Delivery Time", icon: ChevronRight },
         { path: "/admin/delivery-boys", label: "Rider Oversight", icon: ChevronRight },
         { path: "/admin/deliveries", label: "Deliveries Monitor", icon: ChevronRight },
         { path: "/admin/delivery-logs", label: "Delivery Logs", icon: ChevronRight },

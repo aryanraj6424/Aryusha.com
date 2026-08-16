@@ -47,7 +47,7 @@ export default function DeliveredSuccess() {
       <div className="w-full max-w-xs space-y-2.5">
         <button
           onClick={() => navigate("/delivery-boy/orders")}
-          className="w-full py-4 bg-[#6d28d9] hover:bg-[#5b21b6] text-white rounded-2xl font-bold transition shadow-lg shadow-purple-200 flex items-center justify-center gap-2 cursor-pointer"
+          className="w-full py-4 bg-[#0B2214] hover:bg-[#153e25] text-white rounded-2xl font-bold transition shadow-lg shadow-purple-200 flex items-center justify-center gap-2 cursor-pointer"
         >
           Go to My Assignments <ArrowRight size={18} />
         </button>

@@ -5,7 +5,7 @@ export default function UsersRoles() {
     {
       id: "USR-001",
       name: "Admin User",
-      email: "admin@quickcart.com",
+      email: "admin@aryusha.com",
       role: "Super Admin",
       status: "Active",
       lastLogin: "2024-01-15 10:30",
@@ -13,7 +13,7 @@ export default function UsersRoles() {
     {
       id: "USR-002",
       name: "Manager User",
-      email: "manager@quickcart.com",
+      email: "manager@aryusha.com",
       role: "Manager",
       status: "Active",
       lastLogin: "2024-01-15 09:15",
@@ -21,7 +21,7 @@ export default function UsersRoles() {
     {
       id: "USR-003",
       name: "Support User",
-      email: "support@quickcart.com",
+      email: "support@aryusha.com",
       role: "Support",
       status: "Active",
       lastLogin: "2024-01-14 16:45",

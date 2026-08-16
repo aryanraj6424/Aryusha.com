@@ -14,7 +14,7 @@
 
 import { io } from "socket.io-client";
 
-const BACKEND_URL = import.meta.env.VITE_API_URL?.replace("/api", "") || "http://localhost:5000";
+const BACKEND_URL = (import.meta.env.VITE_API_URL || "").replace(/\/api\/?$/, "");
 const activeRooms = new Set();
 
 let _socket = null;
@@ -23,6 +23,7 @@ let _socket = null;
 export function getSocket() {
   if (!_socket) {
     _socket = io(BACKEND_URL, {
+      transports: ["websocket", "polling"],
       withCredentials: true,
       reconnection: true,
       reconnectionAttempts: Infinity,

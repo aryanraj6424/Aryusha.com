@@ -28,7 +28,7 @@ export default function OTPVerificationPage() {
     useState(false);
 
   const [timer, setTimer] =
-    useState(30;
+    useState(30);
 
   const inputsRef = useRef([]);
 
@@ -129,6 +129,7 @@ export default function OTPVerificationPage() {
           {
             state: {
               phoneNumber,
+              resetToken: response.resetToken,
             },
           }
         );
@@ -189,7 +190,7 @@ export default function OTPVerificationPage() {
       <div className="w-full max-w-lg bg-white rounded-[35px] shadow-2xl p-8">
 
         <h1 className="text-4xl font-bold text-purple-700 text-center">
-          QuickCart
+          Aryusha
         </h1>
 
         <h2 className="text-3xl font-bold text-center mt-8">
@@ -219,11 +220,11 @@ export default function OTPVerificationPage() {
                 <input
                   key={index}
                   ref={(el) =>
-                    (
-                      inputsRef.current[
-                        index
-                      ] = el
-                    )
+                  (
+                    inputsRef.current[
+                    index
+                    ] = el
+                  )
                   }
                   type="text"
                   maxLength={1}

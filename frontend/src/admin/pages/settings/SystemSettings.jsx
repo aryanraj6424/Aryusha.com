@@ -4,8 +4,8 @@ import { useToast } from "../../../components/Toast";
 export default function SystemSettings() {
   const { showToast } = useToast();
   const [settings, setSettings] = useState({
-    siteName: "QuickCart",
-    siteEmail: "admin@quickcart.com",
+    siteName: "Aryusha",
+    siteEmail: "admin@Aryusha.com",
     sitePhone: "+91 9876543210",
     currency: "INR",
     timezone: "Asia/Kolkata",

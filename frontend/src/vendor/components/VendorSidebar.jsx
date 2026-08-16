@@ -20,7 +20,8 @@ import {
   MessageSquare,
   Shield,
   FileText,
-  Map
+  Map,
+  Award
 } from "lucide-react";
 
 export default function VendorSidebar({ isOpen, setIsOpen }) {
@@ -44,7 +45,8 @@ export default function VendorSidebar({ isOpen, setIsOpen }) {
         { path: "/vendor/orders", label: "Order Management", icon: ShoppingBag },
         { path: "/vendor/customers", label: "My Customers", icon: Users },
         { path: "/vendor/assigned-area", label: "Assigned Area", icon: Map },
-        { path: "/vendor/finance", label: "My Commissions", icon: Wallet }
+        { path: "/vendor/finance", label: "My Commissions", icon: Wallet },
+        { path: "/vendor/top-selling", label: "Top Selling", icon: Award }
       ]
     }
   ];
@@ -63,7 +65,7 @@ export default function VendorSidebar({ isOpen, setIsOpen }) {
       {/* Sidebar */}
       <div className={`
         fixed lg:static inset-y-0 left-0 z-40 lg:z-auto
-        w-64 bg-[#6d28d9] text-white p-5 flex flex-col h-screen overflow-y-auto
+        w-64 bg-[#0B2214] text-white p-5 flex flex-col h-screen overflow-y-auto
         transform transition-transform duration-300 ease-in-out
         ${isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
       `}>

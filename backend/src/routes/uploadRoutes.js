@@ -17,10 +17,11 @@ const protectUpload = async (req, res, next) => {
       return res.status(401).json({ success: false, message: "Unauthorized - No Token Provided" });
     }
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const user = (await User.findById(decoded.id)) ||
-                 (await Admin.findById(decoded.id)) ||
-                 (await Vendor.findById(decoded.id)) ||
-                 (await DeliveryBoy.findById(decoded.id));
+    const userId = decoded.id || decoded._id;
+    const user = (await User.findById(userId)) ||
+                 (await Admin.findById(userId)) ||
+                 (await Vendor.findById(userId)) ||
+                 (await DeliveryBoy.findById(userId));
     if (!user) {
       return res.status(401).json({ success: false, message: "Account Not Found" });
     }

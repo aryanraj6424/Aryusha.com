@@ -26,7 +26,7 @@ export default function FooterManagement() {
   const [staticPages, setStaticPages] = useState([]);
   const [categories, setCategories] = useState([]);
   const [cities, setCities] = useState([]);
-  
+
   // Loading states
   const [loadingPages, setLoadingPages] = useState(true);
   const [loadingCategories, setLoadingCategories] = useState(true);
@@ -102,11 +102,12 @@ export default function FooterManagement() {
     setSaving(true);
     try {
       const token = localStorage.getItem("adminToken");
+      const sanitizedContent = (editContent || "").replace(/&nbsp;|\u00A0/g, " ");
       const res = await axios.put(
         `${import.meta.env.VITE_API_URL}/footer/pages/${editingPage.slug}`,
         {
           title: editTitle,
-          content: editContent
+          content: sanitizedContent
         },
         {
           headers: { Authorization: `Bearer ${token}` }
@@ -158,8 +159,8 @@ export default function FooterManagement() {
       ['bold', 'italic', 'underline', 'strike'],
       [{ 'color': [] }, { 'background': [] }],
       [{ 'align': [] }],
-      [{ 'list': 'ordered'}, { 'list': 'bullet' }],
-      [{ 'indent': '-1'}, { 'indent': '+1' }],
+      [{ 'list': 'ordered' }, { 'list': 'bullet' }],
+      [{ 'indent': '-1' }, { 'indent': '+1' }],
       ['link', 'image'],
       ['clean']
     ]
@@ -184,7 +185,7 @@ export default function FooterManagement() {
               <h2 className="text-xl font-black text-slate-800 mt-0.5">{editingPage.title}</h2>
             </div>
           </div>
-          
+
           <div className="flex items-center gap-3">
             <button
               onClick={() => setEditingPage(null)}
@@ -211,7 +212,7 @@ export default function FooterManagement() {
               <Sparkles size={16} className="text-green-600" />
               Advanced HTML Page Editor
             </div>
-            
+
             <div className="flex items-center gap-2">
               <button
                 type="button"
@@ -224,11 +225,10 @@ export default function FooterManagement() {
               <button
                 type="button"
                 onClick={() => setShowHtmlView(!showHtmlView)}
-                className={`flex items-center gap-2 px-3.5 py-1.5 text-xs font-black rounded-lg border transition ${
-                  showHtmlView
+                className={`flex items-center gap-2 px-3.5 py-1.5 text-xs font-black rounded-lg border transition ${showHtmlView
                     ? "bg-slate-800 border-slate-800 text-white hover:bg-slate-900"
                     : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
-                }`}
+                  }`}
               >
                 <Code size={14} />
                 {showHtmlView ? "Show Visual Editor" : "View HTML/Code"}
@@ -240,7 +240,7 @@ export default function FooterManagement() {
             <label className="block text-xs font-black text-slate-600 uppercase tracking-wider">
               Page Content
             </label>
-            
+
             {showHtmlView ? (
               <div className="rounded-xl border border-slate-200 overflow-hidden">
                 <textarea
@@ -310,11 +310,10 @@ export default function FooterManagement() {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-2.5 px-6 py-3.5 border-b-2 font-bold text-sm whitespace-nowrap transition cursor-pointer ${
-                isSelected
+              className={`flex items-center gap-2.5 px-6 py-3.5 border-b-2 font-bold text-sm whitespace-nowrap transition cursor-pointer ${isSelected
                   ? "border-green-600 text-green-700 font-extrabold"
                   : "border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300"
-              }`}
+                }`}
             >
               <Icon size={16} />
               {tab.label}
@@ -338,7 +337,7 @@ export default function FooterManagement() {
                   <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Dynamic Sync</p>
                 </div>
               </div>
-              
+
               <Link
                 to="/admin/categories"
                 className="text-xs font-black text-green-600 bg-green-50 hover:bg-green-100 px-3 py-1.5 rounded-lg transition"
@@ -346,7 +345,7 @@ export default function FooterManagement() {
                 Category Manager
               </Link>
             </div>
-            
+
             <p className="text-xs text-slate-500 font-medium leading-relaxed bg-slate-50 border border-slate-100 p-4 rounded-xl">
               📢 Popular Categories are synchronized automatically from the active categories module. The footer displays the first five sorted categories.
             </p>
@@ -388,11 +387,11 @@ export default function FooterManagement() {
                   <MapPin size={20} />
                 </div>
                 <div>
-                  <h3 className="font-bold text-slate-800">Cities We Serve</h3>
+                  <h3 className="font-bold text-slate-800">Towns We Serve</h3>
                   <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Dynamic Sync</p>
                 </div>
               </div>
-              
+
               <Link
                 to="/admin/vendors"
                 className="text-xs font-black text-green-600 bg-green-50 hover:bg-green-100 px-3 py-1.5 rounded-lg transition"
@@ -400,7 +399,7 @@ export default function FooterManagement() {
                 Vendor Manager
               </Link>
             </div>
-            
+
             <p className="text-xs text-slate-500 font-medium leading-relaxed bg-slate-50 border border-slate-100 p-4 rounded-xl">
               📢 Serviceable cities are compiled on-the-fly. When a vendor is registered and assigned a serviceable area with a city name, that city appears automatically in the footer serving list.
             </p>
@@ -435,7 +434,7 @@ export default function FooterManagement() {
             <h3 className="font-bold text-slate-800">Static CMS Pages</h3>
             <p className="text-xs text-slate-400 font-medium mt-0.5">Editable sections representing legal policies and support pages.</p>
           </div>
-          
+
           {loadingPages ? (
             <div className="p-10 text-center text-slate-500 font-semibold animate-pulse">
               Retrieving static pages...

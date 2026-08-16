@@ -3,6 +3,16 @@ import bcrypt from "bcryptjs";
 
 import { generateAdminOtp } from "../utils/generateAdminOtp.js";
 import { generateAdminToken } from "../utils/generateAdminToken.js";
+import {
+  normalizePhoneNumber,
+  findAccountByPhone,
+  generateRandomOtp,
+  sendWhatsappOtp,
+  storeOtp,
+  verifyOtpToken,
+  validateResetToken,
+  consumeResetToken
+} from "../../utils/whatsappOtpService.js";
 
 const sanitizeAdmin = (admin) => {
   if (!admin) return null;
@@ -76,185 +86,141 @@ export const loginAdmin =
   };
 
 // =========================
-// Forgot Password
+// Forgot Password - WhatsApp OTP Flow (Admin)
 // =========================
 
-export const forgotPassword =
-  async (req, res) => {
-    try {
-      const { phone } =
-        req.body;
+export const sendAdminForgotPasswordOtp = async (req, res) => {
+  try {
+    const phoneInput = req.body.phone || req.body.phoneNumber;
+    const normalizedPhone = normalizePhoneNumber(phoneInput);
 
-      const admin =
-        await Admin.findOne({
-          phone,
-        });
-
-      if (!admin) {
-        return res.status(404).json({
-          success: false,
-          message:
-            "Admin not found",
-        });
-      }
-
-      const otp =
-        generateAdminOtp();
-
-      admin.otp = otp;
-
-      admin.otpExpiry =
-        Date.now() +
-        10 * 60 * 1000;
-
-      await admin.save();
-
-      if (process.env.NODE_ENV === "development") {
-        console.log("==================");
-        console.log("ADMIN OTP:", otp);
-        console.log("==================");
-      }
-
-      res.status(200).json({
-        success: true,
-        message:
-          "OTP sent successfully",
-      });
-    } catch (error) {
-      console.log(error);
-
-      res.status(500).json({
+    if (!normalizedPhone) {
+      return res.status(400).json({
         success: false,
-        message:
-          "Server Error",
+        message: "Invalid phone number. Please enter a valid 10-digit mobile number.",
       });
     }
-  };
 
-// =========================
-// Verify OTP
-// =========================
-
-export const verifyOtp =
-  async (req, res) => {
-    try {
-      const {
-        phone,
-        otp,
-      } = req.body;
-
-      const admin =
-        await Admin.findOne({
-          phone,
-        });
-
-      if (!admin) {
-        return res.status(404).json({
-          success: false,
-          message:
-            "Admin not found",
-        });
-      }
-
-      if (
-        admin.otp !== otp
-      ) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Invalid OTP",
-        });
-      }
-
-      if (
-        new Date() >
-        admin.otpExpiry
-      ) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "OTP expired",
-        });
-      }
-
-      admin.otp = "VERIFIED";
-      admin.otpExpiry = new Date(Date.now() + 15 * 60 * 1000);
-      await admin.save();
-
-      res.status(200).json({
-        success: true,
-        message:
-          "OTP verified successfully",
-      });
-    } catch (error) {
-      console.log(error);
-
-      res.status(500).json({
+    const admin = await findAccountByPhone(Admin, "phone", normalizedPhone);
+    if (!admin) {
+      return res.status(404).json({
         success: false,
-        message:
-          "Server Error",
+        message: "Admin account not found with this mobile number.",
       });
     }
-  };
 
-// =========================
-// Reset Password
-// =========================
+    const otp = generateRandomOtp();
+    await sendWhatsappOtp(normalizedPhone, otp);
+    storeOtp("admin", normalizedPhone, otp);
 
-export const resetPassword =
-  async (req, res) => {
-    try {
-      const {
-        phone,
-        newPassword,
-      } = req.body;
+    res.status(200).json({
+      success: true,
+      message: "WhatsApp OTP sent successfully.",
+    });
+  } catch (error) {
+    console.error("sendAdminForgotPasswordOtp Error:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message || "Failed to send WhatsApp OTP.",
+    });
+  }
+};
 
-      const admin =
-        await Admin.findOne({
-          phone,
-        });
+export const forgotPassword = sendAdminForgotPasswordOtp;
 
-      if (!admin) {
-        return res.status(404).json({
-          success: false,
-          message:
-            "Admin not found",
-        });
-      }
+export const verifyAdminForgotPasswordOtp = async (req, res) => {
+  try {
+    const phoneInput = req.body.phone || req.body.phoneNumber;
+    const { otp } = req.body;
+    const normalizedPhone = normalizePhoneNumber(phoneInput);
 
-      if (admin.otp !== "VERIFIED" || !admin.otpExpiry || new Date() > admin.otpExpiry) {
-        return res.status(400).json({
-          success: false,
-          message: "OTP verification required before resetting password.",
-        });
-      }
-
-      const hashedPassword =
-        await bcrypt.hash(
-          newPassword,
-          10
-        );
-
-      admin.password =
-        hashedPassword;
-
-      admin.otp = null;
-      admin.otpExpiry = null;
-
-      await admin.save();
-
-      res.status(200).json({
-        success: true,
-        message:
-          "Password reset successfully",
-      });
-    } catch (error) {
-      console.log(error);
-
-      res.status(500).json({
+    if (!normalizedPhone || !otp) {
+      return res.status(400).json({
         success: false,
-        message:
-          "Server Error",
+        message: "Phone number and OTP are required.",
       });
     }
-  };
+
+    const result = verifyOtpToken("admin", normalizedPhone, otp);
+    if (!result.success) {
+      return res.status(400).json({
+        success: false,
+        message: result.message,
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "OTP verified successfully.",
+      resetToken: result.resetToken,
+    });
+  } catch (error) {
+    console.error("verifyAdminForgotPasswordOtp Error:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message || "Failed to verify OTP.",
+    });
+  }
+};
+
+export const verifyOtp = verifyAdminForgotPasswordOtp;
+
+export const resetAdminPassword = async (req, res) => {
+  try {
+    const phoneInput = req.body.phone || req.body.phoneNumber;
+    const newPassword = req.body.newPassword || req.body.password;
+    const { resetToken } = req.body;
+
+    const normalizedPhone = normalizePhoneNumber(phoneInput);
+
+    if (!normalizedPhone || !resetToken || !newPassword) {
+      return res.status(400).json({
+        success: false,
+        message: "Phone number, resetToken, and newPassword are required.",
+      });
+    }
+
+    if (String(newPassword).length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: "New password must be at least 6 characters long.",
+      });
+    }
+
+    const tokenValidation = validateResetToken("admin", normalizedPhone, resetToken);
+    if (!tokenValidation.success) {
+      return res.status(400).json({
+        success: false,
+        message: tokenValidation.message,
+      });
+    }
+
+    const admin = await findAccountByPhone(Admin, "phone", normalizedPhone);
+    if (!admin) {
+      return res.status(404).json({
+        success: false,
+        message: "Admin account not found.",
+      });
+    }
+
+    admin.password = await bcrypt.hash(newPassword, 10);
+    admin.otp = null;
+    admin.otpExpiry = null;
+    await admin.save();
+
+    consumeResetToken(tokenValidation.tokenKey);
+
+    res.status(200).json({
+      success: true,
+      message: "Password reset successfully.",
+    });
+  } catch (error) {
+    console.error("resetAdminPassword Error:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message || "Failed to reset password.",
+    });
+  }
+};
+
+export const resetPassword = resetAdminPassword;

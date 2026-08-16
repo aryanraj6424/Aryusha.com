@@ -7,48 +7,57 @@ import {
   TrendingUp,
 } from "lucide-react";
 
-export default function DashboardAnalytics() {
+export default function DashboardAnalytics({ data }) {
+  const formatCurrency = (val) => {
+    if (val === undefined || val === null) return "₹0.00";
+    if (val >= 100000) return `₹${(val / 100000).toFixed(2)}L`;
+    if (val >= 1000) return `₹${(val / 1000).toFixed(1)}k`;
+    return `₹${val.toFixed(2)}`;
+  };
+
+  const growthVal = data?.growthPct !== undefined ? `${data.growthPct >= 0 ? '+' : ''}${data.growthPct}%` : "0%";
+
   const analytics = [
     {
       title: "Total Products",
-      value: "1,245",
+      value: data?.totalProducts ?? 0,
       icon: Package,
       color: "bg-blue-100 text-blue-600",
     },
     {
       title: "Total Orders",
-      value: "8,526",
+      value: data?.totalOrders ?? 0,
       icon: ShoppingCart,
       color: "bg-green-100 text-green-600",
     },
     {
       title: "Customers",
-      value: "3,842",
+      value: data?.totalCustomers ?? 0,
       icon: Users,
       color: "bg-purple-100 text-purple-600",
     },
     {
       title: "Vendors",
-      value: "86",
+      value: data?.totalVendors ?? 0,
       icon: Store,
       color: "bg-orange-100 text-orange-600",
     },
     {
       title: "Revenue",
-      value: "₹8.25L",
+      value: formatCurrency(data?.totalRevenue),
       icon: IndianRupee,
       color: "bg-yellow-100 text-yellow-600",
     },
     {
       title: "Growth",
-      value: "+18%",
+      value: growthVal,
       icon: TrendingUp,
-      color: "bg-pink-100 text-pink-600",
+      color: data?.growthPct < 0 ? "bg-red-100 text-red-600" : "bg-emerald-100 text-emerald-600",
     },
   ];
 
   return (
-    <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+    <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 mt-6">
       {analytics.map((item, index) => {
         const Icon = item.icon;
 
@@ -59,9 +68,9 @@ export default function DashboardAnalytics() {
           >
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-500">{item.title}</p>
+                <p className="text-sm text-gray-500 font-medium">{item.title}</p>
 
-                <h2 className="mt-2 text-2xl font-bold text-gray-800">
+                <h2 className="mt-2 text-2xl font-black text-gray-800 tracking-tight">
                   {item.value}
                 </h2>
               </div>

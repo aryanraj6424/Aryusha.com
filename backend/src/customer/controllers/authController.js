@@ -7,8 +7,17 @@ import DeliveryBoy from "../../deliveryBoy/models/DeliveryBoy.js";
 import Admin from "../../admin/models/Admin.js";
 import { generateVendorToken } from "../../vendor/utils/generateVendorToken.js";
 import { generateAdminToken } from "../../admin/utils/generateAdminToken.js";
-import { getFirebaseAdmin } from "../../config/firebase.js";
 import { verifyGoogleToken } from "../../config/googleOAuth.js";
+import {
+  normalizePhoneNumber,
+  findAccountByPhone,
+  generateRandomOtp,
+  sendWhatsappOtp,
+  storeOtp,
+  verifyOtpToken,
+  validateResetToken,
+  consumeResetToken
+} from "../../utils/whatsappOtpService.js";
 
 const sanitizeUser = (user) => {
   if (!user) return null;
@@ -28,13 +37,42 @@ export const signup = async (req, res) => {
   try {
     const { fullName, phoneNumber, email, password } = req.body;
 
-    const userExists = await User.findOne({ phoneNumber });
-    if (userExists) {
-      return res.status(400).json({ success: false, message: "User already exists" });
+    const rawInput = (phoneNumber || "").trim();
+    const isEmailInput = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(rawInput);
+
+    let finalEmail = (email || "").trim().toLowerCase();
+    let finalPhone = (isEmailInput ? "" : rawInput);
+
+    if (isEmailInput && !finalEmail) {
+      finalEmail = rawInput.toLowerCase();
+    }
+
+    if (!fullName?.trim()) {
+      return res.status(400).json({ success: false, message: "Full name is required." });
+    }
+
+    if (!password || password.length < 8) {
+      return res.status(400).json({ success: false, message: "Password must be at least 8 characters long." });
+    }
+
+    const query = [];
+    if (finalPhone) query.push({ phoneNumber: finalPhone });
+    if (finalEmail) query.push({ email: finalEmail });
+
+    if (query.length > 0) {
+      const userExists = await User.findOne({ $or: query });
+      if (userExists) {
+        return res.status(400).json({ success: false, message: "User already exists with this phone number or email." });
+      }
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
-    const user = await User.create({ fullName, phoneNumber, email, password: hashedPassword });
+    const user = await User.create({
+      fullName: fullName.trim(),
+      phoneNumber: finalPhone || undefined,
+      email: finalEmail,
+      password: hashedPassword,
+    });
     const token = generateToken(user._id);
 
     res.status(201).json({ success: true, message: "Account Created Successfully", user: sanitizeUser(user), token });
@@ -52,10 +90,18 @@ export const signup = async (req, res) => {
 export const login = async (req, res) => {
   try {
     const { phoneNumber, password } = req.body;
+    const input = (phoneNumber || "").trim();
 
-    const user = await User.findOne({ phoneNumber });
+    if (!input || !password) {
+      return res.status(400).json({ success: false, message: "Please provide credentials." });
+    }
+
+    const user = await User.findOne({
+      $or: [{ phoneNumber: input }, { email: input.toLowerCase() }],
+    });
+
     if (!user) {
-      return res.status(404).json({ success: false, message: "User not found" });
+      return res.status(404).json({ success: false, message: "User account not found." });
     }
 
     const isMatch = await bcrypt.compare(password, user.password);
@@ -125,93 +171,148 @@ export const googleLogin = async (req, res) => {
 
 /*
 |--------------------------------------------------------------------------
-| Forgot Password
+| Forgot Password - 3-Step WhatsApp OTP Flow (Customer)
 |--------------------------------------------------------------------------
 */
-export const forgotPassword = async (req, res) => {
+
+// 1. Send OTP
+export const sendCustomerForgotPasswordOtp = async (req, res) => {
   try {
-    const { phoneNumber } = req.body;
+    const phoneInput = req.body.phone || req.body.phoneNumber;
+    const normalizedPhone = normalizePhoneNumber(phoneInput);
 
-    const user = await User.findOne({ phoneNumber });
+    if (!normalizedPhone) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid phone number. Please enter a valid 10-digit mobile number.",
+      });
+    }
+
+    const user = await findAccountByPhone(User, "phoneNumber", normalizedPhone);
     if (!user) {
-      return res.status(404).json({ message: "User not found" });
+      return res.status(404).json({
+        success: false,
+        message: "Customer account not found with this phone number.",
+      });
     }
 
-    const otp = generateOtp();
-    user.otp = otp;
-    user.otpExpires = Date.now() + 30 * 60 * 1000;
-    await user.save();
+    const otp = generateRandomOtp();
+    await sendWhatsappOtp(normalizedPhone, otp);
+    storeOtp("customer", normalizedPhone, otp);
 
-    if (process.env.NODE_ENV === "development") {
-      console.log("Generated OTP:", otp);
-    }
-    res.status(200).json({ success: true, message: "OTP Sent Successfully" });
+    res.status(200).json({
+      success: true,
+      message: "WhatsApp OTP sent successfully.",
+    });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error("sendCustomerForgotPasswordOtp Error:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message || "Failed to send WhatsApp OTP.",
+    });
   }
 };
 
-/*
-|--------------------------------------------------------------------------
-| Verify OTP
-|--------------------------------------------------------------------------
-*/
-export const verifyOtp = async (req, res) => {
+export const forgotPassword = sendCustomerForgotPasswordOtp;
+
+// 2. Verify OTP
+export const verifyCustomerForgotPasswordOtp = async (req, res) => {
   try {
-    const { phoneNumber, otp } = req.body;
+    const phoneInput = req.body.phone || req.body.phoneNumber;
+    const { otp } = req.body;
+    const normalizedPhone = normalizePhoneNumber(phoneInput);
 
-    const user = await User.findOne({ phoneNumber });
-    if (!user) {
-      return res.status(404).json({ message: "User not found" });
+    if (!normalizedPhone || !otp) {
+      return res.status(400).json({
+        success: false,
+        message: "Phone number and OTP are required.",
+      });
     }
 
-    if (user.otp !== otp) {
-      return res.status(400).json({ message: "Invalid OTP" });
+    const result = verifyOtpToken("customer", normalizedPhone, otp);
+    if (!result.success) {
+      return res.status(400).json({
+        success: false,
+        message: result.message,
+      });
     }
 
-    if (!user.otpExpires || user.otpExpires.getTime() < Date.now()) {
-      return res.status(400).json({ message: "OTP Expired" });
-    }
-
-    user.otp = "VERIFIED";
-    user.otpExpires = new Date(Date.now() + 15 * 60 * 1000);
-    await user.save();
-
-    const token = generateToken(user._id);
-    res.status(200).json({ success: true, message: "OTP Verified", user: sanitizeUser(user), token });
+    res.status(200).json({
+      success: true,
+      message: "OTP verified successfully.",
+      resetToken: result.resetToken,
+    });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error("verifyCustomerForgotPasswordOtp Error:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message || "Failed to verify OTP.",
+    });
   }
 };
 
-/*
-|--------------------------------------------------------------------------
-| Reset Password
-|--------------------------------------------------------------------------
-*/
-export const resetPassword = async (req, res) => {
+export const verifyOtp = verifyCustomerForgotPasswordOtp;
+
+// 3. Reset Password
+export const resetCustomerPassword = async (req, res) => {
   try {
-    const { phoneNumber, password } = req.body;
+    const phoneInput = req.body.phone || req.body.phoneNumber;
+    const newPassword = req.body.newPassword || req.body.password;
+    const { resetToken } = req.body;
 
-    const user = await User.findOne({ phoneNumber });
+    const normalizedPhone = normalizePhoneNumber(phoneInput);
+
+    if (!normalizedPhone || !resetToken || !newPassword) {
+      return res.status(400).json({
+        success: false,
+        message: "Phone number, resetToken, and newPassword are required.",
+      });
+    }
+
+    if (String(newPassword).length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: "New password must be at least 6 characters long.",
+      });
+    }
+
+    const tokenValidation = validateResetToken("customer", normalizedPhone, resetToken);
+    if (!tokenValidation.success) {
+      return res.status(400).json({
+        success: false,
+        message: tokenValidation.message,
+      });
+    }
+
+    const user = await findAccountByPhone(User, "phoneNumber", normalizedPhone);
     if (!user) {
-      return res.status(404).json({ message: "User not found" });
+      return res.status(404).json({
+        success: false,
+        message: "Customer account not found.",
+      });
     }
 
-    if (user.otp !== "VERIFIED" || !user.otpExpires || user.otpExpires.getTime() < Date.now()) {
-      return res.status(400).json({ message: "OTP verification required before resetting password." });
-    }
-
-    user.password = await bcrypt.hash(password, 10);
+    user.password = await bcrypt.hash(newPassword, 10);
     user.otp = null;
     user.otpExpires = null;
     await user.save();
 
-    res.status(200).json({ success: true, message: "Password Updated" });
+    consumeResetToken(tokenValidation.tokenKey);
+
+    res.status(200).json({
+      success: true,
+      message: "Password reset successfully.",
+    });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error("resetCustomerPassword Error:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message || "Failed to reset password.",
+    });
   }
 };
+
+export const resetPassword = resetCustomerPassword;
 
 /*
 |--------------------------------------------------------------------------
@@ -220,7 +321,7 @@ export const resetPassword = async (req, res) => {
 */
 export const updateProfile = async (req, res) => {
   try {
-    const { fullName, phoneNumber } = req.body;
+    const { fullName, phoneNumber, email } = req.body;
     const userId = req.user?._id;
 
     if (!userId) {
@@ -231,106 +332,58 @@ export const updateProfile = async (req, res) => {
       return res.status(400).json({ success: false, message: "Full name is required." });
     }
 
+    const cleanEmail = (email || "").trim().toLowerCase();
+    const cleanPhone = (phoneNumber || "").trim();
+
+    // Validate Email format if provided
+    if (cleanEmail) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(cleanEmail)) {
+        return res.status(400).json({ success: false, message: "Please enter a valid email address." });
+      }
+
+      // Uniqueness check for email against other users
+      const existingEmail = await User.findOne({ email: cleanEmail, _id: { $ne: userId } });
+      if (existingEmail) {
+        return res.status(400).json({ success: false, message: "Email is already in use by another account." });
+      }
+    }
+
+    // Validate Phone Number format if provided
+    if (cleanPhone) {
+      const phoneRegex = /^\d{10}$/;
+      if (!phoneRegex.test(cleanPhone)) {
+        return res.status(400).json({ success: false, message: "Please enter a valid 10-digit phone number." });
+      }
+
+      // Uniqueness check for phone number against other users
+      const existingPhone = await User.findOne({ phoneNumber: cleanPhone, _id: { $ne: userId } });
+      if (existingPhone) {
+        return res.status(400).json({ success: false, message: "Phone number is already registered to another account." });
+      }
+    }
+
+    const updateFields = {
+      fullName: fullName.trim(),
+      email: cleanEmail,
+    };
+
+    if (cleanPhone) {
+      updateFields.phoneNumber = cleanPhone;
+    } else {
+      updateFields.$unset = { phoneNumber: 1 };
+    }
+
     const updated = await User.findByIdAndUpdate(
       userId,
-      { fullName: fullName.trim(), ...(phoneNumber ? { phoneNumber } : {}) },
-      { new: true, runValidators: false }
+      updateFields,
+      { new: true, runValidators: true }
     );
 
     res.status(200).json({ success: true, message: "Profile updated successfully.", user: sanitizeUser(updated) });
   } catch (error) {
     console.error("Update Profile Error:", error);
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({ success: false, message: error.message || "Failed to update profile." });
   }
 };
-
-/*
-|--------------------------------------------------------------------------
-| Firebase Phone OTP Login — shared by Customer / Vendor / Delivery Boy / Admin
-| (Kept for Phone OTP flow — separate from Google OAuth)
-|--------------------------------------------------------------------------
-*/
-export const firebaseLogin = async (req, res) => {
-  try {
-    const { idToken, role } = req.body;
-
-    if (!idToken || !role) {
-      return res.status(400).json({ success: false, message: "Firebase ID token and role are required." });
-    }
-
-    const admin = getFirebaseAdmin();
-    const decodedToken = await admin.auth().verifyIdToken(idToken);
-    const verifiedPhone = decodedToken.phone_number;
-
-    if (!verifiedPhone) {
-      return res.status(400).json({ success: false, message: "No phone number associated with this Firebase credential." });
-    }
-
-    const last10Digits = verifiedPhone.replace(/\D/g, "").slice(-10);
-    const possiblePhones = [verifiedPhone, last10Digits, `+91${last10Digits}`];
-
-    if (role === "customer") {
-      let user = await User.findOne({ phoneNumber: { $in: possiblePhones } });
-      if (!user) {
-        const dummyPassword = await bcrypt.hash(Math.random().toString(36).slice(-8), 10);
-        user = await User.create({
-          fullName: "Customer",
-          phoneNumber: last10Digits,
-          password: dummyPassword,
-          isVerified: true,
-        });
-      }
-      const token = generateToken(user._id);
-      return res.status(200).json({ success: true, message: "Login successful", token, user: sanitizeUser(user) });
-    }
-
-    if (role === "vendor") {
-      const vendor = await Vendor.findOne({ phone: { $in: possiblePhones } });
-      if (!vendor) {
-        return res.status(404).json({ success: false, message: `Vendor account not found for phone number: ${verifiedPhone}` });
-      }
-      if (vendor.status === "pending") return res.status(403).json({ success: false, message: "Your account is under verification. Please wait for admin approval." });
-      if (vendor.status === "rejected") return res.status(403).json({ success: false, message: "Your vendor account has been rejected." });
-      if (vendor.accountStatus === "hold") return res.status(403).json({ success: false, message: "Your account is currently on hold." });
-      if (vendor.accountStatus === "suspended") return res.status(403).json({ success: false, message: "Your account has been suspended by admin." });
-      if (vendor.accountStatus === "deactivated") return res.status(403).json({ success: false, message: "Your account has been deactivated." });
-
-      const token = generateVendorToken(vendor._id);
-      const vendorObj = vendor.toObject ? vendor.toObject() : { ...vendor };
-      delete vendorObj.password;
-      return res.status(200).json({ success: true, message: "Login successful", token, vendor: vendorObj });
-    }
-
-    if (role === "delivery-boy") {
-      const deliveryBoy = await DeliveryBoy.findOne({ phone: { $in: possiblePhones } });
-      if (!deliveryBoy) {
-        return res.status(404).json({ success: false, message: `Delivery Boy account not found for phone number: ${verifiedPhone}` });
-      }
-      if (deliveryBoy.status !== "approved") return res.status(403).json({ success: false, message: `Your account is pending verification or rejected. Current status: ${deliveryBoy.status}` });
-      if (deliveryBoy.accountStatus !== "active") return res.status(403).json({ success: false, message: `Your account is ${deliveryBoy.accountStatus}.` });
-
-      const token = generateToken(deliveryBoy._id);
-      const dbObj = deliveryBoy.toObject ? deliveryBoy.toObject() : { ...deliveryBoy };
-      delete dbObj.password;
-      return res.status(200).json({ success: true, message: "Login successful", token, deliveryBoy: dbObj });
-    }
-
-    if (role === "admin") {
-      const adminUser = await Admin.findOne({ phone: { $in: possiblePhones } });
-      if (!adminUser) {
-        return res.status(404).json({ success: false, message: `Admin account not found for phone number: ${verifiedPhone}` });
-      }
-      const token = generateAdminToken(adminUser._id);
-      const adminObj = adminUser.toObject ? adminUser.toObject() : { ...adminUser };
-      delete adminObj.password;
-      delete adminObj.otp;
-      delete adminObj.otpExpiry;
-      return res.status(200).json({ success: true, message: "Login successful", token, admin: adminObj });
-    }
-
-    return res.status(400).json({ success: false, message: "Invalid role specified." });
-  } catch (error) {
-    console.error("Firebase Login Error:", error);
-    res.status(401).json({ success: false, message: "Invalid or expired Firebase token." });
-  }
-};
+

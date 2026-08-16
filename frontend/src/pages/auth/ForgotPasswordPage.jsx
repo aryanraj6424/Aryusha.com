@@ -258,7 +258,7 @@ export default function ForgotPasswordPage() {
           <div className="w-full max-w-md">
 
             <h1 className="text-4xl sm:text-5xl font-bold text-purple-700">
-              QuickCart
+              Aryusha
             </h1>
 
             <p className="mt-3 text-gray-500">

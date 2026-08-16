@@ -552,6 +552,74 @@ export default function CartPage() {
         {/* Right Side: Bill Details & Payment COD */}
         <div className="space-y-6">
           
+          {/* Free Delivery Progress Banner */}
+          {(() => {
+            const deliveryConfig = summary?.feeBreakdown?.find(f => f.feeType === "delivery_partner");
+            const threshold = deliveryConfig?.condition?.appliesBelowCartValue || deliveryConfig?.condition?.freeDeliveryThreshold;
+            if (!threshold) return null;
+
+            const itemTotal = summary?.itemTotal || 0;
+            const isFree = itemTotal >= threshold;
+            const remaining = Math.max(0, threshold - itemTotal);
+            const progressPct = Math.min(100, Math.round((itemTotal / threshold) * 100));
+
+            return (
+              <div className={`p-4 rounded-2xl border transition shadow-sm mb-4 ${
+                isFree
+                  ? "bg-emerald-50/80 border-emerald-200 text-emerald-900"
+                  : "bg-purple-50/60 border-purple-200 text-purple-950"
+              }`}>
+                <div className="flex justify-between items-center text-xs font-extrabold mb-1.5">
+                  <span className="flex items-center gap-1.5">
+                    {isFree ? "🎉" : "🚚"}
+                    {isFree
+                      ? "You've unlocked FREE Delivery!"
+                      : `Add ₹${remaining.toFixed(2)} more for FREE Delivery!`}
+                  </span>
+                  <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-white/80 border">
+                    {isFree ? "Unlocked" : `Goal: ₹${threshold}`}
+                  </span>
+                </div>
+
+                {!isFree && (
+                  <div className="w-full h-2 bg-purple-200/60 rounded-full overflow-hidden mt-2">
+                    <div
+                      className="bg-purple-600 h-full rounded-full transition-all duration-500"
+                      style={{ width: `${progressPct}%` }}
+                    />
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
+          {/* Small Cart Fee Notice Banner */}
+          {(() => {
+            const smallCartConfig = summary?.feeBreakdown?.find(f => f.feeType === "small_cart");
+            const smallCartFee = summary?.smallCartFee || 0;
+            const smallCartThreshold = smallCartConfig?.condition?.appliesBelowCartValue;
+
+            if (!smallCartThreshold || smallCartFee <= 0) return null;
+
+            const remainingForSmallCart = Math.max(0, smallCartThreshold - (summary?.itemTotal || 0));
+
+            return (
+              <div className="p-3.5 rounded-2xl bg-amber-50/80 border border-amber-200 text-amber-900 text-xs font-semibold mb-4 flex items-start gap-2">
+                <span className="text-sm">🛒</span>
+                <div className="space-y-0.5">
+                  <p className="font-extrabold">
+                    A Small Cart Fee of ₹{smallCartFee.toFixed(2)} applies for orders below ₹{smallCartThreshold}.
+                  </p>
+                  {remainingForSmallCart > 0 && (
+                    <p className="text-[11px] text-amber-800 font-medium">
+                      Add items worth ₹{remainingForSmallCart.toFixed(2)} more to avoid this fee.
+                    </p>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
+
           {/* Bill breakdown */}
           <div className="bg-white border border-slate-100 p-6 rounded-3xl shadow-sm space-y-6">
             <h3 className="font-extrabold text-slate-800 text-lg border-b pb-2">Bill Details</h3>
@@ -580,33 +648,54 @@ export default function CartPage() {
                   </div>
                 )}
 
-                {/* Handling Fee */}
-                <div className="flex justify-between">
-                  <span>Handling Fee:</span>
-                  <span className="text-slate-850">₹{(summary?.handlingFee || 0).toFixed(2)}</span>
-                </div>
+                {/* Dynamic Fee Breakdown Items */}
+                {summary?.feeBreakdown ? (
+                  summary.feeBreakdown.map((fee) => {
+                    if (fee.amount === 0 && fee.feeType !== "delivery_partner") return null;
 
-                {/* Small Cart Fee */}
-                {summary?.smallCartFee > 0 && (
-                  <div className="flex justify-between text-amber-700">
-                    <span>Small Cart Fee:</span>
-                    <span>₹{summary.smallCartFee.toFixed(2)}</span>
-                  </div>
+                    const isDelivery = fee.feeType === "delivery_partner";
+                    const isFreeDelivery = isDelivery && fee.amount === 0;
+
+                    return (
+                      <div key={fee.feeType} className={`flex justify-between ${fee.feeType === "small_cart" ? "text-amber-800 font-bold" : ""}`}>
+                        <span>{fee.label}:</span>
+                        <span className={isFreeDelivery ? "text-emerald-600 font-bold bg-emerald-50 px-2 py-0.5 rounded text-xs uppercase" : "text-slate-850"}>
+                          {isFreeDelivery ? "FREE" : `₹${fee.amount.toFixed(2)}`}
+                        </span>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <>
+                    {/* Handling Fee Fallback */}
+                    <div className="flex justify-between">
+                      <span>Handling Fee:</span>
+                      <span className="text-slate-850">₹{(summary?.handlingFee || 0).toFixed(2)}</span>
+                    </div>
+
+                    {/* Small Cart Fee Fallback */}
+                    {summary?.smallCartFee > 0 && (
+                      <div className="flex justify-between text-amber-700">
+                        <span>Small Cart Fee:</span>
+                        <span>₹{summary.smallCartFee.toFixed(2)}</span>
+                      </div>
+                    )}
+
+                    {/* Delivery Fee Fallback */}
+                    <div className="flex justify-between">
+                      <span>Delivery Partner Fee:</span>
+                      <span className={summary?.deliveryPartnerFee === 0 ? "text-emerald-600 font-bold" : "text-slate-850"}>
+                        {summary?.deliveryPartnerFee === 0 ? "FREE" : `₹${summary?.deliveryPartnerFee.toFixed(2)}`}
+                      </span>
+                    </div>
+
+                    {/* GST Fallback */}
+                    <div className="flex justify-between">
+                      <span>GST & Charges:</span>
+                      <span className="text-slate-850">₹{(summary?.gst || 0).toFixed(2)}</span>
+                    </div>
+                  </>
                 )}
-
-                {/* Delivery Fee */}
-                <div className="flex justify-between">
-                  <span>Delivery Partner Fee:</span>
-                  <span className={summary?.deliveryPartnerFee === 0 ? "text-emerald-600 font-bold" : "text-slate-850"}>
-                    {summary?.deliveryPartnerFee === 0 ? "FREE" : `₹${summary?.deliveryPartnerFee.toFixed(2)}`}
-                  </span>
-                </div>
-
-                {/* GST */}
-                <div className="flex justify-between">
-                  <span>GST & Charges:</span>
-                  <span className="text-slate-850">₹{(summary?.gst || 0).toFixed(2)}</span>
-                </div>
 
                 {/* Final To Pay */}
                 <div className="border-t pt-3 flex justify-between text-base font-black text-slate-900">
@@ -626,31 +715,7 @@ export default function CartPage() {
             </button>
           </div>
 
-          {/* Payment Section (Cash on Delivery display ONLY) */}
-          <div className="bg-white border border-slate-100 p-5 rounded-2xl shadow-sm space-y-3">
-            <p className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Payment Method</p>
-            
-            <div className="flex items-center justify-between border border-emerald-100 bg-emerald-50/20 p-3 rounded-xl">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 bg-emerald-50 rounded-xl flex items-center justify-center text-emerald-600">
-                  <Coins size={18} />
-                </div>
-                <div>
-                  <h4 className="text-xs font-black text-slate-800">Cash on Delivery</h4>
-                  <p className="text-[10px] text-slate-500 font-medium">Pay with cash/UPI at delivery</p>
-                </div>
-              </div>
-              
-              <div className="flex items-center gap-1 text-emerald-700 bg-emerald-100/50 px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider">
-                <Check size={10} /> Active
-              </div>
-            </div>
-            
-            <div className="flex items-center gap-1.5 text-[10px] text-slate-400 font-semibold px-1">
-              <ShieldCheck size={12} className="text-emerald-600" />
-              <span>Safe and secure checkout processes only</span>
-            </div>
-          </div>
+
 
         </div>
 

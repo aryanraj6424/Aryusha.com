@@ -89,6 +89,8 @@ const productSchema = new mongoose.Schema(
       default: true,
     },
     slug: { type: String, lowercase: true, trim: true },
+    coupon_allowed: { type: Boolean, default: false },
+    max_discount_amount: { type: Number, default: null, min: 0 },
     metaTitle: { type: String, default: "" },
     metaDescription: { type: String, default: "" },
     canonicalUrl: { type: String, default: "" },

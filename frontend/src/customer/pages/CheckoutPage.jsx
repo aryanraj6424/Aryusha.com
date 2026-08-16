@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { getUserAddresses } from "../../services/addressApi";
-import { ArrowLeft, MapPin, Truck, Check, Loader2, Calendar, Clock, CreditCard, Sparkles, Plus, Minus, ShoppingBag, Trash2 } from "lucide-react";
+import { ArrowLeft, MapPin, Truck, Check, Loader2, Calendar, Clock, CreditCard, Sparkles, Plus, Minus, ShoppingBag, Trash2, X, Tag, ChevronRight } from "lucide-react";
 import { useToast } from "../../components/Toast";
 import { getSocket, joinRoom, leaveRoom } from "../../services/socket";
 import SEO from "../../components/SEO";
@@ -16,6 +16,7 @@ export default function CheckoutPage() {
   
   // Slot selection state
   const [slots, setSlots] = useState([]);
+  const [loadingSlots, setLoadingSlots] = useState(false);
   const [activeDateTab, setActiveDateTab] = useState("Today");
   const [selectedSlot, setSelectedSlot] = useState(null); // { date: "Today"/"Tomorrow", slotId, name, time }
   const [isSlotConfirmed, setIsSlotConfirmed] = useState(false);
@@ -33,6 +34,10 @@ export default function CheckoutPage() {
   const [mockPaymentLoading, setMockPaymentLoading] = useState(false);
   const [couponInput, setCouponInput] = useState("");
   const [couponErrorState, setCouponErrorState] = useState("");
+  const [eligibleCoupons, setEligibleCoupons] = useState([]);
+  const [loadingEligibleCoupons, setLoadingEligibleCoupons] = useState(false);
+  const [eligibleCouponsError, setEligibleCouponsError] = useState(false);
+  const [showAllCouponsModal, setShowAllCouponsModal] = useState(false);
 
   const user = JSON.parse(localStorage.getItem("user") || "null");
 
@@ -58,18 +63,22 @@ export default function CheckoutPage() {
 
   const lastJoinedZoneRef = useRef(null);
 
-  // Re-fetch bill summary when active address/zone changes
+  // Re-fetch bill summary and delivery slots when active address/zone changes
   useEffect(() => {
-    if (selectedAddress && cart.length > 0) {
-      const appliedCode = checkoutSummary?.appliedCoupon?.code || localStorage.getItem("appliedCouponCode");
-      fetchSummary(cart, appliedCode);
+    if (selectedAddress) {
+      if (cart.length > 0) {
+        const appliedCode = checkoutSummary?.appliedCoupon?.code || localStorage.getItem("appliedCouponCode");
+        fetchSummary(cart, appliedCode);
+      }
+      fetchSlots(selectedAddress.city);
     }
-  }, [selectedAddress?._id]);
+  }, [selectedAddress?._id, selectedAddress?.city]);
 
-  // Socket connection & real-time fee update listeners
+  // Socket connection & real-time fee & slot update listeners
   useEffect(() => {
     const socket = getSocket();
     joinRoom("fees:global");
+    joinRoom("slots:global");
 
     const handleFeesUpdated = () => {
       if (cart.length > 0) {
@@ -78,13 +87,20 @@ export default function CheckoutPage() {
       }
     };
 
+    const handleSlotsUpdated = () => {
+      fetchSlots(selectedAddress?.city || "");
+    };
+
     socket.on("fees:updated", handleFeesUpdated);
+    socket.on("slots:updated", handleSlotsUpdated);
 
     return () => {
       socket.off("fees:updated", handleFeesUpdated);
+      socket.off("slots:updated", handleSlotsUpdated);
       leaveRoom("fees:global");
+      leaveRoom("slots:global");
     };
-  }, [cart, checkoutSummary?.appliedCoupon?.code]);
+  }, [cart, checkoutSummary?.appliedCoupon?.code, selectedAddress?.city]);
 
   useEffect(() => {
     if (!selectedAddress) return;
@@ -114,6 +130,7 @@ export default function CheckoutPage() {
         return;
       }
       setCart(parsed);
+      fetchEligibleCoupons(parsed);
 
       const storedSummary = localStorage.getItem("checkoutSummary");
       if (storedSummary) {
@@ -123,6 +140,45 @@ export default function CheckoutPage() {
       }
     } catch {
       navigate("/customer/dashboard");
+    }
+  };
+
+  const fetchEligibleCoupons = async (currentCart = cart) => {
+    const targetCart = currentCart && currentCart.length > 0 ? currentCart : cart;
+    if (!targetCart || targetCart.length === 0) {
+      setEligibleCoupons([]);
+      return;
+    }
+    try {
+      setLoadingEligibleCoupons(true);
+      setEligibleCouponsError(false);
+      const token = localStorage.getItem("userToken");
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+
+      const payload = {
+        items: targetCart.map(item => ({
+          productId: item.productId,
+          qty: item.qty,
+          price: item.price,
+          vendorId: item.vendorId
+        })),
+        vendorId: targetCart[0]?.vendorId
+      };
+
+      const res = await axios.post(
+        `${import.meta.env.VITE_API_URL}/customer/cart/eligible-coupons`,
+        payload,
+        { headers }
+      );
+
+      if (res.data.success) {
+        setEligibleCoupons(res.data.coupons || []);
+      }
+    } catch (error) {
+      console.error("Error fetching eligible coupons:", error);
+      setEligibleCouponsError(true);
+    } finally {
+      setLoadingEligibleCoupons(false);
     }
   };
 
@@ -153,16 +209,24 @@ export default function CheckoutPage() {
     }
   };
 
-  const fetchSlots = async () => {
+  const fetchSlots = async (cityParam = "") => {
     try {
+      setLoadingSlots(true);
       const token = localStorage.getItem("userToken");
       const headers = { Authorization: `Bearer ${token}` };
-      const res = await axios.get(`${import.meta.env.VITE_API_URL}/customer/cart/slots`, { headers });
+      const targetCity = cityParam || selectedAddress?.city || "";
+      const vendorId = cart[0]?.vendorId || "";
+      const res = await axios.get(
+        `${import.meta.env.VITE_API_URL}/customer/cart/slots?city=${encodeURIComponent(targetCity)}&vendorId=${encodeURIComponent(vendorId)}`,
+        { headers }
+      );
       if (res.data.success) {
         setSlots(res.data.slots || []);
       }
     } catch (error) {
       console.error("Error loading slots:", error);
+    } finally {
+      setLoadingSlots(false);
     }
   };
 
@@ -210,8 +274,10 @@ export default function CheckoutPage() {
     }
   };
 
-  const handleApplyCoupon = async () => {
-    if (!couponInput) return;
+  const handleApplyCoupon = async (codeToApply = null) => {
+    const code = (typeof codeToApply === "string" ? codeToApply : couponInput).toUpperCase().trim();
+    if (!code) return;
+    setCouponInput(code);
     setCouponErrorState("");
     try {
       const token = localStorage.getItem("userToken");
@@ -233,7 +299,7 @@ export default function CheckoutPage() {
           packSize: item.packSize,
           vendorId: item.vendorId
         })),
-        couponCode: couponInput,
+        couponCode: code,
         vendorId: cart[0]?.vendorId,
         zoneId: selectedAddress?.city || "",
       };
@@ -250,8 +316,9 @@ export default function CheckoutPage() {
           showToast({ type: "error", message: res.data.summary.couponError });
         } else if (res.data.summary.appliedCoupon) {
           setCheckoutSummary(res.data.summary);
-          localStorage.setItem("appliedCouponCode", couponInput);
-          showToast({ type: "success", message: `Coupon "${couponInput}" applied successfully!` });
+          localStorage.setItem("appliedCouponCode", code);
+          showToast({ type: "success", message: `Coupon "${code}" applied successfully!` });
+          setShowAllCouponsModal(false);
         } else {
           setCouponErrorState("Coupon could not be applied.");
         }
@@ -426,6 +493,7 @@ export default function CheckoutPage() {
           name: item.name,
           price: item.price,
           qty: item.qty,
+          vendorId: item.vendorId,
         })),
         deliveryAddress: {
           fullName: selectedAddress.fullName,
@@ -502,7 +570,7 @@ export default function CheckoutPage() {
   }
 
   return (
-    <div className="max-w-6xl mx-auto py-8 px-4 space-y-6 select-none font-semibold text-slate-700">
+    <div className="max-w-6xl mx-auto py-4 sm:py-8 px-3.5 sm:px-6 space-y-5 sm:space-y-6 pb-36 sm:pb-16 select-none font-semibold text-slate-700">
       <SEO title="Checkout | Aryusha" noindex={true} />
       
       {/* Mock Payment Processing Modal */}
@@ -531,13 +599,13 @@ export default function CheckoutPage() {
 
       <h1 className="text-3xl font-black text-slate-800 tracking-tight">Checkout</h1>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 sm:gap-8">
         
         {/* Left Columns */}
-        <div className="lg:col-span-2 space-y-6">
+        <div className="lg:col-span-2 space-y-5 sm:space-y-6">
           
           {/* Order Summary & Collapsible list */}
-          <div className="bg-white border border-slate-150 p-6 rounded-3xl shadow-sm space-y-4">
+          <div className="bg-white border border-slate-200/80 p-4 sm:p-6 rounded-2xl sm:rounded-3xl shadow-xs space-y-4 font-semibold">
             <div className="flex justify-between items-center">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 bg-purple-50 text-purple-755 rounded-xl flex items-center justify-center">
@@ -550,7 +618,7 @@ export default function CheckoutPage() {
               </div>
               <button
                 onClick={() => setViewItems(!viewItems)}
-                className="text-xs font-bold text-purple-700 bg-purple-50 hover:bg-purple-100 px-3 py-1.5 rounded-xl transition cursor-pointer"
+                className="text-xs font-bold text-purple-700 bg-purple-50 hover:bg-purple-100 px-3 py-2 min-h-[38px] rounded-xl transition cursor-pointer flex items-center justify-center"
               >
                 {viewItems ? "Hide Items" : "View Items"}
               </button>
@@ -606,7 +674,7 @@ export default function CheckoutPage() {
           </div>
 
           {/* Delivery Slot Selection tabs */}
-          <div className="bg-white border border-slate-150 p-6 rounded-3xl shadow-sm space-y-4">
+          <div className="bg-white border border-slate-200/80 p-4 sm:p-6 rounded-2xl sm:rounded-3xl shadow-xs space-y-4 font-semibold">
             <h2 className="font-extrabold text-slate-855 text-sm flex items-center gap-2">
               <Calendar size={16} className="text-purple-650" /> Select Delivery Slot
             </h2>
@@ -621,9 +689,9 @@ export default function CheckoutPage() {
                     setSelectedSlot(null);
                     setIsSlotConfirmed(false);
                   }}
-                  className={`flex-1 py-2 text-xs font-bold rounded-xl transition ${
+                  className={`flex-1 py-2.5 min-h-[44px] text-xs font-extrabold rounded-xl transition flex items-center justify-center ${
                     activeDateTab === tab
-                      ? "bg-purple-600 text-white shadow-sm"
+                      ? "bg-purple-600 text-white shadow-xs"
                       : "text-slate-500 hover:text-slate-800 hover:bg-white/50"
                   }`}
                 >
@@ -633,47 +701,58 @@ export default function CheckoutPage() {
             </div>
 
             {/* Slots options grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {slots.map((s) => {
-                const isToday = activeDateTab === "Today";
-                const isAvailable = !isToday || isSlotAvailableToday(s.cutoffTime);
-                const isSelected = selectedSlot?.slotId === s._id && selectedSlot?.date === activeDateTab;
+            {loadingSlots ? (
+              <div className="py-6 text-center text-slate-400 text-xs font-semibold animate-pulse">
+                Loading delivery slots...
+              </div>
+            ) : slots.length === 0 ? (
+              <div className="py-6 text-center bg-slate-50 rounded-2xl border border-slate-100 p-4 space-y-1">
+                <p className="text-xs font-bold text-slate-700">No delivery slots available for {selectedAddress?.city || "your area"} yet</p>
+                <p className="text-[10px] text-slate-400 font-medium">Please select a different delivery address or check back later.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {slots.map((s) => {
+                  const isToday = activeDateTab === "Today";
+                  const isAvailable = isToday ? (s.isActive !== false && isSlotAvailableToday(s.cutoffTime)) : (s.isActive !== false);
+                  const isSelected = selectedSlot?.slotId === s._id && selectedSlot?.date === activeDateTab;
 
-                return (
-                  <div
-                    key={s._id}
-                    onClick={() => isAvailable && handleSlotSelect(s)}
-                    className={`border rounded-2xl p-4 flex flex-col justify-between transition cursor-pointer ${
-                      !isAvailable
-                        ? "bg-slate-50 border-slate-200 opacity-60 cursor-not-allowed"
-                        : isSelected
-                          ? "border-purple-600 bg-purple-50/10 shadow-sm"
-                          : "border-slate-150 hover:border-slate-350"
-                    }`}
-                  >
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <p className="font-extrabold text-slate-800 text-xs">{s.name}</p>
-                        <p className="text-[10px] text-slate-400 font-bold uppercase mt-1 flex items-center gap-1">
-                          <Clock size={12} /> {s.startTime} - {s.endTime}
-                        </p>
+                  return (
+                    <div
+                      key={s._id}
+                      onClick={() => isAvailable && handleSlotSelect(s)}
+                      className={`border rounded-2xl p-3.5 sm:p-4 min-h-[64px] flex flex-col justify-between transition ${
+                        !isAvailable
+                          ? "bg-slate-50 border-slate-200 opacity-60 cursor-not-allowed"
+                          : isSelected
+                            ? "border-purple-600 bg-purple-50/10 shadow-xs cursor-pointer"
+                            : "border-slate-200/80 hover:border-purple-300 cursor-pointer"
+                      }`}
+                    >
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <p className="font-extrabold text-slate-800 text-xs">{s.name}</p>
+                          <p className="text-[10px] text-slate-400 font-bold uppercase mt-1 flex items-center gap-1">
+                            <Clock size={12} /> {s.startTime} - {s.endTime}
+                          </p>
+                        </div>
+                        {isSelected && (
+                          <span className="bg-purple-600 text-white rounded-full p-0.5">
+                            <Check size={12} />
+                          </span>
+                        )}
                       </div>
-                      {isSelected && (
-                        <span className="bg-purple-600 text-white rounded-full p-0.5">
-                          <Check size={12} />
-                        </span>
+
+                      {!isAvailable && (
+                        <p className="text-[9px] text-rose-600 font-black uppercase mt-3 bg-rose-50 self-start px-2 py-0.5 rounded border border-rose-100">
+                          {s.isActive === false ? "Disabled" : "Not available today"}
+                        </p>
                       )}
                     </div>
-
-                    {!isAvailable && (
-                      <p className="text-[9px] text-rose-600 font-black uppercase mt-3 bg-rose-50 self-start px-2 py-0.5 rounded border border-rose-100">
-                        Not available today
-                      </p>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            )}
 
             {/* Explicit Confirm Slot */}
             {selectedSlot && (
@@ -686,13 +765,13 @@ export default function CheckoutPage() {
                 </div>
                 
                 {isSlotConfirmed ? (
-                  <span className="flex items-center gap-1.5 text-xs text-emerald-700 bg-emerald-100/50 px-3 py-1.5 rounded-xl font-black">
+                  <span className="flex items-center gap-1.5 text-xs text-emerald-700 bg-emerald-100/50 px-3.5 py-2 min-h-[40px] rounded-xl font-black">
                     <Check size={14} /> Confirmed
                   </span>
                 ) : (
                   <button
                     onClick={handleConfirmSlot}
-                    className="bg-purple-600 hover:bg-purple-700 text-white font-black text-xs px-4.5 py-2.5 rounded-xl shadow cursor-pointer"
+                    className="bg-purple-600 hover:bg-purple-700 text-white font-extrabold text-xs px-5 py-2.5 min-h-[44px] rounded-xl shadow-xs cursor-pointer transition flex items-center justify-center"
                   >
                     Confirm Slot
                   </button>
@@ -702,14 +781,14 @@ export default function CheckoutPage() {
           </div>
 
           {/* Delivery Address selection list */}
-          <div className="bg-white border border-slate-150 p-6 rounded-3xl shadow-sm space-y-4">
-            <div className="flex justify-between items-center border-b pb-2">
+          <div className="bg-white border border-slate-200/80 p-4 sm:p-6 rounded-2xl sm:rounded-3xl shadow-xs space-y-4 font-semibold">
+            <div className="flex justify-between items-center border-b border-slate-100 pb-3">
               <h2 className="font-extrabold text-slate-800 text-sm flex items-center gap-2">
                 <MapPin size={16} className="text-purple-605" /> Delivery Address
               </h2>
               <button
                 onClick={() => navigate("/customer/addresses")}
-                className="text-xs font-bold text-purple-700 bg-purple-50 hover:bg-purple-100 px-3 py-1.5 rounded-xl transition cursor-pointer"
+                className="text-xs font-bold text-purple-700 bg-purple-50 hover:bg-purple-100 px-3 py-2 min-h-[38px] rounded-xl transition cursor-pointer flex items-center justify-center"
               >
                 Manage Addresses
               </button>
@@ -731,10 +810,10 @@ export default function CheckoutPage() {
                   <div
                     key={addr._id}
                     onClick={() => selectAddress(addr)}
-                    className={`border rounded-2xl p-4 cursor-pointer relative transition ${
+                    className={`border rounded-2xl p-3.5 sm:p-4 min-h-[60px] cursor-pointer relative transition ${
                       selectedAddress?._id === addr._id
-                        ? "border-purple-500 bg-purple-50/10 shadow-sm"
-                        : "border-slate-150 hover:border-slate-350"
+                        ? "border-purple-500 bg-purple-50/10 shadow-xs"
+                        : "border-slate-200/80 hover:border-purple-300"
                     }`}
                   >
                     {selectedAddress?._id === addr._id && (
@@ -757,17 +836,17 @@ export default function CheckoutPage() {
           </div>
 
           {/* Payment Method Option buttons */}
-          <div className="bg-white border border-slate-150 p-6 rounded-3xl shadow-sm space-y-4">
+          <div className="bg-white border border-slate-200/80 p-4 sm:p-6 rounded-2xl sm:rounded-3xl shadow-xs space-y-4 font-semibold">
             <h2 className="font-extrabold text-slate-850 text-sm">Select Payment Method</h2>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {/* COD */}
               <div
                 onClick={() => setPaymentMethod("COD")}
-                className={`border rounded-2xl p-4 flex items-center justify-between cursor-pointer transition ${
+                className={`border rounded-2xl p-3.5 sm:p-4 min-h-[56px] flex items-center justify-between cursor-pointer transition ${
                   paymentMethod === "COD"
-                    ? "border-purple-600 bg-purple-50/10 shadow-sm"
-                    : "border-slate-150 hover:border-slate-350"
+                    ? "border-purple-600 bg-purple-50/10 shadow-xs"
+                    : "border-slate-200/80 hover:border-purple-300"
                 }`}
               >
                 <div className="flex items-center gap-3">
@@ -777,7 +856,7 @@ export default function CheckoutPage() {
                     name="paymentSelect"
                     checked={paymentMethod === "COD"}
                     onChange={() => setPaymentMethod("COD")}
-                    className="accent-purple-600 w-4 h-4"
+                    className="accent-purple-600 w-4.5 h-4.5 cursor-pointer"
                   />
                   <div>
                     <label htmlFor="codPayment" className="text-xs font-extrabold text-slate-800 cursor-pointer">
@@ -791,10 +870,10 @@ export default function CheckoutPage() {
               {/* Online Payment */}
               <div
                 onClick={() => setPaymentMethod("Online")}
-                className={`border rounded-2xl p-4 flex items-center justify-between cursor-pointer transition ${
+                className={`border rounded-2xl p-3.5 sm:p-4 min-h-[56px] flex items-center justify-between cursor-pointer transition ${
                   paymentMethod === "Online"
-                    ? "border-purple-600 bg-purple-50/10 shadow-sm"
-                    : "border-slate-150 hover:border-slate-350"
+                    ? "border-purple-600 bg-purple-50/10 shadow-xs"
+                    : "border-slate-200/80 hover:border-purple-300"
                 }`}
               >
                 <div className="flex items-center gap-3">
@@ -804,13 +883,13 @@ export default function CheckoutPage() {
                     name="paymentSelect"
                     checked={paymentMethod === "Online"}
                     onChange={() => setPaymentMethod("Online")}
-                    className="accent-purple-600 w-4 h-4"
+                    className="accent-purple-600 w-4.5 h-4.5 cursor-pointer"
                   />
                   <div>
                     <label htmlFor="onlinePayment" className="text-xs font-extrabold text-slate-800 cursor-pointer">
                       Online Payment
                     </label>
-                    <p className="text-[9px] text-slate-400 font-semibold text-purple-700">Simulate secure gateway checkout</p>
+                    <p className="text-[9px] text-purple-700 font-bold">Simulate secure gateway checkout</p>
                   </div>
                 </div>
               </div>
@@ -876,10 +955,10 @@ export default function CheckoutPage() {
         </div>
 
         {/* Right Columns: Bill Details card */}
-        <div className="space-y-6 sticky top-24">
+        <div className="space-y-5 sm:space-y-6 lg:sticky lg:top-24">
           
           {/* Coupon Promo Card */}
-          <div className="bg-white border border-slate-150 p-6 rounded-3xl shadow-sm space-y-3">
+          <div className="bg-white border border-slate-200/80 p-4 sm:p-6 rounded-2xl sm:rounded-3xl shadow-xs space-y-3 font-semibold">
             <h4 className="font-extrabold text-slate-800 text-sm flex items-center gap-1.5">
               <Sparkles size={16} className="text-purple-650" /> Apply Coupon
             </h4>
@@ -897,7 +976,7 @@ export default function CheckoutPage() {
                 <button
                   type="button"
                   onClick={handleRemoveCoupon}
-                  className="text-xs font-extrabold text-rose-650 hover:text-rose-800 transition cursor-pointer"
+                  className="text-xs font-extrabold text-rose-650 hover:text-rose-800 transition cursor-pointer min-h-[36px] px-2 flex items-center"
                 >
                   Remove
                 </button>
@@ -910,12 +989,12 @@ export default function CheckoutPage() {
                     value={couponInput}
                     onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
                     placeholder="Enter Promo Code"
-                    className="flex-1 border px-3 py-2.5 rounded-xl outline-none focus:border-purple-600 text-xs font-mono uppercase font-semibold"
+                    className="flex-1 border border-slate-200 px-3.5 py-2.5 min-h-[44px] rounded-xl outline-none focus:border-purple-600 text-xs font-mono uppercase font-semibold"
                   />
                   <button
                     type="button"
-                    onClick={handleApplyCoupon}
-                    className="bg-purple-100 hover:bg-purple-200 text-purple-700 text-xs font-black px-4 rounded-xl transition cursor-pointer"
+                    onClick={() => handleApplyCoupon()}
+                    className="bg-purple-100 hover:bg-purple-200 text-purple-700 text-xs font-extrabold px-4 min-h-[44px] rounded-xl transition cursor-pointer flex items-center justify-center shrink-0"
                   >
                     Apply
                   </button>
@@ -925,11 +1004,92 @@ export default function CheckoutPage() {
                     ⚠️ {couponErrorState}
                   </p>
                 )}
+
+                {/* Available Eligible Coupons — Top 1-2 Inline + View All Button */}
+                <div className="space-y-2 pt-2 border-t border-slate-100 mt-2">
+                  <span className="text-[11px] font-bold text-slate-500 tracking-wider uppercase block">
+                    Available Coupons
+                  </span>
+                  {loadingEligibleCoupons ? (
+                    <div className="text-[11px] text-slate-400 font-medium py-1 animate-pulse flex items-center gap-1.5">
+                      <Loader2 size={12} className="animate-spin text-purple-600" /> Checking available coupons...
+                    </div>
+                  ) : eligibleCouponsError ? (
+                    <div className="flex items-center justify-between text-[11px] text-slate-500 py-1 bg-amber-50 px-2.5 py-1.5 rounded-lg border border-amber-200">
+                      <span>Could not load available coupons</span>
+                      <button
+                        type="button"
+                        onClick={() => fetchEligibleCoupons(cart)}
+                        className="text-purple-700 font-bold underline hover:text-purple-900 cursor-pointer"
+                      >
+                        Retry
+                      </button>
+                    </div>
+                  ) : eligibleCoupons.length === 0 ? (
+                    <p className="text-[11px] text-slate-400 font-medium py-1 italic bg-slate-50 px-2.5 py-1.5 rounded-lg border border-slate-150">
+                      No coupons available for this order
+                    </p>
+                  ) : (
+                    <div className="space-y-2">
+                      {/* Top 1-2 Coupons Inline */}
+                      {eligibleCoupons.slice(0, 2).map((c) => {
+                        const discText = (c.discount_type === "percentage" || c.discountType === "percentage")
+                          ? `${c.discount_value || c.discountValue}% off${(c.max_discount_cap || c.maxDiscountCap) ? `, up to ₹${c.max_discount_cap || c.maxDiscountCap}` : ''}`
+                          : `₹${c.discount_value || c.discountValue} off`;
+                        const minOrder = c.min_order_value !== undefined ? c.min_order_value : (c.minCartValue || 0);
+
+                        return (
+                          <div
+                            key={c._id || c.code}
+                            onClick={() => handleApplyCoupon(c.code)}
+                            className="p-2.5 rounded-xl border border-purple-150 bg-purple-50/40 hover:bg-purple-100/60 hover:border-purple-300 transition cursor-pointer flex items-center justify-between group shadow-2xs"
+                          >
+                            <div className="space-y-0.5">
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-extrabold text-xs text-purple-900 font-mono tracking-wide bg-white px-2 py-0.5 rounded border border-purple-200 shadow-2xs">
+                                  {c.code}
+                                </span>
+                                <span className="text-[11px] font-bold text-slate-700">
+                                  — {discText}
+                                </span>
+                              </div>
+                              {minOrder > 0 && (
+                                <p className="text-[10px] text-slate-500 font-medium">
+                                  Min order: ₹{minOrder}
+                                </p>
+                              )}
+                            </div>
+                            <button
+                              type="button"
+                              className="text-[11px] font-extrabold text-purple-700 group-hover:bg-purple-600 group-hover:text-white bg-white px-2.5 py-1 rounded-lg border border-purple-200 transition cursor-pointer shrink-0 ml-2 shadow-2xs"
+                            >
+                              Apply
+                            </button>
+                          </div>
+                        );
+                      })}
+
+                      {/* View All Coupons Link Button */}
+                      {eligibleCoupons.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setShowAllCouponsModal(true)}
+                          className="w-full py-2.5 px-3 bg-purple-50 hover:bg-purple-100 text-purple-700 font-extrabold text-xs rounded-xl transition cursor-pointer flex items-center justify-between border border-purple-100 mt-2 min-h-[40px]"
+                        >
+                          <span className="flex items-center gap-1.5">
+                            <Tag size={13} /> View All Coupons ({eligibleCoupons.length})
+                          </span>
+                          <ChevronRight size={14} />
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
             )}
           </div>
 
-          <div className="bg-white border border-slate-150 p-6 rounded-3xl shadow-sm space-y-6">
+          <div className="bg-white border border-slate-200/80 p-4 sm:p-6 rounded-2xl sm:rounded-3xl shadow-xs space-y-6 font-semibold">
             <h3 className="font-extrabold text-slate-800 text-lg border-b pb-2">Bill Summary</h3>
 
             <div className="space-y-3.5 text-sm font-semibold text-slate-600">
@@ -949,14 +1109,21 @@ export default function CheckoutPage() {
 
               {/* Dynamic Fee Breakdown */}
               {checkoutSummary?.feeBreakdown ? (
-                checkoutSummary.feeBreakdown.map((fee) => (
-                  <div key={fee.feeType} className="flex justify-between">
-                    <span>{fee.label}:</span>
-                    <span className={fee.feeType === "delivery_partner" && fee.amount === 0 ? "text-emerald-600 font-black bg-emerald-50/50 px-2 py-0.5 rounded text-xs uppercase" : "text-slate-800"}>
-                      {fee.feeType === "delivery_partner" && fee.amount === 0 ? "FREE" : `₹${fee.amount.toFixed(2)}`}
-                    </span>
-                  </div>
-                ))
+                checkoutSummary.feeBreakdown.map((fee) => {
+                  if (fee.amount === 0 && fee.feeType !== "delivery_partner") return null;
+
+                  const isDelivery = fee.feeType === "delivery_partner";
+                  const isFreeDelivery = isDelivery && fee.amount === 0;
+
+                  return (
+                    <div key={fee.feeType} className={`flex justify-between ${fee.feeType === "small_cart" ? "text-amber-800 font-bold" : ""}`}>
+                      <span>{fee.label}:</span>
+                      <span className={isFreeDelivery ? "text-emerald-600 font-black bg-emerald-50/50 px-2 py-0.5 rounded text-xs uppercase" : "text-slate-800"}>
+                        {isFreeDelivery ? "FREE" : `₹${fee.amount.toFixed(2)}`}
+                      </span>
+                    </div>
+                  );
+                })
               ) : (
                 <>
                   {/* Handling Fee */}
@@ -965,15 +1132,15 @@ export default function CheckoutPage() {
                     <span className="text-slate-800">₹{handlingFee.toFixed(2)}</span>
                   </div>
 
-                  {/* Small Cart Fee (Hidden if >= 99) */}
-                  {subtotal < 99 && smallCartFee > 0 && (
+                  {/* Small Cart Fee */}
+                  {smallCartFee > 0 && (
                     <div className="flex justify-between text-amber-700">
                       <span>Small Cart Fee:</span>
                       <span>₹{smallCartFee.toFixed(2)}</span>
                     </div>
                   )}
 
-                  {/* Delivery Fee (FREE threshold at >= 149) */}
+                  {/* Delivery Fee */}
                   <div className="flex justify-between">
                     <span>Delivery Partner Fee:</span>
                     <span className={deliveryCharge === 0 ? "text-emerald-600 font-black bg-emerald-50/50 px-2 py-0.5 rounded text-xs uppercase" : "text-slate-800"}>
@@ -1025,7 +1192,7 @@ export default function CheckoutPage() {
             <button
               onClick={handlePlaceOrder}
               disabled={!isPlaceOrderEnabled}
-              className={`w-full py-4 rounded-2xl font-black text-sm transition flex items-center justify-center gap-2 shadow ${
+              className={`w-full py-4 min-h-[48px] rounded-2xl font-black text-sm transition flex items-center justify-center gap-2 shadow ${
                 isPlaceOrderEnabled
                   ? "bg-purple-600 hover:bg-purple-700 text-white cursor-pointer"
                   : "bg-slate-100 text-slate-400 cursor-not-allowed"
@@ -1058,8 +1225,8 @@ export default function CheckoutPage() {
       </div>
 
       {/* Sticky Bottom Confirmation Bar */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-150 py-3 px-6 shadow-[0_-4px_10px_rgba(0,0,0,0.05)] z-40 flex items-center justify-between">
-        <div className="max-w-5xl mx-auto w-full flex items-center justify-between">
+      <div className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-slate-200/80 py-3.5 px-4 sm:px-6 shadow-[0_-8px_20px_rgba(0,0,0,0.08)] z-40 pb-[max(0.875rem,env(safe-area-inset-bottom))]">
+        <div className="max-w-5xl mx-auto w-full flex items-center justify-between gap-4">
           <div>
             <span className="text-[10px] text-slate-400 font-bold uppercase block tracking-wider">Total To Pay</span>
             <span className="text-lg font-black text-purple-750">₹{grandTotal.toFixed(2)}</span>
@@ -1068,19 +1235,19 @@ export default function CheckoutPage() {
           <button
             onClick={handlePlaceOrder}
             disabled={!isPlaceOrderEnabled}
-            className={`px-8 py-3 rounded-xl font-black text-xs transition flex items-center gap-2 ${
+            className={`px-8 py-3.5 min-h-[48px] rounded-xl font-black text-xs transition flex items-center justify-center gap-2 ${
               isPlaceOrderEnabled
-                ? "bg-purple-600 hover:bg-purple-700 text-white cursor-pointer"
+                ? "bg-purple-600 hover:bg-purple-700 text-white cursor-pointer shadow-md"
                 : "bg-slate-100 text-slate-400 cursor-not-allowed"
             }`}
           >
-            {loading ? <Loader2 className="animate-spin" size={14} /> : "Place Order"}
+            {loading ? <Loader2 className="animate-spin" size={16} /> : "Place Order"}
           </button>
         </div>
       </div>
       {!isPlaceOrderEnabled && (
-        <div className="fixed bottom-14 left-0 right-0 z-35 flex justify-center pointer-events-none">
-          <div className="bg-amber-50 border border-amber-250 text-amber-900 px-4 py-1.5 rounded-full text-[10px] font-bold shadow-md">
+        <div className="fixed bottom-[calc(4.5rem+env(safe-area-inset-bottom,0px))] left-0 right-0 z-35 flex justify-center pointer-events-none px-4">
+          <div className="bg-amber-50 border border-amber-250 text-amber-900 px-4 py-2 rounded-full text-[10px] font-extrabold shadow-md text-center max-w-xs">
             {!selectedAddress 
               ? "⚠️ Select a delivery address to place order" 
               : !isSlotConfirmed 
@@ -1088,6 +1255,97 @@ export default function CheckoutPage() {
                 : !paymentMethod 
                   ? "⚠️ Select a payment method to place order" 
                   : ""}
+          </div>
+        </div>
+      )}
+
+      {/* All Coupons Bottom Sheet / Modal */}
+      {showAllCouponsModal && (
+        <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-end sm:items-center justify-center backdrop-blur-sm p-0 sm:p-4 transition-all duration-300">
+          <div 
+            className="fixed inset-0"
+            onClick={() => setShowAllCouponsModal(false)}
+          />
+          <div className="bg-white w-full max-w-lg rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh] sm:max-h-[80vh] z-10 relative animate-slide-up">
+            
+            {/* Modal Header */}
+            <div className="p-4 sm:p-5 border-b border-slate-150 flex items-center justify-between bg-purple-50/50">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center">
+                  <Sparkles size={16} />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-slate-850 text-sm">Available Coupons</h3>
+                  <p className="text-[11px] text-slate-500 font-medium">Eligible discounts for your current cart</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAllCouponsModal(false)}
+                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center transition cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Modal Body - List of Coupons */}
+            <div className="p-4 sm:p-5 space-y-3 overflow-y-auto max-h-[60vh]">
+              {eligibleCoupons.length === 0 ? (
+                <div className="text-center py-8 space-y-2">
+                  <p className="text-xs font-bold text-slate-600">No coupons available for this order</p>
+                  <p className="text-[11px] text-slate-400">Add more items or check back later for special offers.</p>
+                </div>
+              ) : (
+                eligibleCoupons.map((c) => {
+                  const discText = (c.discount_type === "percentage" || c.discountType === "percentage")
+                    ? `${c.discount_value || c.discountValue}% off${(c.max_discount_cap || c.maxDiscountCap) ? `, up to ₹${c.max_discount_cap || c.maxDiscountCap}` : ''}`
+                    : `₹${c.discount_value || c.discountValue} off`;
+                  const minOrder = c.min_order_value !== undefined ? c.min_order_value : (c.minCartValue || 0);
+
+                  return (
+                    <div
+                      key={c._id || c.code}
+                      className="p-3.5 rounded-2xl border border-purple-200 bg-purple-50/40 hover:bg-purple-50 flex items-center justify-between gap-3 transition shadow-2xs"
+                    >
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono font-black text-xs text-purple-900 bg-white px-2.5 py-1 rounded-lg border border-purple-200 shadow-2xs tracking-wide">
+                            {c.code}
+                          </span>
+                          <span className="text-xs font-extrabold text-slate-800">
+                            {discText}
+                          </span>
+                        </div>
+                        {minOrder > 0 && (
+                          <p className="text-[11px] text-slate-500 font-medium">
+                            Minimum cart value: ₹{minOrder}
+                          </p>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleApplyCoupon(c.code)}
+                        className="bg-purple-600 hover:bg-purple-700 text-white font-extrabold text-xs px-4 py-2 min-h-[36px] rounded-xl shadow-xs transition cursor-pointer shrink-0"
+                      >
+                        Apply
+                      </button>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-3.5 sm:p-4 border-t border-slate-150 bg-slate-50 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setShowAllCouponsModal(false)}
+                className="w-full sm:w-auto px-5 py-2.5 text-xs font-bold text-slate-600 hover:text-slate-800 bg-white border border-slate-200 rounded-xl transition cursor-pointer min-h-[40px]"
+              >
+                Close
+              </button>
+            </div>
+
           </div>
         </div>
       )}

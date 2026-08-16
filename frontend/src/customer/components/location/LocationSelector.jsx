@@ -1,12 +1,21 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import L from "leaflet";
-import "leaflet/dist/leaflet.css";
 import { MapPin, Navigation, Search, X, Loader2, Home, ChevronDown, ChevronUp } from "lucide-react";
 import { useToast } from "../../../components/Toast";
 import { getUserAddresses } from "../../../services/addressApi";
 import { getAddressFromCoords, searchLocation } from "../../../services/locationApi";
+import { loadGoogleMaps } from "../../../utils/googleMapsLoader";
 
+/**
+ * Customer header modal for setting delivery address by dragging the map, searching places via autocomplete,
+ * or clicking "Locate Me".
+ * 
+ * MIGRATED FROM LEAFLET TO GOOGLE MAPS JS API:
+ * - Replaced Leaflet `L.map` & `L.tileLayer` with `google.maps.Map`
+ * - Removed `leaflet/dist/leaflet.css` import
+ * - Kept the exact same CSS-centered `<MapPin>` overlay design (no Google Maps marker created, to preserve UI drag feel)
+ * - Replaced Leaflet `map.on("moveend")` with Google Maps `map.addListener("idle")` with 700ms debounce
+ */
 function LocationSelector() {
   const navigate = useNavigate();
   const { showToast } = useToast();
@@ -55,10 +64,19 @@ function LocationSelector() {
   const loadSavedAddresses = async () => {
     try {
       const user = JSON.parse(localStorage.getItem("user") || "null");
-      if (!user) return;
+      const token = localStorage.getItem("userToken") || localStorage.getItem("token");
+      if (!user || !token) return;
       const response = await getUserAddresses(user._id);
       setSavedAddresses(response.addresses || []);
     } catch (error) {
+      if (error.response?.status === 401) {
+        // Clear expired/invalid token data gracefully
+        localStorage.removeItem("userToken");
+        localStorage.removeItem("token");
+        localStorage.removeItem("user");
+        setSavedAddresses([]);
+        return;
+      }
       console.error("Failed to load addresses:", error);
     }
   };
@@ -73,68 +91,74 @@ function LocationSelector() {
     };
   }, []);
 
-  // Initialize Map
+  // Initialize Google Map (Replaces Leaflet L.map)
   useEffect(() => {
     if (!mapRef.current) return;
 
-    // Fix default Leaflet icon paths in React / Vite
-    delete L.Icon.Default.prototype._getIconUrl;
-    L.Icon.Default.mergeOptions({
-      iconRetinaUrl: "https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon-2x.png",
-      iconUrl: "https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon.png",
-      shadowUrl: "https://unpkg.com/leaflet@1.7.1/dist/images/marker-shadow.png",
-    });
+    let isMounted = true;
 
-    const initialCoords = [lat, lng];
+    loadGoogleMaps().then((google) => {
+      if (!isMounted || !mapRef.current) return;
 
-    mapInstanceRef.current = L.map(mapRef.current, {
-      zoomControl: false,
-    }).setView(initialCoords, 16);
+      const initialCoords = { lat, lng };
 
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      attribution: '&copy; <a href="https://osm.org/copyright">OpenStreetMap</a> contributors'
-    }).addTo(mapInstanceRef.current);
+      // Create Google Map instance without default UI controls to match original Leaflet layout
+      mapInstanceRef.current = new google.maps.Map(mapRef.current, {
+        center: initialCoords,
+        zoom: 16,
+        zoomControl: false,
+        streetViewControl: false,
+        mapTypeControl: false,
+        fullscreenControl: false,
+      });
 
-    fetchAddressDetails(lat, lng);
+      // Initial Address resolution
+      fetchAddressDetails(lat, lng);
 
-    // Map move listener
-    mapInstanceRef.current.on("moveend", () => {
-      const center = mapInstanceRef.current.getCenter();
-      setLat(center.lat);
-      setLng(center.lng);
+      // Listen to map idle/drag movement (Replaces Leaflet moveend event)
+      mapInstanceRef.current.addListener("idle", () => {
+        const center = mapInstanceRef.current.getCenter();
+        const currentLat = center.lat();
+        const currentLng = center.lng();
 
-      if (debounceTimeoutRef.current) clearTimeout(debounceTimeoutRef.current);
-      debounceTimeoutRef.current = setTimeout(() => {
-        fetchAddressDetails(center.lat, center.lng);
-      }, 700); // 700ms drag debounce
-    });
+        setLat(currentLat);
+        setLng(currentLng);
 
-    // Geolocate user on first visit if no stored address exists
-    const hasStored = localStorage.getItem("selectedAddress");
-    if (!hasStored) {
-      handleCurrentLocation();
-    }
+        if (debounceTimeoutRef.current) clearTimeout(debounceTimeoutRef.current);
+        debounceTimeoutRef.current = setTimeout(() => {
+          fetchAddressDetails(currentLat, currentLng);
+        }, 700); // 700ms drag debounce
+      });
 
-    // Invalidate map size after mounting to handle mobile modal dimensions
-    setTimeout(() => {
-      if (mapInstanceRef.current) {
-        mapInstanceRef.current.invalidateSize();
+      // Geolocate user on first visit if no stored address exists
+      const hasStored = localStorage.getItem("selectedAddress");
+      if (!hasStored) {
+        handleCurrentLocation();
       }
-    }, 250);
+
+      // Invalidate map layout size after modal mount
+      setTimeout(() => {
+        if (mapInstanceRef.current && google.maps.event) {
+          google.maps.event.trigger(mapInstanceRef.current, "resize");
+        }
+      }, 250);
+    }).catch((err) => {
+      console.error("Google Maps Load Error in LocationSelector:", err);
+    });
 
     return () => {
-      if (mapInstanceRef.current) {
-        mapInstanceRef.current.remove();
-        mapInstanceRef.current = null;
-      }
+      isMounted = false;
       if (debounceTimeoutRef.current) clearTimeout(debounceTimeoutRef.current);
       if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current = null;
+      }
     };
   }, []);
 
-  const fetchAddressDetails = async (latitude, longitude) => {
+  const fetchAddressDetails = async (latitude, longitude, forceFresh = false) => {
     const cacheKey = `${latitude.toFixed(5)},${longitude.toFixed(5)}`;
-    if (cacheRef.current.has(cacheKey)) {
+    if (!forceFresh && cacheRef.current.has(cacheKey)) {
       setAddress(cacheRef.current.get(cacheKey));
       return;
     }
@@ -157,27 +181,83 @@ function LocationSelector() {
   };
 
   const handleCurrentLocation = () => {
-    if (!navigator.geolocation) {
-      showToast({ type: "warning", message: "Geolocation not supported" });
+    if (!window.isSecureContext) {
+      showToast({
+        type: "warning",
+        message: "Location detection requires an HTTPS connection. You can still set your address by searching above or dragging the pin on the map.",
+      });
       return;
     }
+
+    if (!navigator.geolocation) {
+      showToast({
+        type: "warning",
+        message: "Geolocation is not supported by your browser. Please search or drag the pin on the map.",
+      });
+      return;
+    }
+
     setGpsLoading(true);
+
+    const onGpsSuccess = (position, isFallback = false) => {
+      const { latitude, longitude, accuracy } = position.coords;
+      setLat(latitude);
+      setLng(longitude);
+      setGpsLoading(false);
+
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.setZoom(16);
+        mapInstanceRef.current.panTo({ lat: latitude, lng: longitude });
+      }
+
+      fetchAddressDetails(latitude, longitude, true);
+
+      if (isFallback || accuracy > 2000) {
+        showToast({
+          type: "warning",
+          message: "Showing your approximate area — drag the pin on the map for a more precise location.",
+        });
+      }
+    };
+
+    const tryLowAccuracyFallback = () => {
+      navigator.geolocation.getCurrentPosition(
+        (position) => onGpsSuccess(position, true),
+        (err) => {
+          setGpsLoading(false);
+          if (err.code === 1) {
+            showToast({
+              type: "warning",
+              message: "Location access is turned off for this site. You can set your address by searching above or dragging the pin — or enable location access in browser settings.",
+            });
+          } else {
+            showToast({
+              type: "info",
+              message: "We couldn't detect your location automatically. No worries — just drag the pin on the map to your delivery address, or use the search bar above.",
+            });
+          }
+        },
+        { timeout: 5000, enableHighAccuracy: false, maximumAge: 30000 }
+      );
+    };
+
+    // Stage 1: High-accuracy GPS request (8-second timeout)
     navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const { latitude, longitude } = position.coords;
-        setLat(latitude);
-        setLng(longitude);
-        setGpsLoading(false);
-        if (mapInstanceRef.current) {
-          mapInstanceRef.current.setView([latitude, longitude], 16);
+      (position) => onGpsSuccess(position, false),
+      (err) => {
+        if (err.code === 1) {
+          // Permission denied by browser — do not retry, show friendly guidance
+          setGpsLoading(false);
+          showToast({
+            type: "warning",
+            message: "Location access is turned off for this site. You can set your address by searching above or dragging the pin — or enable location access in browser settings.",
+          });
+        } else {
+          // Stage 2: Automatic fallback to network/WiFi location (5-second timeout)
+          tryLowAccuracyFallback();
         }
       },
-      (err) => {
-        console.error(err);
-        setGpsLoading(false);
-        showToast({ type: "error", message: "Location permission denied" });
-      },
-      { timeout: 8000 }
+      { timeout: 8000, enableHighAccuracy: true, maximumAge: 0 }
     );
   };
 
@@ -207,10 +287,13 @@ function LocationSelector() {
     const longitude = parseFloat(place.properties.lon);
     setSearch(place.properties.formatted);
     setSuggestions([]);
+    setLat(latitude);
+    setLng(longitude);
 
     if (mapInstanceRef.current) {
-      mapInstanceRef.current.setView([latitude, longitude], 16);
+      mapInstanceRef.current.panTo({ lat: latitude, lng: longitude });
     }
+    fetchAddressDetails(latitude, longitude);
   };
 
   const handleConfirmLocation = () => {
@@ -255,9 +338,9 @@ function LocationSelector() {
   };
 
   return (
-    <div className="fixed inset-0 z-[100] md:relative md:z-auto w-full md:max-w-xl md:mx-auto bg-white md:rounded-3xl shadow-2xl flex flex-col h-full md:h-[650px] overflow-hidden pt-[env(safe-area-inset-top,0px)] pb-[env(safe-area-inset-bottom,0px)]">
+    <div className="fixed inset-0 z-[100] md:relative md:z-auto w-full md:max-w-xl md:mx-auto bg-white md:rounded-3xl shadow-2xl flex flex-col h-full md:h-auto max-h-[100dvh] md:max-h-[85vh] overflow-hidden pt-[env(safe-area-inset-top,0px)] pb-[env(safe-area-inset-bottom,0px)]">
       {/* Header */}
-      <div className="p-4 border-b flex justify-between items-center bg-white z-10 flex-shrink-0">
+      <div className="p-4 border-b flex justify-between items-center bg-white z-20 flex-shrink-0 sticky top-0">
         <div>
           <h2 className="text-lg font-extrabold text-slate-800">Select Location</h2>
           <p className="text-xs text-slate-400 font-semibold mt-0.5">Drag to place pin at delivery location</p>
@@ -270,74 +353,76 @@ function LocationSelector() {
         </button>
       </div>
 
-      {/* Map Container */}
-      <div className="flex-1 relative min-h-0 bg-slate-50">
-        <div ref={mapRef} className="w-full h-full z-0" />
+      {/* Scrollable Content Area */}
+      <div className="flex-1 overflow-y-auto min-h-0 overscroll-contain">
+        {/* Map Container */}
+        <div className="relative w-full h-[320px] md:h-[360px] flex-shrink-0 bg-slate-50 min-h-[250px]">
+          <div ref={mapRef} className="w-full h-full z-0" />
 
-        {/* Absolute Centered Pin */}
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-full z-[1000] pointer-events-none flex flex-col items-center select-none">
-          <MapPin size={38} className="text-purple-600 drop-shadow-xl fill-purple-100" />
-          <div className="w-2.5 h-0.5 bg-black/40 rounded-full blur-[0.5px] -mt-0.5" />
-        </div>
+          {/* Absolute Centered Pin Overlay */}
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-full z-[1000] pointer-events-none flex flex-col items-center select-none">
+            <MapPin size={38} className="text-purple-600 drop-shadow-xl fill-purple-100" />
+            <div className="w-2.5 h-0.5 bg-black/40 rounded-full blur-[0.5px] -mt-0.5" />
+          </div>
 
-        {/* Autocomplete Input */}
-        <div className="absolute top-4 left-4 right-4 z-[1000] max-w-[calc(100%-32px)]">
-          <div className="flex items-center bg-white border border-slate-100 shadow-lg rounded-2xl px-3 py-1 focus-within:ring-2 focus-within:ring-purple-300">
-            <Search size={18} className="text-slate-400 mr-2 flex-shrink-0" />
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => handleSearchChange(e.target.value)}
-              placeholder="Search area, street, city..."
-              className="w-full py-2 text-sm outline-none bg-transparent"
-            />
-            {loadingSuggestions && (
-              <Loader2 size={16} className="animate-spin text-purple-600 mr-2" />
-            )}
-            {search && (
-              <button
-                type="button"
-                onClick={() => { setSearch(""); setSuggestions([]); }}
-                className="text-slate-400 hover:text-slate-650"
-              >
-                <X size={16} />
-              </button>
+          {/* Autocomplete Input */}
+          <div className="absolute top-4 left-4 right-4 z-[1000] max-w-[calc(100%-32px)]">
+            <div className="flex items-center bg-white border border-slate-100 shadow-lg rounded-2xl px-3 py-1 focus-within:ring-2 focus-within:ring-purple-300">
+              <Search size={18} className="text-slate-400 mr-2 flex-shrink-0" />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => handleSearchChange(e.target.value)}
+                placeholder="Search area, street, city..."
+                className="w-full py-2 text-sm outline-none bg-transparent"
+              />
+              {loadingSuggestions && (
+                <Loader2 size={16} className="animate-spin text-purple-600 mr-2" />
+              )}
+              {search && (
+                <button
+                  type="button"
+                  onClick={() => { setSearch(""); setSuggestions([]); }}
+                  className="text-slate-400 hover:text-slate-650"
+                >
+                  <X size={16} />
+                </button>
+              )}
+            </div>
+
+            {suggestions.length > 0 && (
+              <div className="mt-1.5 bg-white border rounded-xl overflow-hidden shadow-xl max-h-[180px] overflow-y-auto z-[2000] relative">
+                {suggestions.map((place) => (
+                  <button
+                    key={place.properties.place_id}
+                    onClick={() => handleSelectSuggestion(place)}
+                    className="w-full text-left px-3.5 py-2.5 hover:bg-purple-50 border-b text-xs flex gap-2 font-semibold text-slate-700 transition"
+                  >
+                    <MapPin size={14} className="mt-0.5 text-purple-600 flex-shrink-0" />
+                    <span className="truncate">{place.properties.formatted}</span>
+                  </button>
+                ))}
+              </div>
             )}
           </div>
 
-          {suggestions.length > 0 && (
-            <div className="mt-1.5 bg-white border rounded-xl overflow-hidden shadow-xl max-h-[180px] overflow-y-auto z-[2000] relative">
-              {suggestions.map((place) => (
-                <button
-                  key={place.properties.place_id}
-                  onClick={() => handleSelectSuggestion(place)}
-                  className="w-full text-left px-3.5 py-2.5 hover:bg-purple-50 border-b text-xs flex gap-2 font-semibold text-slate-700 transition"
-                >
-                  <MapPin size={14} className="mt-0.5 text-purple-600 flex-shrink-0" />
-                  <span className="truncate">{place.properties.formatted}</span>
-                </button>
-              ))}
-            </div>
-          )}
+          {/* Locate Me Floating Button */}
+          <button
+            onClick={handleCurrentLocation}
+            disabled={gpsLoading}
+            className="absolute bottom-4 right-4 z-[1000] bg-white p-3 rounded-full shadow-lg border border-slate-100 text-slate-700 hover:bg-slate-50 transition active:scale-95 disabled:opacity-50"
+            title="Locate Me"
+          >
+            {gpsLoading ? (
+              <Loader2 size={18} className="animate-spin text-purple-600" />
+            ) : (
+              <Navigation size={18} className="text-purple-600 rotate-45" />
+            )}
+          </button>
         </div>
 
-        {/* Locate Me Floating Button */}
-        <button
-          onClick={handleCurrentLocation}
-          disabled={gpsLoading}
-          className="absolute bottom-4 right-4 z-[1000] bg-white p-3 rounded-full shadow-lg border border-slate-100 text-slate-700 hover:bg-slate-50 transition active:scale-95 disabled:opacity-50"
-          title="Locate Me"
-        >
-          {gpsLoading ? (
-            <Loader2 size={18} className="animate-spin text-purple-600" />
-          ) : (
-            <Navigation size={18} className="text-purple-600 rotate-45" />
-          )}
-        </button>
-      </div>
-
-      {/* Bottom Control Sheet */}
-      <div className="bg-white border-t flex-shrink-0 z-10 relative">
+        {/* Bottom Control Sheet */}
+        <div className="bg-white border-t flex-shrink-0 z-10 relative">
         <div className="p-4 bg-slate-50/50">
           <div className="mb-3">
             <div className="flex items-center gap-1.5 text-purple-700 font-extrabold text-xs mb-1 tracking-wider uppercase">
@@ -427,6 +512,7 @@ function LocationSelector() {
         )}
       </div>
     </div>
+  </div>
   );
 }
 

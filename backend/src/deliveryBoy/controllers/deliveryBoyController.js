@@ -6,15 +6,37 @@ import User from "../../customer/models/User.js";
 import { emitToRoom } from "../../socket/socketManager.js";
 import RiderNotification from "../models/RiderNotification.js";
 import PayoutSettings from "../models/PayoutSettings.js";
-
-// Seeding helper to ensure delivery boy has orders for UI demonstration
-const ensureMockAssignments = async (deliveryBoyId) => {
-  // Disabled mock seeder to use real live data only
-  return;
-};
-
+import RiderSupportTicket from "../models/RiderSupportTicket.js";
 import mongoose from "mongoose";
 import { handleOrderStatusChange, runInTransaction } from "../../utils/ledgerSyncHelper.js";
+import { createVendorNotification } from "../../utils/notificationHelper.js";
+
+// Helper to compute rider payout per order (defaulting to ONE flat payout per completed order)
+const getCalculatedRiderPayout = (rider, settings, order) => {
+  if (order?.riderPayout !== undefined && order?.riderPayout !== null) {
+    return order.riderPayout;
+  }
+  const isOverride = rider?.payoutOverride && rider.payoutOverride.payoutType && rider.payoutOverride.payoutType !== "none";
+  const payoutType = isOverride ? rider.payoutOverride.payoutType : (settings?.payoutType || "per_order");
+  const baseFee = isOverride ? rider.payoutOverride.payoutAmount : (settings?.payoutAmount !== undefined ? settings.payoutAmount : 35);
+  
+  if (payoutType === "per_order") {
+    return baseFee !== undefined ? baseFee : (order.deliveryCharge || 35);
+  } else {
+    return order.deliveryCharge || 35;
+  }
+};
+
+const formatOrderWithPayout = (orderDoc, rider, settings) => {
+  if (!orderDoc) return null;
+  const obj = typeof orderDoc.toObject === "function" ? orderDoc.toObject() : { ...orderDoc };
+  obj.riderPayout = getCalculatedRiderPayout(rider, settings, orderDoc);
+  return obj;
+};
+
+const ensureMockAssignments = async (deliveryBoyId) => {
+  return;
+};
 
 // Get Dashboard Data
 export const getDashboard = async (req, res) => {
@@ -64,10 +86,15 @@ export const getDashboard = async (req, res) => {
     });
 
     // Fetch active assignments (Pending or In Progress)
-    const activeDeliveries = await CustomerOrder.find({
+    const rider = await DeliveryBoy.findById(deliveryBoyId);
+    const settings = await PayoutSettings.findOne() || {};
+
+    const activeDeliveriesDocs = await CustomerOrder.find({
       deliveryBoyId,
       deliveryStatus: { $in: ["Assigned", "Picked_Up", "On_the_Way", "Reached_Customer"] }
     }).populate("vendorId", "shopName phone address latitude longitude");
+
+    const activeDeliveries = activeDeliveriesDocs.map(o => formatOrderWithPayout(o, rider, settings));
 
     // Compute weekly earnings breakdown (last 7 days)
     const sevenDaysAgo = new Date();
@@ -78,7 +105,7 @@ export const getDashboard = async (req, res) => {
       deliveryBoyId,
       deliveryStatus: "Delivered",
       updatedAt: { $gte: sevenDaysAgo }
-    }).select("deliveryCharge updatedAt");
+    }).select("deliveryCharge riderPayout updatedAt");
 
     // Build day-keyed map
     const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -93,7 +120,7 @@ export const getDashboard = async (req, res) => {
     weeklyOrders.forEach(order => {
       const key = new Date(order.updatedAt).toISOString().slice(0, 10);
       if (dayMap[key]) {
-        dayMap[key].amount += (order.deliveryCharge || 35);
+        dayMap[key].amount += getCalculatedRiderPayout(rider, settings, order);
       }
     });
 
@@ -121,6 +148,8 @@ export const getDashboard = async (req, res) => {
 export const getOrders = async (req, res) => {
   try {
     const deliveryBoyId = req.deliveryBoy._id;
+    const rider = await DeliveryBoy.findById(deliveryBoyId);
+    const settings = await PayoutSettings.findOne() || {};
     const { tab } = req.query; // 'all', 'pending', 'progress', 'completed'
 
     let filter = { deliveryBoyId };
@@ -133,9 +162,12 @@ export const getOrders = async (req, res) => {
       filter.deliveryStatus = "Delivered";
     }
 
-    const orders = await CustomerOrder.find(filter)
+    const ordersDocs = await CustomerOrder.find(filter)
       .populate("vendorId", "shopName phone address latitude longitude")
+      .populate("vendorSubOrders.vendorId", "shopName phone address latitude longitude")
       .sort({ createdAt: -1 });
+
+    const orders = ordersDocs.map(o => formatOrderWithPayout(o, rider, settings));
 
     res.status(200).json({
       success: true,
@@ -150,16 +182,22 @@ export const getOrders = async (req, res) => {
 // Get Order Details
 export const getOrderById = async (req, res) => {
   try {
-    const order = await CustomerOrder.findOne({
+    const rider = await DeliveryBoy.findById(req.deliveryBoy._id);
+    const settings = await PayoutSettings.findOne() || {};
+
+    const orderDoc = await CustomerOrder.findOne({
       _id: req.params.id,
       deliveryBoyId: req.deliveryBoy._id
     })
     .populate("vendorId", "shopName phone address latitude longitude")
+    .populate("vendorSubOrders.vendorId", "shopName phone address latitude longitude")
     .populate("customerId", "fullName phoneNumber");
 
-    if (!order) {
+    if (!orderDoc) {
       return res.status(404).json({ success: false, message: "Order not found or not assigned to you" });
     }
+
+    const order = formatOrderWithPayout(orderDoc, rider, settings);
 
     res.status(200).json({
       success: true,
@@ -236,13 +274,78 @@ export const updateOrderStatus = async (req, res) => {
       emitToRoom("admin:global", eventName, payload);
     }
 
+    const rider = await DeliveryBoy.findById(req.deliveryBoy._id);
+    const settings = await PayoutSettings.findOne() || {};
+    const formattedOrder = formatOrderWithPayout(order, rider, settings);
+
     res.status(200).json({
       success: true,
       message: `Status updated to ${status}`,
-      order
+      order: formattedOrder
     });
   } catch (error) {
     console.error("Update Order Status Error:", error);
+    res.status(500).json({ success: false, message: "Server Error" });
+  }
+};
+
+// Update Vendor Pickup Status (Multi-Vendor Checklist Action)
+export const updateVendorPickupStatus = async (req, res) => {
+  try {
+    const { targetVendorId, status } = req.body; // status: "PICKED"
+    const orderId = req.params.id;
+
+    const order = await CustomerOrder.findOne({
+      _id: orderId,
+      deliveryBoyId: req.deliveryBoy._id
+    })
+      .populate("vendorId", "shopName phone address latitude longitude")
+      .populate("vendorSubOrders.vendorId", "shopName phone address latitude longitude");
+
+    if (!order) {
+      return res.status(404).json({ success: false, message: "Order assignment not found" });
+    }
+
+    const subOrder = (order.vendorSubOrders || []).find(
+      (s) => (s.vendorId?._id || s.vendorId).toString() === targetVendorId
+    );
+
+    if (!subOrder) {
+      return res.status(404).json({ success: false, message: "Target vendor sub-order not found" });
+    }
+
+    subOrder.pickupStatus = status || "PICKED";
+
+    // Check if ALL active sub-orders (excluding rejected ones) are now PICKED
+    const activeSubs = (order.vendorSubOrders || []).filter(s => s.subOrderStatus !== "Rejected" && s.subOrderStatus !== "Cancelled");
+    const allPicked = activeSubs.every(s => s.pickupStatus === "PICKED");
+
+    if (allPicked) {
+      order.deliveryStatus = "Picked_Up";
+      order.orderStatus = "Packed";
+    }
+
+    const vendorName = subOrder.vendorId?.shopName || "Vendor";
+    order.deliveryLogs.push({
+      status: allPicked ? "Picked_Up" : "Assigned",
+      timestamp: new Date(),
+      note: `Rider picked up items from ${vendorName} (${order.vendorSubOrders.filter(s => s.pickupStatus === "PICKED").length}/${order.vendorSubOrders.length} stores picked)`
+    });
+
+    await order.save();
+
+    const rider = await DeliveryBoy.findById(req.deliveryBoy._id);
+    const settings = await PayoutSettings.findOne() || {};
+    const formattedOrder = formatOrderWithPayout(order, rider, settings);
+
+    res.status(200).json({
+      success: true,
+      message: `Pickup marked for ${vendorName}`,
+      order: formattedOrder,
+      allPicked
+    });
+  } catch (error) {
+    console.error("Update Vendor Pickup Status Error:", error);
     res.status(500).json({ success: false, message: "Server Error" });
   }
 };
@@ -290,6 +393,18 @@ export const verifyOtp = async (req, res) => {
       // Sync the ledger status to Delivered
       await handleOrderStatusChange(order._id, "Delivered", session);
 
+      // Trigger 3: Create Order Delivered Notification for Vendor
+      if (order.vendorId) {
+        await createVendorNotification({
+          vendorId: order.vendorId,
+          title: "Order Delivered 🎉",
+          message: `Order #${order.orderId} has been delivered successfully.`,
+          type: "ORDER_DELIVERED",
+          relatedOrderId: order._id,
+          session
+        });
+      }
+
       // Fetch dynamic default payout configurations
       let settings = await PayoutSettings.findOne().session(session);
       if (!settings) {
@@ -321,8 +436,11 @@ export const verifyOtp = async (req, res) => {
         }
       }
 
-      // Base fee only credited immediately if payoutType is per_order
-      const fee = (payoutType === "per_order") ? (order.deliveryCharge || baseFee) : 0;
+      // Base fee credited based on payoutType (per_order baseFee rate or order.deliveryCharge fallback)
+      const fee = (payoutType === "per_order") ? (baseFee !== undefined ? baseFee : (order.deliveryCharge || 35)) : 0;
+      order.riderPayout = fee;
+      await order.save({ session });
+
       const commission = commissionVal;
       const credit = fee + incentive + commission;
 
@@ -674,6 +792,32 @@ export const toggleOnlineStatus = async (req, res) => {
     res.status(200).json({ success: true, message: `Rider is now ${isOnline ? "online" : "offline"}`, rider });
   } catch (error) {
     console.error("Toggle Online Status Error:", error);
+    res.status(500).json({ success: false, message: "Server Error" });
+  }
+};
+
+// Submit Rider Support Ticket
+export const submitSupportTicket = async (req, res) => {
+  try {
+    const { category, description } = req.body;
+    if (!category || !description) {
+      return res.status(400).json({ success: false, message: "Category and description are required" });
+    }
+
+    const ticket = await RiderSupportTicket.create({
+      deliveryBoyId: req.deliveryBoy._id,
+      category,
+      description,
+      status: "Open"
+    });
+
+    res.status(201).json({
+      success: true,
+      message: "Support ticket submitted successfully",
+      ticket
+    });
+  } catch (error) {
+    console.error("Submit Support Ticket Error:", error);
     res.status(500).json({ success: false, message: "Server Error" });
   }
 };

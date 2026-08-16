@@ -1,10 +1,13 @@
 import { useState, useEffect, useRef } from "react";
-import { Search, MapPin, User, Clock, CheckCircle, ArrowRight, ShieldCheck, ChevronDown, Check, Phone, RefreshCw, ShoppingCart, Info, Lock } from "lucide-react";
+import { useLocation } from "react-router-dom";
+import { Search, MapPin, User, Clock, CheckCircle, ArrowRight, ShieldCheck, ChevronDown, Check, Phone, RefreshCw, ShoppingCart, Info, Lock, XCircle } from "lucide-react";
 import axios from "axios";
 import { useToast } from "../../../components/Toast";
+import ConfirmDialog from "../../../components/Toast/ConfirmDialog";
 import { getSocket, joinRoom, leaveRoom } from "../../../services/socket";
 
 export default function OrderList() {
+  const location = useLocation();
   const [orders, setOrders] = useState([]);
   const [riders, setRiders] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -13,8 +16,44 @@ export default function OrderList() {
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [assigning, setAssigning] = useState(false);
   const [accepting, setAccepting] = useState(false);
+  const [rejecting, setRejecting] = useState(false);
+  const [confirmState, setConfirmState] = useState(null);
   const { showToast } = useToast();
   const socketRef = useRef(null);
+  const selectedOrderIdRef = useRef(null);
+
+  // Keep selectedOrderIdRef updated whenever selectedOrder changes
+  useEffect(() => {
+    selectedOrderIdRef.current = selectedOrder?._id || null;
+  }, [selectedOrder?._id]);
+
+  // Helper to select an order clicked from Search results
+  const selectOrderFromSearch = (targetId, currentOrders = orders) => {
+    if (!targetId || !currentOrders || currentOrders.length === 0) return;
+    const match = currentOrders.find(o => o._id === targetId || o.orderId === targetId);
+    if (match) {
+      setSelectedOrder(match);
+      setActiveTab("all");
+    }
+  };
+
+  useEffect(() => {
+    const savedId = sessionStorage.getItem("vendor_selected_order_id") || location.state?.selectedOrderId;
+    if (savedId && orders.length > 0) {
+      selectOrderFromSearch(savedId, orders);
+      sessionStorage.removeItem("vendor_selected_order_id");
+    }
+  }, [orders, location.state]);
+
+  useEffect(() => {
+    const handleEventSelect = (e) => {
+      if (e.detail?.orderId && orders.length > 0) {
+        selectOrderFromSearch(e.detail.orderId, orders);
+      }
+    };
+    window.addEventListener("vendor-order-selected", handleEventSelect);
+    return () => window.removeEventListener("vendor-order-selected", handleEventSelect);
+  }, [orders]);
 
   const fetchOrders = async () => {
     try {
@@ -22,15 +61,19 @@ export default function OrderList() {
       const headers = { Authorization: `Bearer ${token}` };
       const res = await axios.get(`${import.meta.env.VITE_API_URL}/vendor/orders`, { headers });
       if (res.data.success) {
-        setOrders(res.data.orders || []);
+        const fetchedOrders = res.data.orders || [];
+        setOrders(fetchedOrders);
         
-        // Auto-select the first order in list or update selectedOrder with fresh database states
-        if (res.data.orders?.length > 0) {
-          if (selectedOrder) {
-            const fresh = res.data.orders.find(o => o._id === selectedOrder._id);
-            setSelectedOrder(fresh || res.data.orders[0]);
+        // Preserve user's currently selected order across background polling refreshes
+        if (fetchedOrders.length > 0) {
+          const currentId = selectedOrderIdRef.current;
+          if (currentId) {
+            const fresh = fetchedOrders.find(o => o._id === currentId);
+            if (fresh) {
+              setSelectedOrder(fresh);
+            }
           } else if (window.innerWidth >= 1024) {
-            setSelectedOrder(res.data.orders[0]);
+            setSelectedOrder(fetchedOrders[0]);
           }
         } else {
           setSelectedOrder(null);
@@ -166,6 +209,53 @@ export default function OrderList() {
     }
   };
 
+  const handleRejectOrder = async () => {
+    if (!selectedOrder) return;
+    try {
+      setRejecting(true);
+      const token = localStorage.getItem("vendorToken");
+      const headers = { Authorization: `Bearer ${token}` };
+      const res = await axios.post(
+        `${import.meta.env.VITE_API_URL}/vendor/orders/${selectedOrder._id}/reject`,
+        {},
+        { headers }
+      );
+      if (res.data.success) {
+        showToast({ type: "info", message: "Order rejected." });
+        await fetchOrders();
+      }
+    } catch (error) {
+      console.error("Failed to reject order:", error);
+      showToast({ type: "error", message: error.response?.data?.message || "Failed to reject order." });
+    } finally {
+      setRejecting(false);
+      setConfirmState(null);
+    }
+  };
+
+  const triggerRejectConfirm = () => {
+    if (!selectedOrder) return;
+    setConfirmState({
+      message: `Are you sure you want to reject Order #${selectedOrder.orderId}? This action cannot be undone.`,
+      onConfirm: handleRejectOrder,
+      type: "danger",
+    });
+  };
+
+  const getDeliveredRiderName = (order) => {
+    if (order?.deliveryBoyId?.fullName) {
+      return order.deliveryBoyId.fullName;
+    }
+    if (order?.deliveryLogs) {
+      const assignedLog = order.deliveryLogs.find(l => l.note && l.note.includes("assigned to rider"));
+      if (assignedLog) {
+        const match = assignedLog.note.match(/assigned to rider (.*?) with/i);
+        if (match && match[1]) return match[1].trim();
+      }
+    }
+    return "Assigned Delivery Partner";
+  };
+
   // Filter orders based on active tab state
   const filteredOrders = orders.filter((order) => {
     if (activeTab === "pending") {
@@ -218,17 +308,17 @@ export default function OrderList() {
   const currentStepIndex = steps.findIndex(s => s.key === selectedOrder?.deliveryStatus);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-full overflow-x-hidden">
       
       {/* Header */}
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-extrabold text-slate-800 tracking-tight">Order dispatching</h1>
-          <p className="text-slate-500 font-medium">Assign riders and track active customer delivery statuses</p>
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-800 tracking-tight">Order dispatching</h1>
+          <p className="text-slate-500 font-medium text-xs sm:text-sm">Assign riders and track active customer delivery statuses</p>
         </div>
         <button 
           onClick={fetchOrders}
-          className="p-2.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl transition cursor-pointer text-slate-605"
+          className="p-2.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl transition cursor-pointer text-slate-600 self-start sm:self-auto"
           title="Refresh orders lists"
         >
           <RefreshCw size={18} />
@@ -236,7 +326,7 @@ export default function OrderList() {
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b border-slate-200 gap-6">
+      <div className="flex border-b border-slate-200 gap-4 sm:gap-6 overflow-x-auto max-w-full pb-0.5 no-scrollbar">
         {[
           { id: "all", label: "All Orders" },
           { id: "pending", label: "Unassigned" },
@@ -251,9 +341,9 @@ export default function OrderList() {
               // Reset selection when changing tabs to prevent state mismatch
               setSelectedOrder(null);
             }}
-            className={`pb-3 text-sm font-bold uppercase tracking-wider transition-all relative border-b-2 cursor-pointer ${
+            className={`pb-3 text-xs sm:text-sm font-bold uppercase tracking-wider transition-all relative border-b-2 cursor-pointer shrink-0 whitespace-nowrap ${
               activeTab === tab.id 
-                ? "border-[#6d28d9] text-[#6d28d9]" 
+                ? "border-[#0B2214] text-[#0B2214]" 
                 : "border-transparent text-slate-400 hover:text-slate-600"
             }`}
           >
@@ -265,10 +355,10 @@ export default function OrderList() {
       {/* Main Split Screen Container */}
       {loading ? (
         <div className="flex items-center justify-center min-h-[40vh]">
-          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-purple-650"></div>
+          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-purple-600"></div>
         </div>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start max-w-full">
           
           {/* Left panel: Orders list */}
           <div className={`space-y-3 lg:col-span-1 max-h-[70vh] overflow-y-auto pr-1 ${selectedOrder ? "hidden lg:block" : "block"}`}>
@@ -283,7 +373,7 @@ export default function OrderList() {
                   onClick={() => setSelectedOrder(order)}
                   className={`p-4 rounded-2xl border transition-all cursor-pointer ${
                     selectedOrder?._id === order._id 
-                      ? "bg-purple-50/50 border-[#6d28d9] shadow-inner" 
+                      ? "bg-purple-50/50 border-[#0B2214] shadow-inner" 
                       : "bg-white border-slate-150 shadow-sm hover:border-purple-250"
                   }`}
                 >
@@ -296,12 +386,21 @@ export default function OrderList() {
 
                   <div className="space-y-1 text-[11px] text-slate-500 font-semibold mb-2">
                     <p className="truncate"><span className="text-slate-400 font-bold">Client:</span> {order.deliveryAddress?.fullName}</p>
+                    {order.deliverySlot?.time && (
+                      <p className="text-[10px] text-purple-700 font-extrabold truncate flex items-center gap-1">
+                        <Clock size={10} className="shrink-0" /> {order.deliverySlot.date ? `${order.deliverySlot.date} • ` : ""}{order.deliverySlot.time}
+                      </p>
+                    )}
                     <p className="font-bold text-slate-700">₹{order.grandTotal.toFixed(2)}</p>
                   </div>
 
                   <div className="flex justify-between items-center gap-2 pt-2 border-t border-slate-50">
                     <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-full ${
-                      order.orderStatus === "Pending" ? "bg-slate-100 text-slate-650" : "bg-purple-50 text-[#6d28d9]"
+                      order.orderStatus === "Pending"
+                        ? "bg-slate-100 text-slate-650"
+                        : order.orderStatus === "Rejected" || order.orderStatus === "Cancelled"
+                        ? "bg-rose-100 text-rose-800 border border-rose-200"
+                        : "bg-purple-50 text-[#0B2214]"
                     }`}>
                       {order.orderStatus}
                     </span>
@@ -315,13 +414,13 @@ export default function OrderList() {
           </div>
 
           {/* Right panel: Details details card */}
-          <div className={`lg:col-span-2 ${selectedOrder ? "block" : "hidden lg:block"}`}>
+          <div className={`lg:col-span-2 min-w-0 max-w-full ${selectedOrder ? "block" : "hidden lg:block"}`}>
             {!selectedOrder ? (
-              <div className="bg-white border border-slate-100 rounded-3xl p-12 text-center text-slate-400 font-bold shadow-sm">
+              <div className="bg-white border border-slate-100 rounded-3xl p-8 sm:p-12 text-center text-slate-400 font-bold shadow-sm">
                 Select an order from the list to display dispatch controls and logs.
               </div>
             ) : (
-              <div className="bg-white border border-slate-150 rounded-3xl p-6 shadow-sm space-y-6">
+              <div className="bg-white border border-slate-150 rounded-3xl p-4 sm:p-6 shadow-sm space-y-6 min-w-0 max-w-full">
                 
                 {/* Back to list button on mobile */}
                 <button
@@ -332,16 +431,21 @@ export default function OrderList() {
                 </button>
                 
                 {/* Header card summary */}
-                <div className="flex justify-between items-start gap-4 pb-4 border-b border-slate-50">
-                  <div>
+                <div className="flex justify-between items-start gap-4 pb-4 border-b border-slate-50 min-w-0">
+                  <div className="min-w-0">
                     <span className="text-[10px] text-slate-400 uppercase tracking-widest font-black block">Order Detail</span>
-                    <h2 className="text-lg font-black text-slate-850">#{selectedOrder.orderId}</h2>
+                    <h2 className="text-base sm:text-lg font-black text-slate-850 truncate">#{selectedOrder.orderId}</h2>
                     <p className="text-[10px] text-slate-400 font-bold mt-0.5">
                       Placed on: {new Date(selectedOrder.createdAt).toLocaleString()}
                     </p>
+                    {selectedOrder.deliverySlot?.time && (
+                      <p className="text-[11px] text-purple-700 font-extrabold mt-1.5 flex items-center gap-1.5 bg-purple-50 px-2.5 py-1 rounded-lg border border-purple-100 w-fit">
+                        <Clock size={12} className="text-purple-600 shrink-0" /> Slot: {selectedOrder.deliverySlot.date ? `${selectedOrder.deliverySlot.date} • ` : ""}{selectedOrder.deliverySlot.time}
+                      </p>
+                    )}
                   </div>
-                  <div className="text-right space-y-1">
-                    <span className="text-sm font-black text-[#6d28d9] block">₹{selectedOrder.grandTotal.toFixed(2)}</span>
+                  <div className="text-right space-y-1 shrink-0">
+                    <span className="text-sm font-black text-[#0B2214] block">₹{selectedOrder.grandTotal.toFixed(2)}</span>
                     <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">
                       {selectedOrder.paymentMethod}
                     </span>
@@ -353,7 +457,7 @@ export default function OrderList() {
                   {/* Left: Customer Address details */}
                   <div className="space-y-2.5">
                     <div className="flex items-center gap-2">
-                      <User size={16} className="text-[#6d28d9]" />
+                      <User size={16} className="text-[#0B2214]" />
                       <h3 className="font-extrabold text-slate-800 text-xs uppercase tracking-wider">Customer Drop</h3>
                     </div>
                     <div className="text-xs font-semibold text-slate-600 pl-1 leading-relaxed space-y-1">
@@ -363,17 +467,73 @@ export default function OrderList() {
                       {selectedOrder.deliveryAddress?.phoneNumber && (
                         <p className="pt-1.5 font-bold text-slate-500">Contact: {selectedOrder.deliveryAddress.phoneNumber}</p>
                       )}
+                      {selectedOrder.deliverySlot?.time ? (
+                        <div className="pt-2 mt-2 border-t border-slate-100 flex items-center gap-1.5 text-xs text-purple-700 font-bold">
+                          <Clock size={13} className="text-purple-600 shrink-0" />
+                          <span>Slot: <span className="font-extrabold text-slate-800">{selectedOrder.deliverySlot.date ? `${selectedOrder.deliverySlot.date} (${selectedOrder.deliverySlot.time})` : selectedOrder.deliverySlot.time}</span></span>
+                        </div>
+                      ) : (
+                        <div className="pt-2 mt-2 border-t border-slate-100 text-xs text-slate-400 font-semibold">
+                          <span>Slot: <span className="text-slate-500 font-bold">Standard Delivery</span></span>
+                        </div>
+                      )}
                     </div>
                   </div>
 
-                  {/* Right: Assigned Delivery Boy card */}
+                  {/* Right: Assigned Delivery Boy card or Delivered Confirmation */}
                   <div className="space-y-2.5">
                     <div className="flex items-center gap-2">
-                      <CheckCircle size={16} className="text-[#6d28d9]" />
-                      <h3 className="font-extrabold text-slate-800 text-xs uppercase tracking-wider">Delivery Agent</h3>
+                      <CheckCircle size={16} className="text-[#0B2214]" />
+                      <h3 className="font-extrabold text-slate-800 text-xs uppercase tracking-wider">
+                        {selectedOrder.orderStatus === "Delivered" || selectedOrder.deliveryStatus === "Delivered"
+                          ? "Delivery Confirmation"
+                          : "Delivery Agent"}
+                      </h3>
                     </div>
-                    
-                    {selectedOrder.deliveryBoyId ? (
+
+                    {/* Dedicated Delivered View */}
+                    {selectedOrder.orderStatus === "Delivered" || selectedOrder.deliveryStatus === "Delivered" ? (
+                      <div className="p-4 bg-emerald-50/70 rounded-2xl border border-emerald-200 space-y-3">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <span className="text-[10px] font-black uppercase text-emerald-800 tracking-wider block">
+                              Status
+                            </span>
+                            <p className="font-black text-xs text-emerald-950 flex items-center gap-1.5 mt-0.5">
+                              <CheckCircle size={14} className="text-emerald-600" /> Order Delivered
+                            </p>
+                            <p className="text-[10px] text-emerald-700 font-semibold mt-1">
+                              {getTimelineLogTime("Delivered")
+                                ? `Delivered on ${getTimelineLogTime("Delivered")}`
+                                : `Delivered on ${new Date(selectedOrder.updatedAt || selectedOrder.createdAt).toLocaleDateString()} at ${new Date(selectedOrder.updatedAt || selectedOrder.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`}
+                            </p>
+                          </div>
+                          <span className="text-[9px] font-black uppercase px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
+                            Completed
+                          </span>
+                        </div>
+
+                        <div className="pt-2.5 border-t border-emerald-100/80 text-xs">
+                          <div className="flex justify-between items-center">
+                            <div>
+                              <span className="text-[9px] text-emerald-700 font-bold block uppercase">Delivered By</span>
+                              <p className="font-extrabold text-slate-850 text-xs">{getDeliveredRiderName(selectedOrder)}</p>
+                              {selectedOrder.deliveryBoyId?.phone && (
+                                <p className="text-[10px] text-slate-500 font-semibold">{selectedOrder.deliveryBoyId.phone}</p>
+                              )}
+                            </div>
+                            {selectedOrder.deliveryBoyId?.phone && (
+                              <a
+                                href={`tel:${selectedOrder.deliveryBoyId.phone}`}
+                                className="py-1 px-2.5 bg-white border border-emerald-300 hover:bg-emerald-100 rounded-lg font-bold text-[10px] text-emerald-800 flex items-center gap-1 transition cursor-pointer"
+                              >
+                                <Phone size={10} /> Call Rider
+                              </a>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ) : selectedOrder.deliveryBoyId ? (
                       <div className="p-4 bg-purple-50/50 rounded-2xl border border-purple-100 space-y-3">
                         <div className="flex justify-between items-start">
                           <div>
@@ -397,7 +557,7 @@ export default function OrderList() {
                           {selectedOrder.deliveryStatus === "Assigned" && (
                             <button
                               onClick={() => setShowAssignModal(true)}
-                              className="flex-1 py-1.5 bg-[#6d28d9] hover:bg-[#5b21b6] rounded-lg text-center font-bold text-[10px] text-white flex items-center justify-center gap-1 transition cursor-pointer"
+                              className="flex-1 py-1.5 bg-[#0B2214] hover:bg-[#153e25] rounded-lg text-center font-bold text-[10px] text-white flex items-center justify-center gap-1 transition cursor-pointer"
                             >
                               <RefreshCw size={10} /> Change
                             </button>
@@ -406,29 +566,43 @@ export default function OrderList() {
                       </div>
                     ) : (
                       <div className="p-4 bg-slate-50 rounded-2xl border border-slate-150 flex flex-col justify-center items-center text-center space-y-3 min-h-[90px]">
-                        <p className="text-slate-400 text-xs font-semibold">No Rider Assigned Yet</p>
-                        
-                        {/* Constraints Check: Enable assign button only if orderStatus !== 'Pending' */}
+                        {/* Constraints Check: Enable assign button only if order is active & unassigned */}
                         {selectedOrder.orderStatus === "Pending" ? (
                           <div className="flex flex-col gap-2.5 w-full items-center">
                             <div className="text-[10px] font-bold text-amber-600 bg-amber-50 border border-amber-100 px-3 py-1.5 rounded-xl flex items-center gap-1">
                               <Lock size={12} /> Accept order before dispatch assignment
                             </div>
-                            <button
-                              onClick={handleAcceptOrder}
-                              disabled={accepting}
-                              className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-350 text-white font-extrabold text-xs rounded-xl shadow cursor-pointer transition flex items-center justify-center gap-1.5"
-                            >
-                              {accepting ? "Accepting..." : "Accept Order"}
-                            </button>
+                            <div className="flex gap-2 w-full">
+                              <button
+                                onClick={triggerRejectConfirm}
+                                disabled={accepting || rejecting}
+                                className="flex-1 py-2.5 bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 disabled:opacity-50 font-extrabold text-xs rounded-xl shadow-sm cursor-pointer transition flex items-center justify-center gap-1"
+                              >
+                                {rejecting ? "Rejecting..." : "Reject Order"}
+                              </button>
+                              <button
+                                onClick={handleAcceptOrder}
+                                disabled={accepting || rejecting}
+                                className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-350 text-white font-extrabold text-xs rounded-xl shadow cursor-pointer transition flex items-center justify-center gap-1.5"
+                              >
+                                {accepting ? "Accepting..." : "Accept Order"}
+                              </button>
+                            </div>
+                          </div>
+                        ) : selectedOrder.orderStatus === "Rejected" || selectedOrder.orderStatus === "Cancelled" ? (
+                          <div className="text-xs font-extrabold text-rose-700 bg-rose-50 border border-rose-200 px-4 py-2.5 rounded-xl flex items-center gap-1.5">
+                            <XCircle size={14} className="text-rose-600" /> Order {selectedOrder.orderStatus}
                           </div>
                         ) : (
-                          <button
-                            onClick={() => setShowAssignModal(true)}
-                            className="px-4 py-2 bg-[#6d28d9] hover:bg-[#5b21b6] text-white font-extrabold text-xs rounded-xl shadow cursor-pointer transition flex items-center gap-1"
-                          >
-                            Assign Delivery Boy <ArrowRight size={12} />
-                          </button>
+                          <>
+                            <p className="text-slate-400 text-xs font-semibold">No Rider Assigned Yet</p>
+                            <button
+                              onClick={() => setShowAssignModal(true)}
+                              className="px-4 py-2 bg-[#0B2214] hover:bg-[#153e25] text-white font-extrabold text-xs rounded-xl shadow cursor-pointer transition flex items-center gap-1"
+                            >
+                              Assign Delivery Boy <ArrowRight size={12} />
+                            </button>
+                          </>
                         )}
                       </div>
                     )}
@@ -454,16 +628,16 @@ export default function OrderList() {
                             {/* Bullet indicator */}
                             <div className={`absolute -left-6 w-5 h-5 rounded-full border-4 flex items-center justify-center transition-all ${
                               isCurrent 
-                                ? "bg-white border-[#6d28d9]" 
+                                ? "bg-white border-[#0B2214]" 
                                 : isDone 
-                                  ? "bg-[#6d28d9] border-[#6d28d9]" 
+                                  ? "bg-[#0B2214] border-[#0B2214]" 
                                   : "bg-white border-slate-200"
                             }`}>
                               {isDone && !isCurrent && <Check size={8} className="text-white" />}
                             </div>
 
                             <div className="flex-1 text-xs">
-                              <p className={`font-black uppercase tracking-wider ${isCurrent ? "text-[#6d28d9]" : isDone ? "text-slate-800" : "text-slate-400"}`}>
+                              <p className={`font-black uppercase tracking-wider ${isCurrent ? "text-[#0B2214]" : isDone ? "text-slate-800" : "text-slate-400"}`}>
                                 {step.label}
                               </p>
                               {time && (
@@ -488,7 +662,7 @@ export default function OrderList() {
                 {/* Items summary */}
                 <div className="space-y-3">
                   <div className="flex items-center gap-2">
-                    <ShoppingCart size={16} className="text-[#6d28d9]" />
+                    <ShoppingCart size={16} className="text-[#0B2214]" />
                     <h3 className="font-extrabold text-slate-800 text-xs uppercase tracking-wider">Parcels checklist</h3>
                   </div>
                   <div className="divide-y divide-slate-50 text-xs pl-1">
@@ -530,8 +704,8 @@ export default function OrderList() {
                         </div>
                       )}
                       <div className="flex justify-between text-xs font-black text-slate-850 pt-1 border-t border-slate-100">
-                        <span>Order Total:</span>
-                        <span className="text-[#6d28d9]">₹{selectedOrder.grandTotal.toFixed(2)}</span>
+                        <span>Customer Grand Total:</span>
+                        <span className="text-[#0B2214]">₹{selectedOrder.grandTotal.toFixed(2)}</span>
                       </div>
                       {(() => {
                         const hasCommission = selectedOrder.vendorCommission && selectedOrder.vendorCommission.amount !== undefined;
@@ -545,17 +719,28 @@ export default function OrderList() {
                         const finalComm = Math.round(commAmount * 100) / 100;
                         const payout = Math.max(0, itemSubtotal - finalComm);
 
+                        const getCommLabelText = () => {
+                          if (commType === "percentage") return `Platform Commission (${commRate}%):`;
+                          if (commType === "flat") return `Platform Commission (₹${Number(commRate).toFixed(2)} flat):`;
+                          if (commType === "mixed") return `Platform Commission:`;
+                          return `Platform Commission (${commRate}%):`;
+                        };
+
                         return (
-                          <>
-                            <div className="flex justify-between text-red-500 font-bold border-t border-slate-100 pt-1.5 mt-1.5">
-                              <span>Platform Commission ({commRate}{commType === "percentage" ? "%" : " flat"}):</span>
+                          <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100 mt-2 space-y-1">
+                            <div className="flex justify-between text-xs font-bold text-slate-700">
+                              <span>Vendor Order Subtotal:</span>
+                              <span>₹{itemSubtotal.toFixed(2)}</span>
+                            </div>
+                            <div className="flex justify-between text-xs text-red-500 font-bold">
+                              <span>{getCommLabelText()}</span>
                               <span>-₹{finalComm.toFixed(2)}</span>
                             </div>
-                            <div className="flex justify-between text-xs font-black text-emerald-700 pt-1">
+                            <div className="flex justify-between text-xs font-black text-emerald-700 pt-1 border-t border-slate-200">
                               <span>Your Payout:</span>
                               <span>₹{payout.toFixed(2)}</span>
                             </div>
-                          </>
+                          </div>
                         );
                       })()}
                     </div>
@@ -653,6 +838,16 @@ export default function OrderList() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Confirm Reject Dialog */}
+      {confirmState && (
+        <ConfirmDialog
+          message={confirmState.message}
+          type={confirmState.type || "warning"}
+          onConfirm={confirmState.onConfirm}
+          onCancel={() => setConfirmState(null)}
+        />
       )}
 
     </div>

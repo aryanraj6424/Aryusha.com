@@ -276,11 +276,6 @@ import axios from "axios";
 export default function AdminDashboard() {
   const navigate = useNavigate();
 
-  // =====================================
-  // VENDOR DASHBOARD STATS START
-  // Replace this section in future
-  // =====================================
-
   const [stats, setStats] = useState({
     totalVendors: 0,
     pendingVendors: 0,
@@ -288,185 +283,137 @@ export default function AdminDashboard() {
     rejectedVendors: 0,
   });
 
-  // =====================================
-  // VENDOR DASHBOARD STATS END
-  // =====================================
+  const [analyticsData, setAnalyticsData] = useState({
+    totalProducts: 0,
+    totalOrders: 0,
+    totalCustomers: 0,
+    totalVendors: 0,
+    totalRevenue: 0,
+    growthPct: 0
+  });
 
-  const [loading, setLoading] =
-    useState(true);
+  const [loading, setLoading] = useState(true);
 
   const handleLogout = () => {
-    localStorage.removeItem(
-      "adminToken"
-    );
-
-    localStorage.removeItem(
-      "admin"
-    );
-
+    localStorage.removeItem("adminToken");
+    localStorage.removeItem("admin");
     navigate("/admin/login");
   };
 
-  // =====================================
-  // VENDOR API START
-  // Replace this section in future
-  // =====================================
-
   const fetchStats = async () => {
     try {
-      const response =
-        await axios.get(
-          `${import.meta.env.VITE_API_URL}/admin/vendors/stats`
-        );
+      const token = localStorage.getItem("adminToken");
+      const headers = { Authorization: `Bearer ${token}` };
+      const response = await axios.get(
+        `${import.meta.env.VITE_API_URL}/admin/analytics/stats`,
+        { headers }
+      );
 
-      setStats(response.data);
+      if (response.data.success) {
+        setStats(response.data.vendorOverview);
+        setAnalyticsData(response.data.analytics);
+      }
     } catch (error) {
-      console.log(error);
+      console.error("Fetch Admin Stats Error:", error);
     }
   };
 
-  // =====================================
-  // VENDOR API END
-  // =====================================
-
   useEffect(() => {
-    const loadData =
-      async () => {
-        await fetchStats();
-
-        setLoading(false);
-      };
+    const loadData = async () => {
+      await fetchStats();
+      setLoading(false);
+    };
 
     loadData();
   }, []);
 
   if (loading) {
     return (
-      <div className="p-6">
-        Loading Dashboard...
+      <div className="p-8 text-center text-slate-500 font-semibold text-sm">
+        Loading Admin Analytics...
       </div>
     );
   }
 
   return (
-    <div className="p-6">
-
+    <div className="p-6 space-y-8">
       {/* Header */}
-
-      <div className="flex justify-between items-center mb-8">
-
+      <div className="flex justify-between items-center">
         <div>
-
-          <h1 className="text-4xl font-bold">
+          <h1 className="text-4xl font-black text-gray-900 tracking-tight">
             Admin Dashboard
           </h1>
-
-          <p className="text-gray-500 mt-1">
-            Welcome Super Admin
+          <p className="text-gray-500 mt-1 font-medium text-sm">
+            Welcome Super Admin — Real-Time Platform Overview
           </p>
-
         </div>
 
         <button
           onClick={handleLogout}
-          className="bg-red-500 hover:bg-red-600 text-white px-6 py-3 rounded-xl font-semibold"
+          className="bg-red-500 hover:bg-red-600 text-white px-6 py-2.5 rounded-xl font-bold shadow-sm transition"
         >
           Logout
         </button>
-
       </div>
 
-      {/* =====================================
-          VENDOR OVERVIEW CARD START
-          Replace this section in future
-         ===================================== */}
-
-      <div className="bg-white shadow-lg rounded-3xl p-8">
-
-        <div className="flex justify-between items-center mb-8">
-
+      {/* VENDOR OVERVIEW CARD */}
+      <div className="bg-white shadow-sm border border-gray-200 rounded-3xl p-8">
+        <div className="flex justify-between items-center mb-6">
           <div>
-
-            <h2 className="text-3xl font-bold">
+            <h2 className="text-2xl font-black text-gray-900">
               Vendor Overview
             </h2>
-
-            <p className="text-gray-500">
-              Complete Vendor Statistics
+            <p className="text-gray-500 text-sm font-medium">
+              Real-Time Vendor Registration & Approval Status
             </p>
-
           </div>
-
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-
           {/* Total Vendors */}
-
-          <div className="bg-gray-50 rounded-2xl p-8 text-center border">
-
-            <h3 className="text-gray-500 font-medium">
+          <div className="bg-slate-50 rounded-2xl p-6 text-center border border-slate-200">
+            <h3 className="text-gray-500 font-bold text-xs uppercase tracking-wider">
               Total Vendors
             </h3>
-
-            <p className="text-5xl font-bold mt-4">
+            <p className="text-4xl font-black text-slate-800 mt-3">
               {stats.totalVendors}
             </p>
-
           </div>
 
           {/* Pending Vendors */}
-
-          <div className="bg-yellow-50 rounded-2xl p-8 text-center border">
-
-            <h3 className="text-gray-500 font-medium">
+          <div className="bg-amber-50/60 rounded-2xl p-6 text-center border border-amber-200">
+            <h3 className="text-amber-700 font-bold text-xs uppercase tracking-wider">
               Pending
             </h3>
-
-            <p className="text-5xl font-bold mt-4">
+            <p className="text-4xl font-black text-amber-700 mt-3">
               {stats.pendingVendors}
             </p>
-
           </div>
 
           {/* Approved Vendors */}
-
-          <div className="bg-green-50 rounded-2xl p-8 text-center border">
-
-            <h3 className="text-gray-500 font-medium">
+          <div className="bg-emerald-50/60 rounded-2xl p-6 text-center border border-emerald-200">
+            <h3 className="text-emerald-700 font-bold text-xs uppercase tracking-wider">
               Approved
             </h3>
-
-            <p className="text-5xl font-bold mt-4">
+            <p className="text-4xl font-black text-emerald-700 mt-3">
               {stats.approvedVendors}
             </p>
-
           </div>
 
           {/* Rejected Vendors */}
-
-          <div className="bg-red-50 rounded-2xl p-8 text-center border">
-
-            <h3 className="text-gray-500 font-medium">
+          <div className="bg-rose-50/60 rounded-2xl p-6 text-center border border-rose-200">
+            <h3 className="text-rose-700 font-bold text-xs uppercase tracking-wider">
               Rejected
             </h3>
-
-            <p className="text-5xl font-bold mt-4">
+            <p className="text-4xl font-black text-rose-700 mt-3">
               {stats.rejectedVendors}
             </p>
-
           </div>
-
         </div>
-
       </div>
 
-      <DashboardAnalytics />
-
-      {/* =====================================
-          VENDOR OVERVIEW CARD END
-         ===================================== */}
-
+      {/* PLATFORM ANALYTICS 6-CARD ROW */}
+      <DashboardAnalytics data={analyticsData} />
     </div>
   );
 }

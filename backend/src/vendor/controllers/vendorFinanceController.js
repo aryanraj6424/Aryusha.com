@@ -115,7 +115,7 @@ export const getOwnOrderBreakdownList = async (req, res) => {
 export const getOwnOrderCommissionBreakdown = async (req, res) => {
   try {
     const vendorId = req.vendor._id;
-    const order = await CustomerOrder.findOne({ _id: req.params.id, vendorId })
+    const order = await CustomerOrder.findOne({ _id: req.params.id, $or: [{ vendorId }, { "vendorSubOrders.vendorId": vendorId }] })
       .populate("vendorId",   "shopName phone")
       .populate("customerId", "fullName phoneNumber email");
     if (!order) return res.status(404).json({ success: false, message: "Order not found or access denied" });

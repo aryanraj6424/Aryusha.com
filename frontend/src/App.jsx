@@ -7,7 +7,7 @@ import ScrollToTop from "./components/ScrollToTop";
 import LoginPage from "./pages/auth/LoginPage";
 import SignupPage from "./pages/auth/SignupPage";
 import ForgotPasswordPage from "./pages/auth/ForgotPasswordPage";
-import OTPVerificationPage from "./pages/auth/OTPVerificationPage";
+import VerifyOtpPage from "./pages/auth/VerifyOtpPage";
 import ResetPasswordPage from "./pages/auth/ResetPasswordPage";
 
 import CustomerProtectedRoute from "./customer/components/CustomerProtectedRoute";
@@ -48,6 +48,7 @@ import VendorAssignedArea from "./vendor/pages/areas/VendorAssignedArea";
 import VendorProfile from "./vendor/pages/profile/VendorProfile";
 import VendorFinance from "./vendor/pages/finance/VendorFinance";
 import VendorCustomerList from "./vendor/pages/customers/VendorCustomerList";
+import VendorTopSelling from "./vendor/pages/products/VendorTopSelling";
 
 // Vendor Product, Inventory & Order imports
 import ProductList from "./vendor/pages/products/ProductList";
@@ -101,7 +102,7 @@ function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/signup" element={<SignupPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-        <Route path="/verify-otp" element={<OTPVerificationPage />} />
+        <Route path="/verify-otp" element={<VerifyOtpPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
 
         {/* Homepage — CustomerLayout wraps the root route so guests get the full store navbar */}
@@ -166,6 +167,7 @@ function App() {
           <Route path="orders" element={<VendorOrderList />} />
           <Route path="profile" element={<VendorProfile />} />
           <Route path="finance" element={<VendorFinance />} />
+          <Route path="top-selling" element={<VendorTopSelling />} />
           <Route path="customers" element={<VendorCustomerList />} />
         </Route>
 
@@ -181,6 +183,7 @@ function App() {
             </DeliveryBoyProvider>
           }
         >
+          <Route index element={<Navigate to="dashboard" replace />} />
           <Route path="login" element={<DeliveryBoyLogin />} />
           <Route path="register" element={<DeliveryBoyRegister />} />
           <Route path="forgot-password" element={<DeliveryBoyForgotPassword />} />

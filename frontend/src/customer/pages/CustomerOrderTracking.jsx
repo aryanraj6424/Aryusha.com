@@ -1,12 +1,20 @@
 import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import axios from "axios";
-import L from "leaflet";
-import "leaflet/dist/leaflet.css";
 import { ArrowLeft, User, Phone, CheckCircle2, Clock, MapPin, KeyRound, Copy, Star } from "lucide-react";
 import { useToast } from "../../components/Toast";
 import { getSocket, joinRoom, leaveRoom } from "../../services/socket";
+import { loadGoogleMaps } from "../../utils/googleMapsLoader";
 
+/**
+ * Live customer order tracking screen.
+ * 
+ * MIGRATED FROM LEAFLET TO GOOGLE MAPS JS API:
+ * - Replaced Leaflet `L.map` & `L.tileLayer` with `google.maps.Map`
+ * - Replaced Leaflet `L.divIcon` markers with Google Maps `google.maps.Marker` using SVG Data URIs matching original Leaflet styling
+ * - Replaced Leaflet `L.polyline` with Google Maps dashed `google.maps.Polyline`
+ * - Replaced Leaflet `L.latLngBounds` and `fitBounds([50,50])` with `google.maps.LatLngBounds`
+ */
 export default function CustomerOrderTracking() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -22,6 +30,8 @@ export default function CustomerOrderTracking() {
   const riderMarkerRef = useRef(null);
   const dropoffMarkerRef = useRef(null);
   const polylineRef = useRef(null);
+  const riderInfoWindowRef = useRef(null);
+  const dropoffInfoWindowRef = useRef(null);
 
   const user = JSON.parse(localStorage.getItem("user") || "null");
 
@@ -172,7 +182,7 @@ export default function CustomerOrderTracking() {
     };
   }, [id]);
 
-  // Leaflet Map Initialization and Updates
+  // Google Maps Initialization and Live Updates (Replaces Leaflet Map logic)
   useEffect(() => {
     if (!tracking) return;
 
@@ -183,7 +193,9 @@ export default function CustomerOrderTracking() {
     // We only show map view if transit is active and live location is enabled
     if (!isTransiting || !trackingEnabled || !tracking.deliveryBoy) {
       if (mapInstanceRef.current) {
-        mapInstanceRef.current.remove();
+        if (riderMarkerRef.current) riderMarkerRef.current.setMap(null);
+        if (dropoffMarkerRef.current) dropoffMarkerRef.current.setMap(null);
+        if (polylineRef.current) polylineRef.current.setMap(null);
         mapInstanceRef.current = null;
         riderMarkerRef.current = null;
         dropoffMarkerRef.current = null;
@@ -200,72 +212,139 @@ export default function CustomerOrderTracking() {
 
     if (!mapRef.current) return;
 
-    // Fix default Leaflet icon paths
-    delete L.Icon.Default.prototype._getIconUrl;
-    L.Icon.Default.mergeOptions({
-      iconRetinaUrl: "https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon-2x.png",
-      iconUrl: "https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon.png",
-      shadowUrl: "https://unpkg.com/leaflet@1.7.1/dist/images/marker-shadow.png",
+    let isMounted = true;
+
+    loadGoogleMaps().then((google) => {
+      if (!isMounted || !mapRef.current) return;
+
+      const riderPos = { lat: riderLat, lng: riderLng };
+      const dropoffPos = { lat: dropoffLat, lng: dropoffLng };
+
+      // Helper to generate SVG Data URI matching original Leaflet divIcon styling
+      const getRiderIcon = () => {
+        const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 36 36">
+          <circle cx="18" cy="18" r="16" fill="#0B2214" stroke="#ffffff" stroke-width="2"/>
+          <g transform="translate(6, 6)" stroke="#ffffff" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="1" y="3" width="15" height="13"></rect>
+            <polygon points="16 8 20 8 23 11 23 16 16 16 16 8"></polygon>
+            <circle cx="5.5" cy="18.5" r="2.5"></circle>
+            <circle cx="18.5" cy="18.5" r="2.5"></circle>
+          </g>
+        </svg>`;
+        return {
+          url: "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(svg),
+          scaledSize: new google.maps.Size(36, 36),
+          anchor: new google.maps.Point(18, 18),
+        };
+      };
+
+      const getDropoffIcon = () => {
+        const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 36 36">
+          <circle cx="18" cy="18" r="16" fill="#e11d48" stroke="#ffffff" stroke-width="2"/>
+          <g transform="translate(6, 6)" stroke="#ffffff" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+            <circle cx="12" cy="10" r="3"></circle>
+          </g>
+        </svg>`;
+        return {
+          url: "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(svg),
+          scaledSize: new google.maps.Size(36, 36),
+          anchor: new google.maps.Point(18, 18),
+        };
+      };
+
+      if (!mapInstanceRef.current) {
+        // 1. Setup Google Maps instance
+        mapInstanceRef.current = new google.maps.Map(mapRef.current, {
+          center: riderPos,
+          zoom: 13,
+          zoomControl: true,
+          streetViewControl: false,
+          mapTypeControl: false,
+          fullscreenControl: false,
+        });
+
+        // Create InfoWindows (Replaces Leaflet .bindPopup)
+        riderInfoWindowRef.current = new google.maps.InfoWindow({
+          content: `<strong>Delivery Agent</strong><br/>Heading towards your dropoff location`,
+        });
+        dropoffInfoWindowRef.current = new google.maps.InfoWindow({
+          content: `<strong>Your Dropoff</strong><br/>${tracking.deliveryAddress?.fullName || "Recipient"}`,
+        });
+
+        // Place markers
+        riderMarkerRef.current = new google.maps.Marker({
+          position: riderPos,
+          map: mapInstanceRef.current,
+          icon: getRiderIcon(),
+          title: "Delivery Agent",
+        });
+
+        dropoffMarkerRef.current = new google.maps.Marker({
+          position: dropoffPos,
+          map: mapInstanceRef.current,
+          icon: getDropoffIcon(),
+          title: "Your Dropoff",
+        });
+
+        riderMarkerRef.current.addListener("click", () => {
+          riderInfoWindowRef.current.open(mapInstanceRef.current, riderMarkerRef.current);
+        });
+
+        dropoffMarkerRef.current.addListener("click", () => {
+          dropoffInfoWindowRef.current.open(mapInstanceRef.current, dropoffMarkerRef.current);
+        });
+
+        // Draw dashed polyline route (Replaces Leaflet L.polyline with dashArray)
+        const lineSymbol = {
+          path: "M 0,-1 0,1",
+          strokeOpacity: 1,
+          scale: 4,
+        };
+
+        polylineRef.current = new google.maps.Polyline({
+          path: [riderPos, dropoffPos],
+          geodesic: true,
+          strokeColor: "#0B2214",
+          strokeOpacity: 0,
+          icons: [
+            {
+              icon: lineSymbol,
+              offset: "0",
+              repeat: "16px",
+            },
+          ],
+          map: mapInstanceRef.current,
+        });
+
+        // Fit map boundary with padding (Replaces Leaflet L.latLngBounds & fitBounds)
+        const bounds = new google.maps.LatLngBounds();
+        bounds.extend(riderPos);
+        bounds.extend(dropoffPos);
+        mapInstanceRef.current.fitBounds(bounds, { top: 50, bottom: 50, left: 50, right: 50 });
+
+      } else {
+        // 2. Smoothly update marker and route positions on poll interval updates
+        riderMarkerRef.current.setPosition(riderPos);
+        dropoffMarkerRef.current.setPosition(dropoffPos);
+        polylineRef.current.setPath([riderPos, dropoffPos]);
+      }
+
+      // Auto fit boundary if markers move significantly
+      const timer = setTimeout(() => {
+        if (mapInstanceRef.current && google.maps.event) {
+          google.maps.event.trigger(mapInstanceRef.current, "resize");
+        }
+      }, 200);
+
+      return () => clearTimeout(timer);
+    }).catch((err) => {
+      console.error("Google Maps Load Error in CustomerOrderTracking:", err);
     });
 
-    if (!mapInstanceRef.current) {
-      // 1. Setup Leaflet map instance
-      mapInstanceRef.current = L.map(mapRef.current).setView([riderLat, riderLng], 13);
-
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        attribution: '&copy; <a href="https://osm.org/copyright">OpenStreetMap</a> contributors'
-      }).addTo(mapInstanceRef.current);
-
-      // Create Custom Icons
-      const riderIcon = L.divIcon({
-        html: `<div class="bg-purple-600 text-white p-2 rounded-full border-2 border-white shadow flex items-center justify-center w-9 h-9"><svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="3" width="15" height="13"></rect><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"></polygon><circle cx="5.5" cy="18.5" r="2.5"></circle><circle cx="18.5" cy="18.5" r="2.5"></circle></svg></div>`,
-        className: 'custom-leaflet-icon',
-        iconSize: [36, 36],
-        iconAnchor: [18, 36]
-      });
-
-      const customerIcon = L.divIcon({
-        html: `<div class="bg-rose-600 text-white p-2 rounded-full border-2 border-white shadow flex items-center justify-center w-9 h-9"><svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg></div>`,
-        className: 'custom-leaflet-icon',
-        iconSize: [36, 36],
-        iconAnchor: [18, 36]
-      });
-
-      // Place markers
-      riderMarkerRef.current = L.marker([riderLat, riderLng], { icon: riderIcon })
-        .addTo(mapInstanceRef.current)
-        .bindPopup(`<strong>Delivery Agent</strong><br/>Heading towards your dropoff location`);
-
-      dropoffMarkerRef.current = L.marker([dropoffLat, dropoffLng], { icon: customerIcon })
-        .addTo(mapInstanceRef.current)
-        .bindPopup(`<strong>Your Dropoff</strong><br/>${tracking.deliveryAddress?.fullName}`);
-
-      // Draw polyline route
-      polylineRef.current = L.polyline([[riderLat, riderLng], [dropoffLat, dropoffLng]], {
-        color: '#7c3aed',
-        weight: 4,
-        opacity: 0.85,
-        dashArray: '6, 10'
-      }).addTo(mapInstanceRef.current);
-
-      // Fit map boundary
-      const bounds = L.latLngBounds([[riderLat, riderLng], [dropoffLat, dropoffLng]]);
-      mapInstanceRef.current.fitBounds(bounds, { padding: [50, 50] });
-
-    } else {
-      // 2. Smoothly update marker and route positions on poll interval updates
-      riderMarkerRef.current.setLatLng([riderLat, riderLng]);
-      polylineRef.current.setLatLngs([[riderLat, riderLng], [dropoffLat, dropoffLng]]);
-    }
-
-    // Auto fit boundary if markers move significantly
-    const timer = setTimeout(() => {
-      if (mapInstanceRef.current) {
-        mapInstanceRef.current.invalidateSize();
-      }
-    }, 200);
-
-    return () => clearTimeout(timer);
+    return () => {
+      isMounted = false;
+    };
   }, [tracking]);
 
   const handleCopyOtp = () => {

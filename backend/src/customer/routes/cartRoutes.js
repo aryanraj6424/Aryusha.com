@@ -5,6 +5,7 @@ import User from "../models/User.js";
 import {
   getCartSummary,
   getActiveCoupons,
+  getEligibleCoupons,
   applyCoupon,
   removeCoupon,
   getDeliverySlots
@@ -28,7 +29,10 @@ const optionalProtect = async (req, res, next) => {
 
 router.post("/summary", optionalProtect, getCartSummary); // Allow POST for easy passing of cart items
 router.get("/summary", optionalProtect, getCartSummary);  // Also support GET with query parameter for spec alignment
-router.get("/coupons", protect, getActiveCoupons); // Eligible coupons route for customers
+router.get("/coupons", protect, getActiveCoupons); // Active coupons route for customers
+router.post("/eligible-coupons", optionalProtect, getEligibleCoupons); // Eligible coupons route for customer cart
+router.get("/eligible-coupons", optionalProtect, getEligibleCoupons);
+router.get("/coupons/eligible", optionalProtect, getEligibleCoupons);
 router.post("/apply-coupon", protect, applyCoupon);
 router.post("/remove-coupon", protect, removeCoupon);
 router.get("/slots", protect, getDeliverySlots);

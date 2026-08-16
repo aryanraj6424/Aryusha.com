@@ -34,6 +34,7 @@ const categorySchema = new Schema(
     icon: { type: String, trim: true, default: "" },
     sortOrder: { type: Number, default: 0 },
     status: { type: String, enum: ['active', 'inactive'], default: 'active', index: true },
+    unitId: { type: Schema.Types.ObjectId, ref: 'Unit', default: null, index: true },
     isFeatured: { type: Boolean, default: false, index: true },
     parentId: { type: Schema.Types.ObjectId, ref: 'Category', default: null },
     // SEO fields
@@ -92,6 +93,7 @@ const subCategorySchema = new Schema(
     image: { type: String, trim: true },
     sortOrder: { type: Number, default: 0 },
     status: { type: String, enum: ['active', 'inactive'], default: 'active', index: true },
+    unitId: { type: Schema.Types.ObjectId, ref: 'Unit', default: null, index: true },
     // SEO fields
     metaTitle: { type: String, default: "" },
     metaDescription: { type: String, default: "" },
@@ -150,6 +152,7 @@ const productFamilySchema = new Schema(
     }],
     tags: [{ type: String }],
     unitType: { type: String, default: "" },
+    unitId: { type: Schema.Types.ObjectId, ref: 'Unit', default: null, index: true },
     shelfLife: { type: String, default: "" },
     storageInstructions: { type: String, default: "" },
     countryOfOrigin: { type: String, default: "" },
@@ -186,6 +189,8 @@ productFamilySchema.pre('validate', function () {
   }
 });
 productFamilySchema.index({ subCategoryId: 1, name: 1 }, { unique: true });
+productFamilySchema.index({ subCategoryId: 1, unitId: 1 });
+productFamilySchema.index({ categoryId: 1, unitId: 1 });
 
 productFamilySchema.virtual('products', {
   ref: 'Product',
@@ -242,6 +247,8 @@ const productSchema = new Schema(
     ],
     averageRating: { type: Number, default: 0 },
     totalReviews: { type: Number, default: 0 },
+    coupon_allowed: { type: Boolean, default: false },
+    max_discount_amount: { type: Number, default: null, min: 0 },
     // SEO fields
     metaTitle: { type: String, default: "" },
     metaDescription: { type: String, default: "" },
@@ -312,6 +319,7 @@ productVariantSchema.set('toObject', { virtuals: true });
 
 // same product cannot have two variants with an identical pack size
 productVariantSchema.index({ productId: 1, 'packSize.value': 1, 'packSize.unit': 1 }, { unique: true });
+productVariantSchema.index({ productId: 1, status: 1 });
 
 /* ============================================================================
  * 6. VENDOR LISTING — bridges a catalog variant to one vendor's own
@@ -324,6 +332,7 @@ const vendorListingSchema = new Schema(
     variantId: { type: Schema.Types.ObjectId, ref: 'ProductVariant', required: true, index: true },
 
     sellingPrice: { type: Number, required: true, min: 0 },
+    mrp: { type: Number, min: 0 },
     stock: {
       quantity: { type: Number, default: 0, min: 0 },
       lowStockThreshold: { type: Number, default: 5 }
@@ -414,6 +423,10 @@ const vendorProductSchema = new Schema(
     vendorNotes: { type: String, default: "" },
     averageRating: { type: Number, default: 0 },
     totalReviews: { type: Number, default: 0 },
+    coupon_allowed: { type: Boolean, default: false },
+    max_discount_amount: { type: Number, default: null, min: 0 },
+    commissionType: { type: String, enum: ['percentage', 'flat', 'inherit'], default: 'inherit' },
+    commissionValue: { type: Number, default: null },
     status: { type: String, enum: ['active', 'inactive'], default: 'active', index: true }
   },
   { timestamps: true }
@@ -421,6 +434,24 @@ const vendorProductSchema = new Schema(
 
 // A vendor cannot list the same master product twice
 vendorProductSchema.index({ vendorId: 1, masterProductId: 1 }, { unique: true });
+
+/* ============================================================================
+ * 8. COMMISSION CHANGE HISTORY — tracks admin commission rate updates per vendor product
+ * ========================================================================= */
+const commissionChangeHistorySchema = new Schema(
+  {
+    vendorProductId: { type: Schema.Types.ObjectId, ref: 'VendorProduct', required: true, index: true },
+    previousType: { type: String, default: 'inherit' },
+    previousValue: { type: Number, default: null },
+    newType: { type: String, required: true },
+    newValue: { type: Number, default: null },
+    changedBy: { type: Schema.Types.ObjectId, ref: 'Admin', default: null },
+    changedAt: { type: Date, default: Date.now }
+  },
+  { timestamps: true }
+);
+
+commissionChangeHistorySchema.index({ vendorProductId: 1, changedAt: -1 });
 
 const Brand = mongoose.model('Brand', brandSchema);
 const Category = mongoose.model('Category', categorySchema);
@@ -430,6 +461,7 @@ const Product = mongoose.model('Product', productSchema);
 const ProductVariant = mongoose.model('ProductVariant', productVariantSchema);
 const VendorListing = mongoose.model('VendorListing', vendorListingSchema);
 const VendorProduct = mongoose.model('VendorProduct', vendorProductSchema);
+const CommissionChangeHistory = mongoose.model('CommissionChangeHistory', commissionChangeHistorySchema);
 
 const productReviewSchema = new Schema(
   {
@@ -461,6 +493,7 @@ export {
   ProductVariant,
   VendorListing,
   VendorProduct,
+  CommissionChangeHistory,
   Brand,
   ProductReview
 };

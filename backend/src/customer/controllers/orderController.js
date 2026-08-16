@@ -2,11 +2,30 @@ import mongoose from "mongoose";
 import PDFDocument from "pdfkit";
 import CustomerOrder from "../models/CustomerOrder.js";
 import Invoice from "../models/Invoice.js";
+import Counter from "../../models/Counter.js";
 import { VendorListing, VendorProduct, ProductVariant, ProductReview, Product } from "../../models/catalog.js";
 import { calculateOrderFees } from "../../utils/feeCalculator.js";
+import { calculateCouponDiscount } from "../../utils/couponCalculator.js";
 import { calculateVendorOrderCommission } from "../../utils/commissionCalculator.js";
 import { handleOrderCreated, runInTransaction } from "../../utils/ledgerSyncHelper.js";
 import { serializeCustomerOrder } from "../../utils/financeSerializer.js";
+import { createVendorNotification } from "../../utils/notificationHelper.js";
+import { createAdminNotification } from "../../utils/adminNotificationHelper.js";
+
+// Helper: Generate atomic sequential invoice numbers (AR-000001, AR-000002...)
+export const getNextInvoiceNumber = async (session = null) => {
+  const opts = { new: true, upsert: true };
+  if (session) opts.session = session;
+  
+  const counter = await Counter.findOneAndUpdate(
+    { _id: "invoiceNumber" },
+    { $inc: { seq: 1 } },
+    opts
+  );
+  
+  const numStr = String(counter.seq).padStart(6, "0");
+  return `AR-${numStr}`;
+};
 
 // Helper: Generate unique IDs
 const generateUniqueId = async (prefix, Model, field) => {
@@ -43,13 +62,14 @@ export const placeOrder = async (req, res) => {
         throw new Error("Missing required order fields.");
       }
 
-      // 1. Resolve actual item prices from DB and calculate server totalAmount
+      // 1. Resolve item details server-side per vendor
       let serverTotalAmount = 0;
       const resolvedItems = [];
       for (const item of items) {
         let price = Number(item.price || 0);
+        const itemVendorId = item.vendorId || vendorId;
         const listing = await VendorListing.findOne({
-          vendorId,
+          vendorId: itemVendorId,
           variantId: item.variantId,
         }).session(session);
 
@@ -57,7 +77,7 @@ export const placeOrder = async (req, res) => {
           price = listing.sellingPrice;
         } else {
           const vpLink = await VendorProduct.findOne({
-            vendorId,
+            vendorId: itemVendorId,
             masterProductId: item.productId,
           }).session(session);
 
@@ -70,41 +90,26 @@ export const placeOrder = async (req, res) => {
         serverTotalAmount += price * qty;
         resolvedItems.push({
           ...item,
+          vendorId: itemVendorId,
           price,
           qty,
         });
       }
 
-      // 2. Recalculate coupon discount server-side if couponCode is provided
+      // 2. Recalculate coupon discount server-side using shared coupon calculator
       let serverCouponDiscount = 0;
       if (couponCode) {
-        const Coupon = mongoose.model("Coupon");
-        const codeUpper = String(couponCode).toUpperCase().trim();
-        const coupon = await Coupon.findOne({ code: codeUpper }).session(session);
-
-        if (coupon && coupon.status === "active" && new Date() >= coupon.startDate && new Date() <= coupon.expiryDate && serverTotalAmount >= coupon.minCartValue) {
-          let valid = true;
-          if (coupon.usageLimit !== null && coupon.usedCount >= coupon.usageLimit) {
-            valid = false;
-          }
-          if (valid && customerId && coupon.perCustomerLimit !== null) {
-            const count = await CustomerOrder.countDocuments({ customerId, couponCode: codeUpper }).session(session);
-            if (count >= coupon.perCustomerLimit) {
-              valid = false;
-            }
-          }
-          if (valid) {
-            if (coupon.discountType === "flat") {
-              serverCouponDiscount = Math.min(coupon.discountValue, serverTotalAmount);
-            } else if (coupon.discountType === "percentage") {
-              let discount = (serverTotalAmount * coupon.discountValue) / 100;
-              if (coupon.maxDiscountCap !== null) {
-                discount = Math.min(discount, coupon.maxDiscountCap);
-              }
-              serverCouponDiscount = Math.min(discount, serverTotalAmount);
-            }
-          }
+        const calcResult = await calculateCouponDiscount({
+          couponCode,
+          items: resolvedItems,
+          vendorId,
+          customerId,
+          session
+        });
+        if (calcResult.couponError) {
+          throw new Error(calcResult.couponError);
         }
+        serverCouponDiscount = calcResult.couponDiscount;
       }
 
       // 3. Recalculate fees server-side based on customer city/zone and total
@@ -132,11 +137,12 @@ export const placeOrder = async (req, res) => {
         throw new Error("Duplicate order submission detected. Please wait 15 seconds.");
       }
 
-      // 4. Validate stock availability for each item and decrement stock
+      // 4. Validate stock availability for each item per vendor and decrement stock
       const operationsToExecute = [];
       for (const item of resolvedItems) {
+        const itemVendorId = item.vendorId;
         const listing = await VendorListing.findOne({
-          vendorId,
+          vendorId: itemVendorId,
           variantId: item.variantId,
         }).session(session);
 
@@ -144,14 +150,25 @@ export const placeOrder = async (req, res) => {
           if (listing.stock.quantity < item.qty) {
             throw new Error(`Insufficient stock for variant "${item.name}". Available: ${listing.stock.quantity}, requested: ${item.qty}`);
           }
+          const remaining = listing.stock.quantity - item.qty;
+          if (remaining <= 5 && remaining >= 0) {
+            await createVendorNotification({
+              vendorId: itemVendorId,
+              title: "Low Stock Alert! ⚠️",
+              message: `"${item.name}" is running low — only ${remaining} left in stock.`,
+              type: "LOW_STOCK",
+              relatedProductId: item.productId,
+              session
+            });
+          }
           operationsToExecute.push({
             type: "listing",
-            query: { vendorId, variantId: item.variantId },
+            query: { vendorId: itemVendorId, variantId: item.variantId },
             update: { $inc: { "stock.quantity": -item.qty } },
           });
         } else {
           const vpLink = await VendorProduct.findOne({
-            vendorId,
+            vendorId: itemVendorId,
             masterProductId: item.productId,
           }).session(session);
 
@@ -159,13 +176,24 @@ export const placeOrder = async (req, res) => {
             if (vpLink.stock < item.qty) {
               throw new Error(`Insufficient stock for product "${item.name}". Available: ${vpLink.stock}, requested: ${item.qty}`);
             }
+            const remaining = vpLink.stock - item.qty;
+            if (remaining <= 5 && remaining >= 0) {
+              await createVendorNotification({
+                vendorId: itemVendorId,
+                title: "Low Stock Alert! ⚠️",
+                message: `"${item.name}" is running low — only ${remaining} left in stock.`,
+                type: "LOW_STOCK",
+                relatedProductId: item.productId,
+                session
+              });
+            }
             operationsToExecute.push({
               type: "vendorProduct",
-              query: { vendorId, masterProductId: item.productId },
+              query: { vendorId: itemVendorId, masterProductId: item.productId },
               update: { $inc: { stock: -item.qty } },
             });
           } else {
-            throw new Error(`Product variant "${item.name}" is not listed by this vendor.`);
+            throw new Error(`Product variant "${item.name}" is not listed by vendor.`);
           }
         }
       }
@@ -179,19 +207,39 @@ export const placeOrder = async (req, res) => {
         }
       }
 
-      // 5. Generate Unique Order ID
-      const orderId = await generateUniqueId("QK", CustomerOrder, "orderId");
+      // 5. Generate Unique Order ID & Sequential Invoice Number
+      const orderId = await generateUniqueId("AR", CustomerOrder, "orderId");
+      const invoiceNumber = await getNextInvoiceNumber(session);
 
-      // Calculate and lock the commission at order time
-      const commissionDetails = await calculateVendorOrderCommission({ items: resolvedItems }, vendorId);
+      // 6. Group items by vendorId and calculate per-vendor sub-orders & commissions
+      const vendorItemsMap = new Map();
+      for (const item of resolvedItems) {
+        const vKey = String(item.vendorId);
+        if (!vendorItemsMap.has(vKey)) {
+          vendorItemsMap.set(vKey, []);
+        }
+        vendorItemsMap.get(vKey).push(item);
+      }
 
-      // Create the CustomerOrder record
-      const [order] = await CustomerOrder.create([
-        {
-          orderId,
-          customerId,
-          vendorId,
-          items: commissionDetails.items.map(item => ({
+      const vendorSubOrders = [];
+      for (const [vKey, vItems] of vendorItemsMap.entries()) {
+        const commDetails = await calculateVendorOrderCommission({ items: vItems }, vKey);
+        const subtotal = vItems.reduce((acc, it) => acc + (it.price * it.qty), 0);
+        
+        // Calculate per-item coupon discount allocation if coupon is applied
+        let couponDiscountAllocatedTotal = 0;
+        const mappedItems = commDetails.items.map((item, idx) => {
+          const lineSub = (item.price || 0) * (item.qty || 1);
+          let itemCoupon = 0;
+          if (serverCouponDiscount > 0 && serverTotalAmount > 0) {
+            if (idx === commDetails.items.length - 1) {
+              itemCoupon = Math.max(0, Math.round((serverCouponDiscount - couponDiscountAllocatedTotal + Number.EPSILON) * 100) / 100);
+            } else {
+              itemCoupon = Math.round(((lineSub / serverTotalAmount) * serverCouponDiscount + Number.EPSILON) * 100) / 100;
+              couponDiscountAllocatedTotal += itemCoupon;
+            }
+          }
+          return {
             productId: item.productId,
             variantId: item.variantId,
             name: item.name,
@@ -200,8 +248,40 @@ export const placeOrder = async (req, res) => {
             img: item.img,
             calculatedCommissionAmount: item.calculatedCommissionAmount,
             commissionRateApplied: item.commissionRateApplied,
-            commissionResolutionLevel: item.commissionResolutionLevel
-          })),
+            commissionResolutionLevel: item.commissionResolutionLevel,
+            commissionType: item.commissionType || "inherit",
+            commissionValue: item.commissionValue !== undefined ? item.commissionValue : null,
+            couponDiscount: itemCoupon
+          };
+        });
+
+        vendorSubOrders.push({
+          vendorId: vKey,
+          items: mappedItems,
+          subOrderStatus: "Pending",
+          pickupStatus: "PENDING",
+          vendorCommission: {
+            rate: commDetails.rate,
+            commissionType: commDetails.type,
+            amount: commDetails.commissionAmount,
+            calculatedAt: new Date()
+          },
+          subtotal
+        });
+      }
+
+      const primaryVendorId = vendorSubOrders[0]?.vendorId || vendorId;
+      const allFlatItems = vendorSubOrders.flatMap(vso => vso.items);
+
+      // Create the CustomerOrder record
+      const [order] = await CustomerOrder.create([
+        {
+          orderId,
+          invoiceNumber,
+          customerId,
+          vendorId: primaryVendorId,
+          vendorSubOrders,
+          items: allFlatItems,
           totalAmount: serverTotalAmount,
           deliveryCharge: finalDeliveryFee,
           taxAmount: finalGst,
@@ -219,12 +299,7 @@ export const placeOrder = async (req, res) => {
           deliverySlot: deliverySlot || null,
           customerLiveLocation: customerLiveLocation || null,
           locationUnavailable: locationUnavailable || false,
-          vendorCommission: {
-            rate: commissionDetails.rate,
-            commissionType: commissionDetails.type,
-            amount: commissionDetails.commissionAmount,
-            calculatedAt: new Date()
-          }
+          vendorCommission: vendorSubOrders[0]?.vendorCommission || { rate: 0, commissionType: "percentage", amount: 0, calculatedAt: new Date() }
         }
       ], { session });
 
@@ -239,6 +314,29 @@ export const placeOrder = async (req, res) => {
 
       // Update Ledger and daily summary inside the transaction
       await handleOrderCreated(order, session);
+
+      // Trigger Notifications for each participating Vendor
+      for (const vso of vendorSubOrders) {
+        await createVendorNotification({
+          vendorId: vso.vendorId,
+          title: "New Order Received! 🛒",
+          message: `New order #${order.orderId} received — Subtotal ₹${vso.subtotal.toFixed(2)}`,
+          type: "NEW_ORDER",
+          relatedOrderId: order._id,
+          session
+        });
+      }
+
+      // Trigger Notification for Admin
+      await createAdminNotification({
+        title: "New Platform Order 🛒",
+        message: `New order #${order.orderId} placed (${vendorSubOrders.length} vendor${vendorSubOrders.length > 1 ? 's' : ''}) — ₹${finalGrandTotal.toFixed(2)}`,
+        type: "NEW_ORDER_PLACED",
+        relatedVendorId: primaryVendorId,
+        relatedOrderId: order._id,
+        session
+      });
+
       resultOrder = order;
     });
 
@@ -381,6 +479,10 @@ export const downloadInvoice = async (req, res) => {
       .text(`Phone: ${order.vendorId?.phone || "N/A"}`)
       .moveDown(1);
 
+    const slotInfo = order.deliverySlot?.time
+      ? (order.deliverySlot.date ? `${order.deliverySlot.date} (${order.deliverySlot.time})` : order.deliverySlot.time)
+      : "Standard Delivery";
+
     doc
       .fontSize(12)
       .fillColor("#1e293b")
@@ -392,6 +494,7 @@ export const downloadInvoice = async (req, res) => {
       .text(
         `Address: ${order.deliveryAddress?.houseNo}, ${order.deliveryAddress?.area}, ${order.deliveryAddress?.city}, ${order.deliveryAddress?.state} - ${order.deliveryAddress?.pincode}`
       )
+      .text(`Delivery Slot: ${slotInfo}`)
       .moveDown(1.5);
 
     // Items Table Header
@@ -476,7 +579,7 @@ export const downloadInvoice = async (req, res) => {
       .moveDown(4)
       .fontSize(12)
       .fillColor("#4f46e5")
-      .text("Thank you for shopping with QuickCart! 🚀", { align: "center" });
+      .text("Thank you for shopping with Aryusha! 🚀", { align: "center" });
 
     // End Document Stream
     doc.end();

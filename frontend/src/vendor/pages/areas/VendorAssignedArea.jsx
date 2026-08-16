@@ -37,14 +37,14 @@ export default function VendorAssignedArea() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-3xl font-extrabold text-slate-800">Assigned Service Area</h1>
           <p className="text-slate-500 font-medium">View your delivery range and pinned coordinates. This screen is read-only.</p>
         </div>
         <button
           onClick={() => refresh()}
-          className="px-3.5 py-2 border rounded-xl hover:bg-slate-50 font-bold text-xs text-slate-600 transition flex items-center gap-1.5 shadow-sm"
+          className="px-3.5 py-2 border rounded-xl hover:bg-slate-50 font-bold text-xs text-slate-600 transition flex items-center gap-1.5 shadow-sm cursor-pointer"
         >
           🔄 Sync Area Info
         </button>

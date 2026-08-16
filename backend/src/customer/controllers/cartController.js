@@ -1,7 +1,9 @@
 import mongoose from "mongoose";
 import { Product, ProductVariant, VendorListing, VendorProduct } from "../../models/catalog.js";
 import Coupon from "../../admin/models/Coupon.js";
+import CouponApplicability from "../../admin/models/CouponApplicability.js";
 import { calculateOrderFees } from "../../utils/feeCalculator.js";
+import { calculateCouponDiscount } from "../../utils/couponCalculator.js";
 import CustomerOrder from "../models/CustomerOrder.js";
 import DeliverySlot from "../models/DeliverySlot.js";
 
@@ -181,55 +183,21 @@ export const getCartSummary = async (req, res) => {
       mrpTotal += (item.mrp || item.price) * item.qty;
     }
 
-
-
     let couponDiscount = 0;
     let appliedCoupon = null;
     let couponError = null;
 
     // Validate and apply coupon if provided
     if (couponCode) {
-      const codeUpper = String(couponCode).toUpperCase().trim();
-      const coupon = await Coupon.findOne({ code: codeUpper });
-
-      if (!coupon) {
-        couponError = "Invalid coupon code";
-      } else if (coupon.status !== "active") {
-        couponError = "This coupon is inactive";
-      } else if (new Date() < coupon.startDate) {
-        couponError = "This coupon is not active yet";
-      } else if (new Date() > coupon.expiryDate) {
-        couponError = "This coupon has expired";
-      } else if (itemTotal < coupon.minCartValue) {
-        couponError = `Minimum order amount of ₹${coupon.minCartValue} is required to use this coupon`;
-      } else if (coupon.usageLimit !== null && coupon.usedCount >= coupon.usageLimit) {
-        couponError = "Coupon usage limit has been reached";
-      } else {
-        if (customerId && coupon.perCustomerLimit !== null) {
-          const count = await CustomerOrder.countDocuments({ customerId, couponCode: codeUpper });
-          if (count >= coupon.perCustomerLimit) {
-            couponError = "You have already used this coupon maximum times";
-          }
-        }
-      }
-
-      if (!couponError && coupon) {
-        if (coupon.discountType === "flat") {
-          couponDiscount = Math.min(coupon.discountValue, itemTotal);
-        } else if (coupon.discountType === "percentage") {
-          let discount = (itemTotal * coupon.discountValue) / 100;
-          if (coupon.maxDiscountCap !== null) {
-            discount = Math.min(discount, coupon.maxDiscountCap);
-          }
-          couponDiscount = Math.min(discount, itemTotal);
-        }
-        appliedCoupon = {
-          code: coupon.code,
-          discountType: coupon.discountType,
-          discountValue: coupon.discountValue,
-          discountAmount: couponDiscount
-        };
-      }
+      const calcResult = await calculateCouponDiscount({
+        couponCode,
+        items,
+        vendorId,
+        customerId
+      });
+      couponDiscount = calcResult.couponDiscount;
+      appliedCoupon = calcResult.appliedCoupon;
+      couponError = calcResult.couponError;
     }
 
     // Bill calculations using dynamic FeeConfig overrides
@@ -280,16 +248,44 @@ export const getCartSummary = async (req, res) => {
  */
 export const getDeliverySlots = async (req, res) => {
   try {
-    let slots = await DeliverySlot.find();
-    if (slots.length === 0) {
+    const city = (req.query.city || req.query.zoneId || "").trim();
+    const vendorId = (req.query.vendorId || "").trim();
+
+    // Query active slots (isActive is true or undefined)
+    const query = { isActive: { $ne: false } };
+
+    const conditions = [];
+
+    // Global slots apply to everyone
+    conditions.push({ isGlobal: true });
+    conditions.push({ isGlobal: { $exists: false } });
+
+    // Specific vendor matching
+    if (vendorId && mongoose.Types.ObjectId.isValid(vendorId)) {
+      conditions.push({ vendorIds: vendorId });
+    }
+
+    // Specific city matching
+    if (city) {
+      conditions.push({ city: new RegExp(`^${city}$`, "i") });
+    }
+
+    query.$or = conditions;
+
+    let slots = await DeliverySlot.find(query).sort({ cutoffTime: 1, startTime: 1 });
+
+    // If database is completely empty (no slots ever created), seed defaults dynamically
+    const totalCount = await DeliverySlot.countDocuments();
+    if (totalCount === 0) {
       const defaults = [
-        { name: "Early Morning Slot", startTime: "07:00 AM", endTime: "10:00 AM", cutoffTime: "06:00" },
-        { name: "Mid Day Slot", startTime: "11:00 AM", endTime: "02:00 PM", cutoffTime: "10:00" },
-        { name: "Evening Rush Slot", startTime: "03:00 PM", endTime: "06:00 PM", cutoffTime: "14:00" },
-        { name: "Night Delivery Slot", startTime: "07:00 PM", endTime: "10:00 PM", cutoffTime: "18:00" }
+        { name: "Early Morning Slot", startTime: "07:00 AM", endTime: "10:00 AM", cutoffTime: "06:00", isGlobal: true, isActive: true },
+        { name: "Mid Day Slot", startTime: "11:00 AM", endTime: "02:00 PM", cutoffTime: "10:00", isGlobal: true, isActive: true },
+        { name: "Evening Rush Slot", startTime: "03:00 PM", endTime: "06:00 PM", cutoffTime: "14:00", isGlobal: true, isActive: true },
+        { name: "Night Delivery Slot", startTime: "07:00 PM", endTime: "10:00 PM", cutoffTime: "18:00", isGlobal: true, isActive: true }
       ];
       slots = await DeliverySlot.insertMany(defaults);
     }
+
     res.json({ success: true, slots });
   } catch (error) {
     console.error("Get Delivery Slots Error:", error);
@@ -353,6 +349,122 @@ export const getActiveCoupons = async (req, res) => {
     const coupons = await Coupon.find(query).sort({ expiryDate: 1 });
     res.json({ success: true, coupons });
   } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+/**
+ * Endpoint: Get eligible coupons for current cart (POST or GET /customer/cart/eligible-coupons)
+ */
+export const getEligibleCoupons = async (req, res) => {
+  try {
+    const rawItems = req.body?.items || req.query?.items || [];
+    const items = typeof rawItems === "string" ? JSON.parse(rawItems) : rawItems;
+    const vendorId = req.body?.vendorId || req.query?.vendorId || (items[0]?.vendorId || null);
+
+    // Calculate cart item total
+    let itemTotal = 0;
+    if (Array.isArray(items) && items.length > 0) {
+      for (const item of items) {
+        const price = Number(item.price || 0);
+        const qty = Number(item.qty || 1);
+        itemTotal += price * qty;
+      }
+    } else {
+      itemTotal = Number(req.body?.subtotal || req.query?.subtotal || 0);
+    }
+
+    const currentDate = new Date();
+
+    // Query all active coupons within date validity
+    const coupons = await Coupon.find({
+      status: "active",
+      $and: [
+        {
+          $or: [
+            { valid_from: { $lte: currentDate } },
+            { startDate: { $lte: currentDate } },
+            { valid_from: { $exists: false }, startDate: { $exists: false } }
+          ]
+        },
+        {
+          $or: [
+            { valid_to: { $gte: currentDate } },
+            { expiryDate: { $gte: currentDate } },
+            { valid_to: { $exists: false }, expiryDate: { $exists: false } }
+          ]
+        }
+      ]
+    }).lean();
+
+    const eligibleCoupons = [];
+
+    for (const coupon of coupons) {
+      const minOrderVal = coupon.min_order_value !== undefined && coupon.min_order_value !== null ? coupon.min_order_value : (coupon.minCartValue || 0);
+      const totalLimit = coupon.total_usage_limit !== undefined ? coupon.total_usage_limit : coupon.usageLimit;
+
+      // 1. Min order value check
+      if (itemTotal < minOrderVal) {
+        continue;
+      }
+
+      // 2. Usage limit check
+      if (totalLimit !== null && totalLimit !== undefined && (coupon.usedCount || 0) >= totalLimit) {
+        continue;
+      }
+
+      // 3. Applicability scope & product coupon-allowed check
+      const applicabilityRules = await CouponApplicability.find({ coupon_id: coupon._id });
+      const isAllScope = applicabilityRules.length === 0 || applicabilityRules.some(r => r.scope_type === "All");
+
+      let isEligibleForCart = false;
+
+      if (Array.isArray(items) && items.length > 0) {
+        for (const item of items) {
+          const masterProd = item.productId ? await Product.findById(item.productId) : null;
+          const vpLink = (vendorId && item.productId) ? await VendorProduct.findOne({ vendorId, masterProductId: item.productId }) : null;
+
+          const isCouponAllowed = (vpLink && vpLink.coupon_allowed !== undefined) ? vpLink.coupon_allowed : (masterProd?.coupon_allowed || false);
+
+          if (!isCouponAllowed) continue;
+
+          let isScopeMatch = isAllScope;
+          if (!isScopeMatch && masterProd) {
+            isScopeMatch = applicabilityRules.some(r => {
+              if (r.scope_type === "Product" && r.scope_id?.toString() === masterProd._id.toString()) return true;
+              if (r.scope_type === "Category" && masterProd.categoryId && r.scope_id?.toString() === masterProd.categoryId.toString()) return true;
+              if (r.scope_type === "Subcategory" && masterProd.subCategoryId && r.scope_id?.toString() === masterProd.subCategoryId.toString()) return true;
+              if (r.scope_type === "ProductFamily" && masterProd.familyId && r.scope_id?.toString() === masterProd.familyId.toString()) return true;
+              return false;
+            });
+          }
+
+          if (isScopeMatch) {
+            isEligibleForCart = true;
+            break;
+          }
+        }
+      } else {
+        // If cart items array is not provided, fallback to isAllScope
+        isEligibleForCart = isAllScope;
+      }
+
+      if (isEligibleForCart) {
+        eligibleCoupons.push({
+          _id: coupon._id,
+          code: coupon.code,
+          discount_type: coupon.discount_type || coupon.discountType || "flat",
+          discount_value: coupon.discount_value !== undefined ? coupon.discount_value : (coupon.discountValue || 0),
+          max_discount_cap: coupon.max_discount_cap !== undefined && coupon.max_discount_cap !== null ? coupon.max_discount_cap : (coupon.maxDiscountCap || null),
+          min_order_value: minOrderVal,
+          expiry: coupon.valid_to || coupon.expiryDate
+        });
+      }
+    }
+
+    res.json({ success: true, coupons: eligibleCoupons });
+  } catch (error) {
+    console.error("Get Eligible Coupons Error:", error);
     res.status(500).json({ success: false, message: error.message });
   }
 };

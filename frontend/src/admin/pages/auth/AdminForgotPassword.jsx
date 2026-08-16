@@ -13,32 +13,39 @@ export default function AdminForgotPassword() {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
+    const rawPhone = phone.trim();
+    if (!rawPhone) {
+      showToast({ type: "warning", message: "Please enter phone number" });
+      return;
+    }
+
     try {
       setLoading(true);
 
       const response = await axios.post(
-        `${import.meta.env.VITE_API_URL}/admin/auth/forgot-password`,
+        `${import.meta.env.VITE_API_URL}/admin/auth/forgot-password/send-otp`,
         {
-          phone,
+          phone: rawPhone,
         }
       );
 
       if (response.data.success) {
-        localStorage.setItem(
-          "adminResetPhone",
-          phone
-        );
+        localStorage.setItem("adminResetPhone", rawPhone);
 
-        showToast({ type: "success", message: "OTP Sent Successfully" });
+        showToast({ type: "success", message: response.data.message || "OTP Sent Successfully" });
 
-        navigate("/admin/verify-otp");
+        navigate("/admin/verify-otp", {
+          state: {
+            phone: rawPhone,
+          },
+        });
       }
     } catch (error) {
       console.error(error);
 
       showToast({
         type: "error",
-        message: error.response?.data?.message || "Failed to send OTP"
+        message: error.response?.data?.message || "Failed to send OTP",
       });
     } finally {
       setLoading(false);
@@ -47,9 +54,7 @@ export default function AdminForgotPassword() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-white flex items-center justify-center px-4">
-
       <div className="bg-white border border-blue-100 p-8 rounded-3xl shadow-lg w-full max-w-md">
-
         <h2 className="text-3xl font-bold mb-2 text-center">
           Forgot Password
         </h2>
@@ -58,18 +63,12 @@ export default function AdminForgotPassword() {
           Enter your registered phone number
         </p>
 
-        <form
-          onSubmit={handleSubmit}
-          className="space-y-4"
-        >
-
+        <form onSubmit={handleSubmit} className="space-y-4">
           <input
             type="tel"
-            placeholder="Phone Number"
+            placeholder="Phone Number (e.g. 9876543210)"
             value={phone}
-            onChange={(e) =>
-              setPhone(e.target.value)
-            }
+            onChange={(e) => setPhone(e.target.value)}
             className="w-full px-4 py-3 border border-blue-200 rounded-2xl outline-none focus:border-blue-500"
             required
           />
@@ -77,17 +76,12 @@ export default function AdminForgotPassword() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-blue-600 text-white py-3 rounded-2xl font-semibold"
+            className="w-full bg-blue-600 text-white py-3 rounded-2xl font-semibold cursor-pointer disabled:opacity-60"
           >
-            {loading
-              ? "Sending OTP..."
-              : "Send OTP"}
+            {loading ? "Sending OTP..." : "Send OTP"}
           </button>
-
         </form>
-
       </div>
-
     </div>
   );
 }

@@ -4,6 +4,7 @@ import {
   getOrders,
   getOrderById,
   updateOrderStatus,
+  updateVendorPickupStatus,
   verifyOtp,
   getEarnings,
   updateProfile,
@@ -14,7 +15,8 @@ import {
   signAgreement,
   getNotifications,
   markNotificationRead,
-  toggleOnlineStatus
+  toggleOnlineStatus,
+  submitSupportTicket
 } from "../controllers/deliveryBoyController.js";
 import { protectDeliveryBoy } from "../middleware/deliveryBoyAuthMiddleware.js";
 
@@ -27,9 +29,11 @@ router.get("/dashboard", getDashboard);
 router.get("/orders", getOrders);
 router.get("/orders/:id", getOrderById);
 router.put("/orders/:id/status", updateOrderStatus);
+router.put("/orders/:id/pickup-vendor", updateVendorPickupStatus);
 router.post("/orders/:id/verify-otp", verifyOtp);
 router.get("/earnings", getEarnings);
 router.put("/profile", updateProfile);
+router.post("/support-ticket", submitSupportTicket);
 
 // Onboarding & Availability
 router.get("/onboarding-status", getOnboardingStatus);

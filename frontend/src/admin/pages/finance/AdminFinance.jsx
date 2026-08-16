@@ -441,7 +441,13 @@ export default function AdminFinance() {
                         ) : <span className="text-slate-300">—</span>}
                       </td>
                       <td className="p-2.5 text-slate-500">
-                        {row.commissionRateApplied}{row.commissionType === "percentage" ? "%" : "₹"}
+                        {row.commissionType === "percentage" 
+                          ? `${row.commissionRateApplied}%` 
+                          : row.commissionType === "flat" 
+                            ? `₹${row.commissionRateApplied}` 
+                            : row.commissionType === "mixed"
+                              ? "Mixed"
+                              : `${row.commissionRateApplied}%`}
                       </td>
                       <td className="p-2.5 text-sky-700 font-bold">₹{Number(row.commissionAmount).toFixed(2)}</td>
                       <td className="p-2.5 text-emerald-700 font-extrabold">₹{Number(row.netPayout).toFixed(2)}</td>

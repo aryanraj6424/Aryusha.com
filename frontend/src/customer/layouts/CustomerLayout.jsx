@@ -141,7 +141,9 @@ export default function CustomerLayout() {
           pb-20
           md:pb-6
           ${
-            hideMobileTopNavbar
+            location.pathname === "/customer/location"
+              ? "max-w-xl"
+              : hideMobileTopNavbar
               ? "max-w-md"
               : "max-w-[1400px]"
           }

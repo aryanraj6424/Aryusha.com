@@ -55,11 +55,17 @@ export default function DeliveryBoyDashboard() {
         fetchDashboardData();
       };
 
+      const handlePayoutUpdate = () => {
+        fetchDashboardData();
+      };
+
       socket.on("order:assigned", handleAssigned);
+      socket.on("payout:updated", handlePayoutUpdate);
 
       return () => {
         clearInterval(timer);
         socket.off("order:assigned", handleAssigned);
+        socket.off("payout:updated", handlePayoutUpdate);
         leaveRoom(`deliveryBoy:${riderId}`);
       };
     }
@@ -109,7 +115,7 @@ export default function DeliveryBoyDashboard() {
       <div className="grid grid-cols-3 gap-3">
         {/* Today's Earnings */}
         <div className="bg-white rounded-2xl border border-slate-100 p-4 text-center shadow-sm">
-          <div className="w-9 h-9 bg-purple-50 rounded-xl flex items-center justify-center mx-auto text-[#6d28d9] mb-2">
+          <div className="w-9 h-9 bg-purple-50 rounded-xl flex items-center justify-center mx-auto text-[#0B2214] mb-2">
             <Wallet size={18} />
           </div>
           <p className="text-[9px] font-black uppercase text-slate-400 tracking-wider">Today's Pay</p>
@@ -139,7 +145,7 @@ export default function DeliveryBoyDashboard() {
       <div className="space-y-3">
         <div className="flex justify-between items-center px-1">
           <h3 className="font-extrabold text-slate-800 text-sm">Active Assignments ({activeDeliveries.length})</h3>
-          <button onClick={() => navigate("/delivery-boy/orders")} className="text-xs text-[#6d28d9] font-bold hover:underline flex items-center gap-0.5">
+          <button onClick={() => navigate("/delivery-boy/orders")} className="text-xs text-[#0B2214] font-bold hover:underline flex items-center gap-0.5">
             View All <ArrowRight size={12} />
           </button>
         </div>
@@ -158,7 +164,7 @@ export default function DeliveryBoyDashboard() {
               >
                 <div className="space-y-1.5 flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <span className="font-black text-xs text-[#6d28d9]">#{order.orderId}</span>
+                    <span className="font-black text-xs text-[#0B2214]">#{order.orderId}</span>
                     <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-full ${
                       order.deliveryStatus === 'Assigned' ? 'bg-amber-100 text-amber-800 border border-amber-250' : 'bg-purple-100 text-purple-800 border border-purple-250'
                     }`}>
@@ -215,7 +221,7 @@ export default function DeliveryBoyDashboard() {
       {/* Support & Notification Widgets */}
       <div className="bg-slate-100 border border-slate-200 rounded-3xl p-4 flex items-center justify-between gap-3 shadow-inner">
         <div className="flex items-center gap-3">
-          <div className="p-2.5 bg-purple-100 text-[#6d28d9] rounded-xl shadow-sm">
+          <div className="p-2.5 bg-purple-100 text-[#0B2214] rounded-xl shadow-sm">
             <HelpCircle size={18} />
           </div>
           <div>

@@ -224,7 +224,7 @@ export default function OnboardingWizard({ rider, onComplete }) {
               currentStep > i + 1 
                 ? "bg-emerald-500 text-white" 
                 : currentStep === i + 1 
-                ? "bg-[#6d28d9] text-white" 
+                ? "bg-[#0B2214] text-white" 
                 : "bg-slate-200 text-slate-550"
             }`}>
               {currentStep > i + 1 ? "✓" : i + 1}
@@ -247,7 +247,7 @@ export default function OnboardingWizard({ rider, onComplete }) {
       {currentStep === 1 && (
         <div className="bg-white border border-purple-100 rounded-3xl p-5 shadow-sm space-y-4">
           <div className="text-center space-y-1.5">
-            <ShieldCheck size={36} className="text-[#6d28d9] mx-auto" />
+            <ShieldCheck size={36} className="text-[#0B2214] mx-auto" />
             <h2 className="font-extrabold text-slate-800 text-sm">Verify Phone Number</h2>
             <p className="text-[11px] text-slate-400 font-semibold leading-relaxed">
               We have printed a registration validation OTP to the console logs. Enter the OTP below to authenticate.
@@ -260,13 +260,13 @@ export default function OnboardingWizard({ rider, onComplete }) {
               placeholder="Enter 4-Digit OTP Code"
               value={otp}
               onChange={(e) => setOtp(e.target.value)}
-              className="w-full text-center tracking-widest border border-slate-200 p-3 rounded-2xl text-md font-bold focus:border-[#6d28d9] outline-none"
+              className="w-full text-center tracking-widest border border-slate-200 p-3 rounded-2xl text-md font-bold focus:border-[#0B2214] outline-none"
               required
             />
             <button
               type="submit"
               disabled={submitting}
-              className="w-full py-3 rounded-2xl font-black bg-[#6d28d9] hover:bg-[#5b21b6] text-white transition shadow-md disabled:opacity-50 cursor-pointer"
+              className="w-full py-3 rounded-2xl font-black bg-[#0B2214] hover:bg-[#153e25] text-white transition shadow-md disabled:opacity-50 cursor-pointer"
             >
               Verify OTP Code
             </button>
@@ -286,7 +286,7 @@ export default function OnboardingWizard({ rider, onComplete }) {
               <select
                 value={vehicle}
                 onChange={(e) => setVehicle(e.target.value)}
-                className="w-full border border-slate-200 p-2.5 rounded-xl text-xs font-semibold outline-none focus:border-[#6d28d9] bg-white"
+                className="w-full border border-slate-200 p-2.5 rounded-xl text-xs font-semibold outline-none focus:border-[#0B2214] bg-white"
               >
                 <option value="own_bike">Yes, I ride my own Motorbike</option>
                 <option value="scooter">Yes, Scooter</option>
@@ -339,7 +339,7 @@ export default function OnboardingWizard({ rider, onComplete }) {
                 <select
                   value={shift}
                   onChange={(e) => setShift(e.target.value)}
-                  className="w-full border border-slate-200 p-2.5 rounded-xl text-xs font-semibold outline-none focus:border-[#6d28d9] bg-white"
+                  className="w-full border border-slate-200 p-2.5 rounded-xl text-xs font-semibold outline-none focus:border-[#0B2214] bg-white"
                 >
                   <option value="Morning">Morning Shift (6 AM - 2 PM)</option>
                   <option value="Afternoon">Afternoon Shift (2 PM - 10 PM)</option>
@@ -373,7 +373,7 @@ export default function OnboardingWizard({ rider, onComplete }) {
                       {isUploaded ? (
                         <span className="text-[10px] text-green-700 font-extrabold bg-green-50 px-2 py-0.5 rounded border border-green-150 uppercase">Uploaded</span>
                       ) : (
-                        <label className="px-3 py-1 bg-[#6d28d9] hover:bg-[#5b21b6] text-white font-bold text-[10px] rounded-lg shadow cursor-pointer transition flex items-center gap-1 uppercase">
+                        <label className="px-3 py-1 bg-[#0B2214] hover:bg-[#153e25] text-white font-bold text-[10px] rounded-lg shadow cursor-pointer transition flex items-center gap-1 uppercase">
                           <Upload size={10} /> Upload <input type="file" onChange={(e) => handleUploadFile(e, item.key)} className="hidden" />
                         </label>
                       )}
@@ -394,7 +394,7 @@ export default function OnboardingWizard({ rider, onComplete }) {
                   type="text"
                   value={bank.accountHolderName}
                   onChange={(e) => setBank({ ...bank, accountHolderName: e.target.value })}
-                  className="w-full border border-slate-200 p-2.5 rounded-xl text-xs outline-none focus:border-[#6d28d9] bg-slate-50/50"
+                  className="w-full border border-slate-200 p-2.5 rounded-xl text-xs outline-none focus:border-[#0B2214] bg-slate-50/50"
                   required
                 />
               </div>
@@ -406,7 +406,7 @@ export default function OnboardingWizard({ rider, onComplete }) {
                     type="text"
                     value={bank.accountNumber}
                     onChange={(e) => setBank({ ...bank, accountNumber: e.target.value })}
-                    className="w-full border border-slate-200 p-2.5 rounded-xl text-xs outline-none focus:border-[#6d28d9] bg-slate-50/50"
+                    className="w-full border border-slate-200 p-2.5 rounded-xl text-xs outline-none focus:border-[#0B2214] bg-slate-50/50"
                     required
                   />
                 </div>
@@ -416,7 +416,7 @@ export default function OnboardingWizard({ rider, onComplete }) {
                     type="text"
                     value={bank.ifscCode}
                     onChange={(e) => setBank({ ...bank, ifscCode: e.target.value })}
-                    className="w-full border border-slate-200 p-2.5 rounded-xl text-xs outline-none focus:border-[#6d28d9] bg-slate-50/50"
+                    className="w-full border border-slate-200 p-2.5 rounded-xl text-xs outline-none focus:border-[#0B2214] bg-slate-50/50"
                     required
                   />
                 </div>
@@ -427,7 +427,7 @@ export default function OnboardingWizard({ rider, onComplete }) {
                 {bank.passbookImage ? (
                   <span className="text-[10px] text-green-700 font-extrabold bg-green-50 px-2 py-0.5 rounded border border-green-150 uppercase">Uploaded</span>
                 ) : (
-                  <label className="px-3 py-1 bg-[#6d28d9] hover:bg-[#5b21b6] text-white font-bold text-[10px] rounded-lg shadow cursor-pointer transition flex items-center gap-1 uppercase">
+                  <label className="px-3 py-1 bg-[#0B2214] hover:bg-[#153e25] text-white font-bold text-[10px] rounded-lg shadow cursor-pointer transition flex items-center gap-1 uppercase">
                     <Upload size={10} /> Upload <input type="file" onChange={(e) => handleUploadFile(e, "passbookImage", true)} className="hidden" />
                   </label>
                 )}
@@ -447,7 +447,7 @@ export default function OnboardingWizard({ rider, onComplete }) {
           <button
             type="submit"
             disabled={submitting}
-            className="w-full py-3 rounded-2xl font-black bg-[#6d28d9] hover:bg-[#5b21b6] text-white transition shadow-md disabled:opacity-50 cursor-pointer text-sm uppercase tracking-wider"
+            className="w-full py-3 rounded-2xl font-black bg-[#0B2214] hover:bg-[#153e25] text-white transition shadow-md disabled:opacity-50 cursor-pointer text-sm uppercase tracking-wider"
           >
             {submitting ? "Uploading Documents..." : "Submit Profile & Documents"}
           </button>
@@ -486,7 +486,7 @@ export default function OnboardingWizard({ rider, onComplete }) {
                   ) : (
                     <button
                       onClick={() => handleCompleteTrainingModule(moduleName)}
-                      className="px-3 py-1.5 bg-[#6d28d9] hover:bg-[#5b21b6] text-white font-bold text-[10px] rounded-lg shadow transition flex items-center gap-1 cursor-pointer uppercase"
+                      className="px-3 py-1.5 bg-[#0B2214] hover:bg-[#153e25] text-white font-bold text-[10px] rounded-lg shadow transition flex items-center gap-1 cursor-pointer uppercase"
                     >
                       <Play size={10} className="fill-white" /> Watch Video
                     </button>
@@ -541,7 +541,7 @@ export default function OnboardingWizard({ rider, onComplete }) {
                 id="agreement"
                 checked={agreementChecked}
                 onChange={(e) => setAgreementChecked(e.target.checked)}
-                className="mt-0.5 cursor-pointer w-4 h-4 text-[#6d28d9] focus:ring-[#6d28d9] border-slate-300 rounded"
+                className="mt-0.5 cursor-pointer w-4 h-4 text-[#0B2214] focus:ring-[#0B2214] border-slate-300 rounded"
               />
               <label htmlFor="agreement" className="text-xs text-slate-650 font-semibold leading-relaxed cursor-pointer select-none">
                 I agree to Aryusha's partner terms, delivery payouts rules, and COD policies.
@@ -555,7 +555,7 @@ export default function OnboardingWizard({ rider, onComplete }) {
                 placeholder="Digital signature name matches legal name"
                 value={signingName}
                 onChange={(e) => setSigningName(e.target.value)}
-                className="w-full border border-slate-200 p-2.5 rounded-xl text-xs outline-none focus:border-[#6d28d9]"
+                className="w-full border border-slate-200 p-2.5 rounded-xl text-xs outline-none focus:border-[#0B2214]"
                 required
               />
             </div>
@@ -563,7 +563,7 @@ export default function OnboardingWizard({ rider, onComplete }) {
             <button
               type="submit"
               disabled={submitting || !agreementChecked || !signingName}
-              className="w-full py-3 rounded-2xl font-black bg-[#6d28d9] hover:bg-[#5b21b6] text-white transition shadow-md disabled:opacity-50 cursor-pointer text-sm uppercase tracking-wider"
+              className="w-full py-3 rounded-2xl font-black bg-[#0B2214] hover:bg-[#153e25] text-white transition shadow-md disabled:opacity-50 cursor-pointer text-sm uppercase tracking-wider"
             >
               Sign & Unlock Account
             </button>

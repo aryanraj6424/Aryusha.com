@@ -1,5 +1,6 @@
 import jwt from "jsonwebtoken";
 import Vendor from "../models/Vendor.js";
+import Admin from "../../admin/models/Admin.js";
 
 export const protectVendor = async (req, res, next) => {
   try {
@@ -14,33 +15,46 @@ export const protectVendor = async (req, res, next) => {
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
+    // 1. Try finding Vendor account
     const vendor = await Vendor.findById(decoded.id).select("-password");
 
-    if (!vendor) {
-      return res.status(404).json({
-        success: false,
-        message: "Vendor Account Not Found",
-      });
+    if (vendor) {
+      // Check Approval Status
+      if (vendor.status !== "approved") {
+        return res.status(403).json({
+          success: false,
+          message: `Access Denied - Account status is '${vendor.status}'`,
+        });
+      }
+
+      // Check Account Status (active, hold, suspended, deactivated)
+      if (vendor.accountStatus !== "active") {
+        return res.status(403).json({
+          success: false,
+          message: `Access Denied - Account is ${vendor.accountStatus}`,
+        });
+      }
+
+      req.vendor = vendor;
+      return next();
     }
 
-    // Check Approval Status
-    if (vendor.status !== "approved") {
-      return res.status(403).json({
-        success: false,
-        message: `Access Denied - Account status is '${vendor.status}'`,
-      });
+    // 2. Fallback: Check if Admin account
+    const admin = await Admin.findById(decoded.id).select("-password");
+
+    if (admin) {
+      req.admin = admin;
+      const targetVendorId = req.body?.vendorId || req.query?.vendorId;
+      if (targetVendorId) {
+        req.vendor = await Vendor.findById(targetVendorId);
+      }
+      return next();
     }
 
-    // Check Account Status (active, hold, suspended, deactivated)
-    if (vendor.accountStatus !== "active") {
-      return res.status(403).json({
-        success: false,
-        message: `Access Denied - Account is ${vendor.accountStatus}`,
-      });
-    }
-
-    req.vendor = vendor;
-    next();
+    return res.status(404).json({
+      success: false,
+      message: "Account Not Found",
+    });
   } catch (error) {
     console.error("Vendor Auth Error:", error);
     res.status(401).json({

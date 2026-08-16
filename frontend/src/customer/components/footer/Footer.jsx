@@ -73,13 +73,7 @@ export default function Footer() {
     }
   };
 
-  const fallbackCities = [
-    "Samastipur", "Delhi", "Noida", "Gurugram", "Ghaziabad", "Faridabad",
-    "Mumbai", "Pune", "Bengaluru", "Hyderabad", "Kolkata", "Chennai",
-    "Ahmedabad", "Jaipur", "Lucknow", "Chandigarh", "Indore", "Kochi"
-  ];
-
-  const displayCities = cities.length > 0 ? cities : fallbackCities;
+  const displayCities = cities;
 
   return (
     <footer className="bg-white border-t border-purple-100 mt-12 w-full pb-24 md:pb-8">
@@ -89,7 +83,7 @@ export default function Footer() {
           <span className="w-1.5 h-4 bg-purple-600 rounded-full"></span>
           Popular Categories
         </h3>
-        
+
         {loading && categories.length === 0 ? (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
             {[...Array(5)].map((_, i) => (
@@ -106,7 +100,7 @@ export default function Footer() {
             {displayCategories.map((category) => {
               const isFallback = !category.image && !category.icon?.startsWith("http");
               const hasColor = category.color;
-              
+
               return (
                 <button
                   key={category._id}
@@ -131,7 +125,7 @@ export default function Footer() {
                       <span className="text-xl">{category.icon || "🛒"}</span>
                     )}
                   </div>
-                  
+
                   {/* Category Info */}
                   <div className="flex items-center justify-between flex-1 min-w-0">
                     <span className="text-xs font-bold text-slate-700 group-hover:text-purple-700 truncate leading-snug">
@@ -147,25 +141,27 @@ export default function Footer() {
       </div>
 
       {/* 2. Cities We Serve Section */}
-      <div className="max-w-[1400px] mx-auto px-4 lg:px-6 py-6 border-b border-purple-50">
-        <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider mb-3 flex items-center gap-2">
-          <span className="w-1.5 h-4 bg-purple-600 rounded-full"></span>
-          Cities We Serve
-        </h3>
-        <p className="text-xs leading-relaxed text-slate-500 font-medium">
-          {displayCities.map((city, index) => (
-            <span key={city} className="inline-block whitespace-nowrap">
-              <span className="hover:text-purple-600 cursor-pointer transition-colors duration-200 font-semibold">{city}</span>
-              {index < displayCities.length - 1 && <span className="mx-2.5 text-slate-300">|</span>}
-            </span>
-          ))}
-        </p>
-      </div>
+      {displayCities.length > 0 && (
+        <div className="max-w-[1400px] mx-auto px-4 lg:px-6 py-6 border-b border-purple-50">
+          <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider mb-3 flex items-center gap-2">
+            <span className="w-1.5 h-4 bg-purple-600 rounded-full"></span>
+            Cities We Serve
+          </h3>
+          <p className="text-xs leading-relaxed text-slate-500 font-medium">
+            {displayCities.map((city, index) => (
+              <span key={city} className="inline-block whitespace-nowrap">
+                <span className="hover:text-purple-600 cursor-pointer transition-colors duration-200 font-semibold">{city}</span>
+                {index < displayCities.length - 1 && <span className="mx-2.5 text-slate-300">|</span>}
+              </span>
+            ))}
+          </p>
+        </div>
+      )}
 
       {/* 3. Bottom Footer Sections */}
       <div className="max-w-[1400px] mx-auto px-4 lg:px-6 py-12">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-10">
-          
+
           {/* Column 1: Logo + Tagline + Social Icons */}
           <div className="flex flex-col gap-5">
             <div
@@ -178,11 +174,11 @@ export default function Footer() {
                 className="h-10 w-auto object-contain"
               />
             </div>
-            
+
             <p className="text-xs text-slate-500 font-medium leading-relaxed max-w-xs">
               Quick essentials, delivered to your door. Get fresh groceries, household items, snacks, and daily needs in minutes.
             </p>
-            
+
             <div className="flex items-center gap-3 mt-1">
               {[
                 { icon: Instagram, url: "https://instagram.com", name: "Instagram" },
@@ -263,14 +259,14 @@ export default function Footer() {
               <span className="absolute left-0 top-1 bottom-1 w-0.5 bg-purple-600 rounded-full"></span>
               Experience Our App
             </h4>
-            
+
             <div className="border border-dashed border-purple-200 rounded-2xl p-5 bg-purple-50/30 flex items-start gap-4 hover:border-purple-300 transition-colors duration-300">
               <div className="w-10 h-10 rounded-xl bg-purple-100 flex items-center justify-center text-purple-600 flex-shrink-0">
                 <Smartphone size={20} className="animate-pulse" />
               </div>
               <div className="space-y-1">
                 <p className="text-xs font-extrabold text-slate-700">
-                  Download QuickCart App
+                  Download Aryusha App
                 </p>
                 <p className="text-[10px] font-bold text-purple-600 bg-purple-50 border border-purple-100 px-2 py-0.5 rounded-full w-fit">
                   Coming Soon
@@ -289,7 +285,7 @@ export default function Footer() {
       <div className="bg-slate-50 border-t border-purple-50 py-6">
         <div className="max-w-[1400px] mx-auto px-4 lg:px-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs font-semibold text-slate-500 text-center sm:text-left">
           <p>
-            © 2025 <span className="text-purple-600 font-bold">Aryusha</span>. All rights reserved.
+            © 2026 <span className="text-purple-600 font-bold">Aryusha</span>. All rights reserved.
           </p>
           <p className="flex items-center gap-1 bg-white px-3 py-1.5 rounded-full border border-purple-100 shadow-sm w-fit mx-auto sm:mx-0">
             <span>Proudly made for our customers</span>

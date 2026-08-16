@@ -231,11 +231,53 @@ export default function BasicInformation({ formData, setFormData }) {
             name="isReturnable"
             checked={formData.isReturnable || false}
             onChange={(e) => setFormData({ ...formData, isReturnable: e.target.checked })}
-            className="w-4 h-4 accent-indigo-600"
+            className="w-4 h-4 accent-indigo-600 cursor-pointer"
           />
-          <label htmlFor="isReturnable" className="text-sm font-medium text-gray-700">
+          <label htmlFor="isReturnable" className="text-sm font-medium text-gray-700 cursor-pointer">
             Returnable Product
           </label>
+        </div>
+      </div>
+
+      {/* ── Commission Settings (Tier 1 Override) ── */}
+      <div className="p-4 border border-indigo-100 rounded-xl bg-indigo-50/50 space-y-3">
+        <h4 className="text-xs uppercase font-bold tracking-wider text-indigo-900">
+          Tier 1 Commission Override (Product Level)
+        </h4>
+        <div className="grid md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-xs font-semibold text-gray-700 mb-1">
+              Commission Rule
+            </label>
+            <select
+              name="commissionType"
+              value={formData.commissionType || "inherit"}
+              onChange={handleChange}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white outline-none focus:ring-2 focus:ring-indigo-500"
+            >
+              <option value="inherit">Inherit (Use Vendor or Platform Default Rate)</option>
+              <option value="percentage">Percentage Rate (%)</option>
+              <option value="flat">Flat Amount (₹ per unit)</option>
+            </select>
+          </div>
+
+          {(formData.commissionType === "percentage" || formData.commissionType === "flat") && (
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 mb-1">
+                {formData.commissionType === "percentage" ? "Commission Rate (%)" : "Flat Commission (₹)"} *
+              </label>
+              <input
+                type="number"
+                min="0"
+                step="any"
+                name="commissionValue"
+                value={formData.commissionValue || ""}
+                onChange={handleChange}
+                placeholder={formData.commissionType === "percentage" ? "e.g. 10 for 10%" : "e.g. 15 for ₹15"}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+          )}
         </div>
       </div>
     </div>

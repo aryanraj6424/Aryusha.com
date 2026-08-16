@@ -18,6 +18,24 @@ const deliverySlotSchema = new mongoose.Schema(
     cutoffTime: {
       type: String,
       required: true
+    },
+    isGlobal: {
+      type: Boolean,
+      default: true
+    },
+    vendorIds: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Vendor"
+      }
+    ],
+    city: {
+      type: String,
+      default: null
+    },
+    isActive: {
+      type: Boolean,
+      default: true
     }
   },
   {

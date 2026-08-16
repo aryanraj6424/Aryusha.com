@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import axios from "axios";
-import { ArrowLeft, User, MapPin, ShoppingBag, Coins, ShieldAlert, Truck } from "lucide-react";
+import { ArrowLeft, User, MapPin, ShoppingBag, Coins, ShieldAlert, Truck, Printer } from "lucide-react";
 import { useToast } from "../../../components/Toast";
+import { InvoiceModal } from "../customers/CustomerList";
 
 export default function OrderDetails() {
   const { id } = useParams();
@@ -10,6 +11,7 @@ export default function OrderDetails() {
   const { showToast } = useToast();
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [showInvoiceModal, setShowInvoiceModal] = useState(false);
 
   useEffect(() => {
     fetchOrderDetails();
@@ -87,6 +89,80 @@ export default function OrderDetails() {
     : (commType === "percentage" ? itemSubtotal * (commRate / 100) : commRate);
   const finalComm = Math.round(commAmount * 100) / 100;
   const payout = Math.max(0, itemSubtotal - finalComm);
+  const getCommLabelText = () => {
+    if (commType === "percentage") return `Platform Commission (${commRate}%):`;
+    if (commType === "flat") return `Platform Commission (₹${Number(commRate).toFixed(2)} flat):`;
+    if (commType === "mixed") return `Platform Commission:`;
+    return `Platform Commission (${commRate}%):`;
+  };
+
+  // Per-item breakdown for Parcels Checklist
+  const rawItems = order.items || [];
+  let allocatedCouponSum = 0;
+  let allocatedCommSum = 0;
+
+  const itemsWithBreakdown = rawItems.map((item, idx) => {
+    const lineSubtotal = (Number(item.price) || 0) * (Number(item.qty) || 0);
+    
+    // 1. Coupon Share
+    let itemCoupon = 0;
+    if (item.couponDiscount !== undefined && item.couponDiscount !== null && item.couponDiscount >= 0 && order.couponDiscount > 0) {
+      itemCoupon = item.couponDiscount;
+    } else if (order.couponDiscount > 0 && itemSubtotal > 0) {
+      if (idx === rawItems.length - 1) {
+        itemCoupon = Math.max(0, Math.round((order.couponDiscount - allocatedCouponSum + Number.EPSILON) * 100) / 100);
+      } else {
+        itemCoupon = Math.round(((lineSubtotal / itemSubtotal) * order.couponDiscount + Number.EPSILON) * 100) / 100;
+        allocatedCouponSum += itemCoupon;
+      }
+    }
+
+    // 2. Platform Commission
+    let itemComm = 0;
+    if (item.calculatedCommissionAmount !== undefined && item.calculatedCommissionAmount !== null && item.calculatedCommissionAmount > 0) {
+      itemComm = item.calculatedCommissionAmount;
+    } else if (finalComm > 0 && itemSubtotal > 0) {
+      if (commType === "percentage") {
+        itemComm = lineSubtotal * (commRate / 100);
+      } else {
+        itemComm = (lineSubtotal / itemSubtotal) * finalComm;
+      }
+    }
+
+    if (idx === rawItems.length - 1 && finalComm > 0) {
+      itemComm = Math.max(0, Math.round((finalComm - allocatedCommSum + Number.EPSILON) * 100) / 100);
+    } else {
+      itemComm = Math.round((itemComm + Number.EPSILON) * 100) / 100;
+      allocatedCommSum += itemComm;
+    }
+
+    // Resolved Commission Label
+    let itemCommLabel = "";
+    const type = item.commissionType || commType;
+    const val = item.commissionValue ?? item.commissionRateApplied ?? commRate;
+
+    if (type === "flat") {
+      itemCommLabel = `Flat ₹${Number(val).toFixed(2)} per item: −₹${itemComm.toFixed(2)}`;
+    } else if (type === "percentage" || val > 0) {
+      itemCommLabel = `${val}% of ₹${lineSubtotal.toFixed(2)}: −₹${itemComm.toFixed(2)}`;
+    } else if (lineSubtotal > 0 && itemComm > 0) {
+      const effRate = ((itemComm / lineSubtotal) * 100).toFixed(1);
+      itemCommLabel = `${effRate}% of ₹${lineSubtotal.toFixed(2)}: −₹${itemComm.toFixed(2)}`;
+    } else {
+      itemCommLabel = `Platform Commission: −₹${itemComm.toFixed(2)}`;
+    }
+
+    const itemNetEarning = Math.max(0, lineSubtotal - itemComm);
+
+    return {
+      ...item,
+      lineSubtotal,
+      itemCoupon,
+      itemComm,
+      itemCommLabel,
+      itemNetEarning
+    };
+  });
 
   return (
     <div className="p-6 max-w-6xl mx-auto space-y-6">
@@ -111,9 +187,17 @@ export default function OrderDetails() {
             Placed on: {new Date(order.createdAt).toLocaleString()}
           </p>
         </div>
-        <div className="text-right">
-          <span className="text-[10px] text-slate-400 uppercase tracking-wider block font-bold">Grand Total</span>
-          <span className="text-xl font-black text-green-700">₹{order.grandTotal.toFixed(2)}</span>
+        <div className="flex items-center gap-4">
+          <button
+            onClick={() => setShowInvoiceModal(true)}
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-purple-700 text-white rounded-xl text-xs font-bold hover:bg-purple-800 transition shadow-sm cursor-pointer"
+          >
+            <Printer size={15} /> Print Invoice
+          </button>
+          <div className="text-right">
+            <span className="text-[10px] text-slate-400 uppercase tracking-wider block font-bold">Grand Total</span>
+            <span className="text-xl font-black text-green-700">₹{order.grandTotal.toFixed(2)}</span>
+          </div>
         </div>
       </div>
 
@@ -122,17 +206,64 @@ export default function OrderDetails() {
         <div className="md:col-span-2 space-y-6">
           {/* Ordered items */}
           <div className="bg-white rounded-2xl border p-6 shadow-sm space-y-4">
-            <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider flex items-center gap-2 border-b pb-2">
-              <ShoppingBag size={18} className="text-green-600" />
-              Parcels Checklist
-            </h3>
-            <div className="divide-y divide-slate-100">
-              {order.items?.map((item, idx) => (
-                <div key={idx} className="py-3 flex justify-between items-center text-xs font-semibold text-slate-700">
-                  <span>
-                    {item.name} <span className="text-slate-405 font-black">x{item.qty}</span>
-                  </span>
-                  <span className="font-extrabold text-slate-900">₹{(item.price * item.qty).toFixed(2)}</span>
+            <div className="flex justify-between items-center border-b pb-2">
+              <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider flex items-center gap-2">
+                <ShoppingBag size={18} className="text-green-600" />
+                Parcels Checklist
+              </h3>
+              <span className="text-xs font-bold text-slate-400">{itemsWithBreakdown.length} Item{itemsWithBreakdown.length > 1 ? "s" : ""}</span>
+            </div>
+
+            <div className="space-y-3">
+              {itemsWithBreakdown.map((item, idx) => (
+                <div key={idx} className="bg-slate-50/80 border border-slate-200/80 rounded-xl p-4 space-y-2 text-xs">
+                  {/* Item Main Info */}
+                  <div className="flex justify-between items-start gap-2">
+                    <div className="space-y-0.5">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-xxs font-bold text-slate-400">#{idx + 1}</span>
+                        <span className="font-bold text-slate-800 text-xs sm:text-sm">{item.name}</span>
+                      </div>
+                      <p className="text-xxs text-slate-500 font-mono">
+                        {item.qty} × ₹{Number(item.price || 0).toFixed(2)}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-xxs font-bold text-slate-400 block uppercase tracking-wider">Line Total</span>
+                      <span className="font-mono font-black text-slate-900 text-sm">₹{item.lineSubtotal.toFixed(2)}</span>
+                    </div>
+                  </div>
+
+                  {/* Deductions */}
+                  <div className="pt-2 border-t border-slate-200/60 space-y-1 text-xxs sm:text-xs">
+                    <div className="flex justify-between items-center">
+                      <span className="text-slate-500 font-medium">Coupon Share:</span>
+                      {item.itemCoupon > 0 ? (
+                        <span className="font-mono font-bold text-emerald-600">
+                          {order.couponCode ? `${order.couponCode} discount` : "Coupon discount"}: −₹{item.itemCoupon.toFixed(2)}
+                        </span>
+                      ) : (
+                        <span className="font-mono text-slate-400 italic">No coupon on this item</span>
+                      )}
+                    </div>
+
+                    <div className="flex justify-between items-center">
+                      <span className="text-slate-500 font-medium">Platform Commission:</span>
+                      <span className="font-mono font-bold text-red-600">
+                        {item.itemCommLabel}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Net Item Earning Highlight */}
+                  <div className="bg-purple-100/70 border border-purple-200/80 rounded-lg px-3 py-2 flex justify-between items-center">
+                    <span className="font-bold text-purple-900 text-xxs sm:text-xs uppercase tracking-wider">
+                      Vendor earns on this item
+                    </span>
+                    <span className="font-mono font-black text-purple-800 text-xs sm:text-sm">
+                      ₹{item.itemNetEarning.toFixed(2)}
+                    </span>
+                  </div>
                 </div>
               ))}
             </div>
@@ -189,7 +320,7 @@ export default function OrderDetails() {
               {/* Commission details - admin only */}
               <div className="border-t border-slate-100 pt-3 mt-1 space-y-2.5 bg-slate-50 p-4 rounded-xl border">
                 <div className="flex justify-between text-red-600 font-bold">
-                  <span>Platform Commission ({commRate}{commType === "percentage" ? "%" : " flat"}):</span>
+                  <span>{getCommLabelText()}</span>
                   <span>-₹{finalComm.toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between font-black text-slate-855 text-sm">
@@ -259,6 +390,10 @@ export default function OrderDetails() {
           )}
         </div>
       </div>
+
+      {showInvoiceModal && (
+        <InvoiceModal order={order} onClose={() => setShowInvoiceModal(false)} />
+      )}
     </div>
   );
 }

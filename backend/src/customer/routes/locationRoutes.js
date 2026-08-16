@@ -1,63 +1,54 @@
-// import express from "express";
-// import axios from "axios";
-
-// const router = express.Router();
-
-// router.get("/search", async (req, res) => {
-//   try {
-//     const { text } = req.query;
-
-//     if (!text) {
-//       return res.status(400).json({
-//         message: "Search text is required",
-//       });
-//     }
-
-//     const response = await axios.get(
-//       "https://geoapify-address-autocomplete1.p.rapidapi.com/address-auto-complete.php",
-//       {
-//         params: {
-//           text,
-//           type: "street",
-//           limit: 8,
-//           filter: "countrycode:in",
-//         },
-//         headers: {
-//           "x-rapidapi-key": process.env.RAPID_API_KEY,
-//           "x-rapidapi-host":
-//             "geoapify-address-autocomplete1.p.rapidapi.com",
-//           "Content-Type": "application/json",
-//         },
-//       }
-//     );
-
-//     res.json(response.data);
-//   } catch (error) {
-//     console.log(
-//       "RapidAPI Error:",
-//       error.response?.data || error.message
-//     );
-
-//     res.status(500).json({
-//       message: "Failed to fetch addresses",
-//       error: error.response?.data,
-//     });
-//   }
-// });
-
-// export default router;
-
 import express from "express";
 import axios from "axios";
 
 const router = express.Router();
 
+/**
+ * Helper function to parse Google Maps address components into simplified address object.
+ */
+function parseGoogleAddressComponents(components) {
+  let postcode = "";
+  let city = "";
+  let state = "";
+  let road = "";
+
+  if (Array.isArray(components)) {
+    let localityCity = "";
+    let admin2City = "";
+    let sublocalityCity = "";
+
+    for (const comp of components) {
+      const types = comp.types || [];
+      if (types.includes("postal_code")) {
+        postcode = comp.long_name;
+      }
+      if (types.includes("locality")) {
+        localityCity = comp.long_name;
+      } else if (types.includes("administrative_area_level_2")) {
+        admin2City = comp.long_name;
+      } else if (types.includes("sublocality_level_1") || types.includes("sublocality")) {
+        sublocalityCity = comp.long_name;
+      }
+      if (types.includes("administrative_area_level_1")) {
+        state = comp.long_name;
+      }
+      if (types.includes("route") || types.includes("sublocality_level_1") || types.includes("neighborhood")) {
+        if (!road) road = comp.long_name;
+      }
+    }
+
+    // Priority for City: locality (e.g. Dhanbad / Gurugram) > administrative_area_level_2 (District) > sublocality_level_1
+    city = localityCity || admin2City || sublocalityCity || "";
+  }
+  return { postcode, city, state, road };
+}
+
 /*
 |--------------------------------------------------------------------------
-| Search Address
+| Search Address (Google Maps Geocoding & Places API)
+| Replaced OpenStreetMap Nominatim with Google Maps Geocoding API
 |--------------------------------------------------------------------------
 */
-
 router.get("/search", async (req, res) => {
   try {
     const { text } = req.query;
@@ -69,28 +60,41 @@ router.get("/search", async (req, res) => {
       });
     }
 
+    const apiKey = process.env.GOOGLE_MAPS_API_KEY || "AIzaSyAZiwElX_ByZPzc9MHLLC-E6Jr_Tkk7Kss";
+
+    // Query Google Maps Geocoding API restricted to India
     const response = await axios.get(
-      "https://nominatim.openstreetmap.org/search",
+      "https://maps.googleapis.com/maps/api/geocode/json",
       {
         params: {
-          q: text,
-          format: "json",
-          addressdetails: 1,
-          limit: 8,
-        },
-        headers: {
-          "User-Agent": "QuickCart",
+          address: text,
+          components: "country:in",
+          key: apiKey,
         },
       }
     );
 
+    const results = (response.data.results || []).map((item) => {
+      const parsed = parseGoogleAddressComponents(item.address_components);
+      return {
+        place_id: item.place_id,
+        display_name: item.formatted_address,
+        formatted: item.formatted_address,
+        lat: item.geometry.location.lat,
+        lon: item.geometry.location.lng,
+        lng: item.geometry.location.lng,
+        address: parsed,
+        ...parsed,
+      };
+    });
+
     res.status(200).json({
       success: true,
-      results: response.data,
+      results,
     });
 
   } catch (error) {
-    console.error("Location Error:", error.message);
+    console.error("Google Maps Location Search Error:", error.message);
 
     res.status(500).json({
       success: false,
@@ -99,6 +103,12 @@ router.get("/search", async (req, res) => {
   }
 });
 
+/*
+|--------------------------------------------------------------------------
+| Reverse Geocode Coordinates (Google Maps Geocoding API)
+| Replaced OpenStreetMap Nominatim with Google Maps Geocoding API
+|--------------------------------------------------------------------------
+*/
 router.get("/reverse", async (req, res) => {
   try {
     const { lat, lon } = req.query;
@@ -110,28 +120,42 @@ router.get("/reverse", async (req, res) => {
       });
     }
 
+    const apiKey = process.env.GOOGLE_MAPS_API_KEY || "AIzaSyAZiwElX_ByZPzc9MHLLC-E6Jr_Tkk7Kss";
+
     const response = await axios.get(
-      "https://nominatim.openstreetmap.org/reverse",
+      "https://maps.googleapis.com/maps/api/geocode/json",
       {
         params: {
-          lat,
-          lon,
-          format: "json",
-          addressdetails: 1,
-        },
-        headers: {
-          "User-Agent": "QuickCart",
+          latlng: `${lat},${lon}`,
+          key: apiKey,
         },
       }
     );
 
-    res.status(200).json({
-      success: true,
-      result: response.data,
-    });
+    const first = response.data.results?.[0];
+    if (first) {
+      const parsed = parseGoogleAddressComponents(first.address_components);
+      res.status(200).json({
+        success: true,
+        result: {
+          display_name: first.formatted_address,
+          formatted: first.formatted_address,
+          lat: first.geometry.location.lat,
+          lon: first.geometry.location.lng,
+          lng: first.geometry.location.lng,
+          address: parsed,
+          ...parsed,
+        },
+      });
+    } else {
+      res.status(200).json({
+        success: true,
+        result: { formatted: "Unknown location", postcode: "", city: "", state: "", road: "" },
+      });
+    }
 
   } catch (error) {
-    console.error("Reverse Geocoding Error:", error.message);
+    console.error("Google Maps Reverse Geocoding Error:", error.message);
     res.status(500).json({
       success: false,
       message: "Failed to reverse geocode coordinates",

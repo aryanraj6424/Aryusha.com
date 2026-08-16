@@ -89,98 +89,98 @@ export default function VendorFinance() {
   const totalPages = Math.ceil(ordersTotal / PER_PAGE);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-full overflow-x-hidden">
 
       {/* ── Header ── */}
-      <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="bg-white p-4 sm:p-5 rounded-2xl shadow-sm border border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4 max-w-full">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
-            <Wallet className="text-purple-600" /> My Commission & Payouts
+          <h1 className="text-xl sm:text-2xl font-bold text-slate-800 flex items-center gap-2">
+            <Wallet className="text-purple-600" /> My Commissions & Payouts
           </h1>
-          <p className="text-sm text-slate-500 mt-1">
-            Your commission is deducted <strong>only from your Item Total</strong>. Platform fees and any coupon discounts are handled entirely by the platform and do not affect your earnings.
+          <p className="text-xs sm:text-sm text-slate-500 mt-1">
+            Commission is calculated <strong>only on your item sales</strong>. Delivery fees, customer GST, platform fees, and coupon discounts are handled by the platform and do not reduce your earnings.
           </p>
         </div>
-        <div className="flex gap-2 items-center bg-slate-50 p-2 rounded-xl border border-slate-100">
+        <div className="flex flex-wrap gap-2 items-center bg-slate-50 p-2 rounded-xl border border-slate-100 max-w-full w-full sm:w-auto justify-start sm:justify-end">
           <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)}
             className="text-xxs border border-slate-200 rounded-lg p-1.5 bg-white font-semibold text-slate-600 focus:outline-none" />
           <span className="text-slate-300 text-xs">to</span>
           <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)}
             className="text-xxs border border-slate-200 rounded-lg p-1.5 bg-white font-semibold text-slate-600 focus:outline-none" />
           {(startDate || endDate) && (
-            <button onClick={() => { setStartDate(""); setEndDate(""); }} className="p-1 hover:bg-slate-200 rounded text-slate-400"><X size={15} /></button>
+            <button onClick={() => { setStartDate(""); setEndDate(""); }} className="p-1 hover:bg-slate-200 rounded text-slate-400 cursor-pointer"><X size={15} /></button>
           )}
         </div>
       </div>
 
       {/* ── Commission Rate Banner ── */}
-      <div className="bg-gradient-to-r from-purple-900 to-indigo-900 text-white p-5 rounded-2xl border border-purple-950 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-        <div className="space-y-1">
-          <p className="text-purple-300 text-xxs font-bold uppercase tracking-wider">Your Active Commission Rate (applied on Item Total only)</p>
-          <h2 className="text-2xl font-extrabold">
+      <div className="bg-gradient-to-r from-purple-900 to-indigo-900 text-white p-4 sm:p-5 rounded-2xl border border-purple-950 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 max-w-full">
+        <div className="space-y-1 min-w-0">
+          <p className="text-purple-300 text-xxs font-bold uppercase tracking-wider">Commission Rate on Your Sales</p>
+          <h2 className="text-xl sm:text-2xl font-extrabold">
             {rateConfig.commissionValue} {rateConfig.commissionType === "percentage" ? "%" : "₹ Flat"}
           </h2>
           <p className="text-xs text-purple-200">
             {rateConfig.resolvedFrom === "vendor"
-              ? "Based on your custom vendor-level override rate."
-              : "Inherited from the platform-wide default commission rate."}
+              ? "Custom rate configured for your store by platform admin."
+              : "Standard platform rate applied to your store."}
           </p>
         </div>
-        <div className="flex flex-col items-end gap-2">
-          <div className="bg-white/10 backdrop-blur-md px-4 py-2 rounded-xl text-xs font-bold border border-white/10 uppercase tracking-wide">
-            {rateConfig.resolvedFrom === "vendor" ? "Custom Override" : "Global Default"}
+        <div className="flex flex-col items-start sm:items-end gap-2 min-w-0 shrink-0">
+          <div className="bg-white/10 backdrop-blur-md px-3.5 py-1.5 rounded-full text-xxs font-bold border border-white/10 uppercase tracking-wider text-purple-200 select-none cursor-default">
+            Status: {rateConfig.resolvedFrom === "vendor" ? "Custom Rate Active" : "Standard Rate Active"}
           </div>
-          <div className="flex items-center gap-1.5 bg-white/10 backdrop-blur-md px-3 py-1.5 rounded-xl text-xxs border border-white/10">
-            <ShieldCheck size={13} className="text-purple-300" />
-            <span className="text-purple-200">Platform fees are NOT charged from your earnings</span>
+          <div className="flex items-center gap-1.5 bg-white/10 backdrop-blur-md px-3 py-1.5 rounded-xl text-xxs border border-white/10 select-none">
+            <ShieldCheck size={13} className="text-emerald-400 shrink-0" />
+            <span className="text-purple-100 font-medium">Platform fees are NOT charged from your earnings</span>
           </div>
         </div>
       </div>
 
       {/* ── Vendor Waterfall KPI Cards ── */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex items-start gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 max-w-full">
+        <div className="bg-white p-4 sm:p-5 rounded-2xl shadow-sm border border-slate-100 flex items-start gap-3 min-w-0">
           <div className="p-3 bg-purple-50 rounded-xl text-purple-600 flex-shrink-0"><TrendingUp size={22} /></div>
-          <div>
-            <p className="text-xxs font-bold text-slate-400 uppercase tracking-wider flex items-center">
-              Item Sales (Your Products)
-              <Tooltip text="Sum of your item prices × qty. This is the base on which your commission is calculated. Platform fees and coupon discounts are excluded." />
+          <div className="min-w-0">
+            <p className="text-xxs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+              <span>Item Sales</span>
+              <Tooltip text="Sum of your item prices × quantity. This is the sales total on which commission is calculated. Platform fees and coupon discounts are excluded." />
             </p>
-            <h3 className="text-xl font-extrabold text-slate-800 mt-0.5">{fmt(summary.totalItemSubtotal)}</h3>
-            <p className="text-xxs text-slate-400">Commission base</p>
+            <h3 className="text-lg sm:text-xl font-extrabold text-slate-800 mt-0.5 truncate">{fmt(summary.totalItemSubtotal)}</h3>
+            <p className="text-xxs text-slate-400">Total sales base</p>
           </div>
         </div>
 
-        <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex items-start gap-3">
+        <div className="bg-white p-4 sm:p-5 rounded-2xl shadow-sm border border-slate-100 flex items-start gap-3 min-w-0">
           <div className="p-3 bg-red-50 rounded-xl text-red-500 flex-shrink-0"><TrendingDown size={22} /></div>
-          <div>
-            <p className="text-xxs font-bold text-slate-400 uppercase tracking-wider flex items-center">
-              Commission Deducted
-              <Tooltip text="Platform's share deducted from your Item Total. Formula: Item Total × Commission Rate." />
+          <div className="min-w-0">
+            <p className="text-xxs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+              <span>Commission Deducted</span>
+              <Tooltip text="Platform commission deducted from item sales. Formula: Item Sales × Commission Rate." />
             </p>
-            <h3 className="text-xl font-extrabold text-red-600 mt-0.5">{fmt(summary.totalCommissionAmount)}</h3>
-            <p className="text-xxs text-slate-400">Platform's share</p>
+            <h3 className="text-lg sm:text-xl font-extrabold text-red-600 mt-0.5 truncate">{fmt(summary.totalCommissionAmount)}</h3>
+            <p className="text-xxs text-slate-400">Platform commission</p>
           </div>
         </div>
 
-        <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex items-start gap-3">
+        <div className="bg-white p-4 sm:p-5 rounded-2xl shadow-sm border border-slate-100 flex items-start gap-3 min-w-0">
           <div className="p-3 bg-emerald-50 rounded-xl text-emerald-600 flex-shrink-0"><Coins size={22} /></div>
-          <div>
-            <p className="text-xxs font-bold text-slate-400 uppercase tracking-wider flex items-center">
-              Your Net Earning
-              <Tooltip text="Item Total − Commission Amount. Coupon discounts and delivery/handling/platform fees are NOT deducted from your earnings." />
+          <div className="min-w-0">
+            <p className="text-xxs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+              <span>Your Net Earnings</span>
+              <Tooltip text="Item Sales − Commission Deducted. Delivery charges, customer GST, and platform fees are NOT deducted from your earnings." />
             </p>
-            <h3 className="text-xl font-extrabold text-emerald-600 mt-0.5">{fmt(summary.totalNetPayout)}</h3>
-            <p className="text-xxs text-slate-400">Item Total − Commission</p>
+            <h3 className="text-lg sm:text-xl font-extrabold text-emerald-600 mt-0.5 truncate">{fmt(summary.totalNetPayout)}</h3>
+            <p className="text-xxs text-slate-400">Item Sales − Commission</p>
           </div>
         </div>
 
-        <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex items-start gap-3">
+        <div className="bg-white p-4 sm:p-5 rounded-2xl shadow-sm border border-slate-100 flex items-start gap-3 min-w-0">
           <div className="p-3 bg-sky-50 rounded-xl text-sky-600 flex-shrink-0"><FileText size={22} /></div>
-          <div>
+          <div className="min-w-0">
             <p className="text-xxs font-bold text-slate-400 uppercase tracking-wider">Eligible Orders</p>
-            <h3 className="text-xl font-extrabold text-slate-800 mt-0.5">{summary.totalOrders || 0}</h3>
-            <p className="text-xxs text-slate-400">Excludes cancelled / rejected</p>
+            <h3 className="text-lg sm:text-xl font-extrabold text-slate-800 mt-0.5 truncate">{summary.totalOrders || 0}</h3>
+            <p className="text-xxs text-slate-400">Delivered & active orders</p>
           </div>
         </div>
       </div>
@@ -197,16 +197,16 @@ export default function VendorFinance() {
                 <th className="p-2.5">Date</th>
                 <th className="p-2.5">Orders</th>
                 <th className="p-2.5">
-                  Item Subtotal
-                  <Tooltip text="Your item total (commission base). Platform fees and coupons excluded." />
+                  Item Sales
+                  <Tooltip text="Your item sales total (commission base). Platform fees and coupons excluded." />
                 </th>
                 <th className="p-2.5">
                   Commission Deducted
-                  <Tooltip text="Platform's share = Item Total × Rate." />
+                  <Tooltip text="Platform commission = Item Sales × Rate." />
                 </th>
                 <th className="p-2.5">
-                  Your Net Earning
-                  <Tooltip text="Item Subtotal − Commission. This is what you keep." />
+                  Your Net Earnings
+                  <Tooltip text="Item Sales − Commission Deducted. This is your net payout." />
                 </th>
               </tr>
             </thead>
@@ -241,7 +241,7 @@ export default function VendorFinance() {
             <h2 className="text-sm font-bold text-slate-800 flex items-center gap-1.5">
               <FileText size={16} className="text-purple-500" /> Per-Order Commission Breakdown
             </h2>
-            <p className="text-xxs text-slate-400 mt-0.5">Commission deducted per order — only from your item total. Platform fees are not shown as they don't affect your earnings.</p>
+            <p className="text-xxs text-slate-400 mt-0.5">Commission breakdown per order — calculated strictly on your item sales.</p>
           </div>
           <span className="text-xs text-slate-400 font-semibold">{ordersTotal} records</span>
         </div>
@@ -257,17 +257,17 @@ export default function VendorFinance() {
                     <th className="p-2.5">Order ID</th>
                     <th className="p-2.5">Date</th>
                     <th className="p-2.5">
-                      Item Total
-                      <Tooltip text="Your item prices × qty. Commission is calculated on this amount only." />
+                      Item Sales
+                      <Tooltip text="Your item prices × quantity. Commission is calculated on this amount only." />
                     </th>
-                    <th className="p-2.5">Rate Applied</th>
+                    <th className="p-2.5">Commission Rate</th>
                     <th className="p-2.5">
-                      Commission (Deducted)
-                      <Tooltip text="Platform's cut = Item Total × Rate. Platform fees and customer coupons do NOT affect this calculation." />
+                      Commission Deducted
+                      <Tooltip text="Platform commission = Item Sales × Rate. Platform fees and customer coupons do NOT affect this calculation." />
                     </th>
                     <th className="p-2.5">
-                      Your Net Earning
-                      <Tooltip text="Item Total − Commission. Coupon discounts and platform fees are handled by the platform, not deducted from your side." />
+                      Your Net Earnings
+                      <Tooltip text="Item Sales − Commission Deducted. This is what you earn for this order." />
                     </th>
                     <th className="p-2.5">Status</th>
                   </tr>
@@ -281,7 +281,13 @@ export default function VendorFinance() {
                       </td>
                       <td className="p-2.5 font-bold text-slate-800">₹{Number(row.itemSubtotal).toFixed(2)}</td>
                       <td className="p-2.5 text-slate-500">
-                        {row.commissionRateApplied}{row.commissionType === "percentage" ? "%" : "₹"}
+                        {row.commissionType === "percentage" 
+                          ? `${row.commissionRateApplied}%` 
+                          : row.commissionType === "flat" 
+                            ? `₹${row.commissionRateApplied}` 
+                            : row.commissionType === "mixed"
+                              ? "Mixed"
+                              : `${row.commissionRateApplied}%`}
                         <span className="ml-1 text-slate-300 italic text-xxs">({row.resolutionLevel})</span>
                       </td>
                       <td className="p-2.5 text-red-500 font-bold">−₹{Number(row.commissionAmount).toFixed(2)}</td>

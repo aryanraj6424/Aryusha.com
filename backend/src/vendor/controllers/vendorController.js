@@ -5,7 +5,7 @@ import Settlement from "../models/Settlement.js";
 import Commission from "../models/Commission.js";
 import CommissionLedger from "../models/CommissionLedger.js";
 import Order from "../models/Order.js";
-import { Product } from "../../models/catalog.js";
+import { Product, ProductVariant } from "../../models/catalog.js";
 import CustomerOrder from "../../customer/models/CustomerOrder.js";
 import DeliveryBoy from "../../deliveryBoy/models/DeliveryBoy.js";
 import { emitToRoom } from "../../socket/socketManager.js";
@@ -107,12 +107,116 @@ export const getVendorDashboard = async (req, res) => {
       isDeleted: { $ne: true }
     });
 
+    // Fetch top selling products
+    const topSellingRaw = await CustomerOrder.aggregate([
+      {
+        $match: {
+          orderStatus: { $nin: ["Cancelled", "Rejected"] },
+          $or: [
+            { vendorId: vendorId },
+            { "vendorSubOrders.vendorId": vendorId }
+          ]
+        }
+      },
+      {
+        $project: {
+          itemsToUse: {
+            $cond: {
+              if: { $eq: ["$vendorId", vendorId] },
+              then: "$items",
+              else: {
+                $reduce: {
+                  input: "$vendorSubOrders",
+                  initialValue: [],
+                  in: {
+                    $cond: {
+                      if: {
+                        $and: [
+                          { $eq: ["$$this.vendorId", vendorId] },
+                          { $not: [{ $in: ["$$this.subOrderStatus", ["Cancelled", "Rejected"]] }] }
+                        ]
+                      },
+                      then: { $concatArrays: ["$$value", "$$this.items"] },
+                      else: "$$value"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      { $unwind: "$itemsToUse" },
+      {
+        $group: {
+          _id: {
+            productId: "$itemsToUse.productId",
+            variantId: "$itemsToUse.variantId"
+          },
+          name: { $first: "$itemsToUse.name" },
+          img: { $first: "$itemsToUse.img" },
+          totalQtySold: { $sum: "$itemsToUse.qty" },
+          totalRevenue: { $sum: { $multiply: ["$itemsToUse.price", "$itemsToUse.qty"] } },
+          ordersSet: { $addToSet: "$_id" }
+        }
+      },
+      {
+        $project: {
+          _id: 0,
+          productId: "$_id.productId",
+          variantId: "$_id.variantId",
+          name: 1,
+          img: 1,
+          totalQtySold: 1,
+          totalRevenue: 1,
+          distinctOrdersCount: { $size: "$ordersSet" }
+        }
+      },
+      { $sort: { totalQtySold: -1, totalRevenue: -1 } },
+      { $limit: 5 }
+    ]);
+
+    const variantIds = topSellingRaw.map(item => item.variantId).filter(Boolean);
+    const productIds = topSellingRaw.map(item => item.productId).filter(Boolean);
+
+    const [variants, products] = await Promise.all([
+      ProductVariant.find({ _id: { $in: variantIds } }).lean(),
+      Product.find({ _id: { $in: productIds } }).lean()
+    ]);
+
+    const variantMap = new Map(variants.map(v => [v._id.toString(), v]));
+    const productMap = new Map(products.map(p => [p._id.toString(), p]));
+
+    const topSelling = topSellingRaw.map(item => {
+      const variant = variantMap.get(item.variantId?.toString());
+      const product = productMap.get(item.productId?.toString());
+
+      let packSize = "";
+      if (variant?.variantLabel) {
+        packSize = variant.variantLabel;
+      } else if (variant?.packSize?.value) {
+        packSize = `${variant.packSize.value} ${variant.packSize.unit || ""}`.trim();
+      }
+
+      return {
+        productId: item.productId,
+        variantId: item.variantId,
+        name: item.name || product?.name || "Product",
+        packSize,
+        img: item.img || variant?.images?.[0] || product?.images?.[0] || "",
+        totalQtySold: item.totalQtySold,
+        totalRevenue: Number(item.totalRevenue.toFixed(2)),
+        distinctOrdersCount: item.distinctOrdersCount
+      };
+    });
+
     res.status(200).json({
       success: true,
       vendor,
       earnings,
       orders: mappedOrders,
-      totalProducts
+      totalProducts,
+      topSelling
     });
   } catch (error) {
     console.error(error);
@@ -276,6 +380,16 @@ export const requestWithdrawalSelf = async (req, res) => {
         bankName: vendor?.documents?.bankDetails?.bankName || "",
       },
     });
+
+    // Trigger Admin Notification for Payout Request
+    import("../../utils/adminNotificationHelper.js").then(({ createAdminNotification }) => {
+      createAdminNotification({
+        title: "Payout Withdrawal Request 💳",
+        message: `Payout withdrawal request of ₹${amount} submitted by "${vendor?.storeDetails?.storeName || vendor?.shopName || 'Vendor'}"`,
+        type: "PAYOUT_REQUESTED",
+        relatedVendorId: vendorId
+      });
+    }).catch(err => console.error("Admin notification trigger error:", err));
 
     res.status(201).json({
       success: true,
@@ -504,14 +618,11 @@ export const updateVendorProfileSelf = async (req, res) => {
     }
     if (req.body.documents !== undefined) {
       const docs = req.body.documents || {};
-      const bank = docs.bankDetails || {};
+      // Preserve existing sensitive fields: gstNumber, businessRegNo, aadhaar, pan, bankDetails
+      const { gstNumber, businessRegNo, aadhaar, pan, bankDetails, ...allowedDocs } = docs;
       vendor.documents = {
         ...(vendor.documents || {}),
-        ...docs,
-        bankDetails: {
-          ...(vendor.documents?.bankDetails || {}),
-          ...bank
-        }
+        ...allowedDocs,
       };
     }
 
@@ -527,10 +638,25 @@ export const updateVendorProfileSelf = async (req, res) => {
 export const getVendorOrders = async (req, res) => {
   try {
     const vendorId = req.vendor._id;
-    const orders = await CustomerOrder.find({ vendorId })
+    const rawOrders = await CustomerOrder.find({
+      $or: [{ vendorId }, { "vendorSubOrders.vendorId": vendorId }]
+    })
       .populate("customerId", "fullName email phoneNumber")
       .populate("deliveryBoyId", "fullName phone")
       .sort({ createdAt: -1 });
+
+    const orders = rawOrders.map(order => {
+      const orderObj = order.toObject();
+      const sub = (order.vendorSubOrders || []).find(s => s.vendorId.toString() === vendorId.toString());
+      if (sub) {
+        orderObj.items = sub.items;
+        orderObj.orderStatus = sub.subOrderStatus;
+        orderObj.parentOrderStatus = order.orderStatus;
+        orderObj.totalAmount = sub.subtotal;
+        orderObj.vendorCommission = sub.vendorCommission;
+      }
+      return orderObj;
+    });
 
     res.status(200).json({
       success: true,
@@ -751,7 +877,10 @@ export const acceptOrder = async (req, res) => {
     let resultOrder = null;
 
     await runInTransaction(async (session) => {
-      const order = await CustomerOrder.findOne({ _id: orderId, vendorId })
+      const order = await CustomerOrder.findOne({
+        _id: orderId,
+        $or: [{ vendorId }, { "vendorSubOrders.vendorId": vendorId }]
+      })
         .populate("customerId", "fullName email phoneNumber")
         .populate("deliveryBoyId", "fullName phone")
         .session(session);
@@ -760,15 +889,31 @@ export const acceptOrder = async (req, res) => {
         throw new Error("Order not found");
       }
 
-      if (order.orderStatus !== "Pending") {
-        throw new Error("Order is already accepted or processed");
+      const subOrder = (order.vendorSubOrders || []).find(s => s.vendorId.toString() === vendorId.toString());
+      if (subOrder) {
+        if (subOrder.subOrderStatus !== "Pending") {
+          throw new Error("Your portion of this order is already accepted or processed");
+        }
+        subOrder.subOrderStatus = "Accepted";
       }
 
-      order.orderStatus = "Accepted";
+      // Compute aggregate parent order status
+      const subStatuses = (order.vendorSubOrders || []).map(s => s.subOrderStatus);
+      const allAccepted = subStatuses.every(s => s === "Accepted" || s === "Packed" || s === "Delivered");
+      const allRejected = subStatuses.every(s => s === "Rejected" || s === "Cancelled");
+
+      if (allAccepted) {
+        order.orderStatus = "Accepted";
+      } else if (allRejected) {
+        order.orderStatus = "Rejected";
+      } else if (subStatuses.some(s => s === "Accepted" || s === "Packed")) {
+        order.orderStatus = "Partially_Accepted";
+      }
+
       await order.save({ session });
 
       // Sync status in the commission ledger
-      await handleOrderStatusChange(order._id, "Accepted", session);
+      await handleOrderStatusChange(order._id, order.orderStatus, session);
       resultOrder = order;
     });
 
@@ -777,7 +922,7 @@ export const acceptOrder = async (req, res) => {
       emitToRoom(`customer:${resultOrder.customerId._id || resultOrder.customerId}`, "order:accepted", {
         orderId: resultOrder._id,
         orderRef: resultOrder.orderId,
-        message: "Your order has been accepted by the vendor!"
+        message: "Your order has been accepted!"
       });
     }
 
@@ -789,5 +934,176 @@ export const acceptOrder = async (req, res) => {
   } catch (error) {
     console.error("Accept Order Error:", error);
     res.status(500).json({ success: false, message: error.message || "Server Error" });
+  }
+};
+
+export const rejectOrder = async (req, res) => {
+  try {
+    const orderId = req.params.id;
+    const vendorId = req.vendor._id;
+    const { reason } = req.body;
+    let resultOrder = null;
+
+    await runInTransaction(async (session) => {
+      const order = await CustomerOrder.findOne({
+        _id: orderId,
+        $or: [{ vendorId }, { "vendorSubOrders.vendorId": vendorId }]
+      })
+        .populate("customerId", "fullName email phoneNumber")
+        .populate("deliveryBoyId", "fullName phone")
+        .session(session);
+
+      if (!order) {
+        throw new Error("Order not found");
+      }
+
+      const subOrder = (order.vendorSubOrders || []).find(s => s.vendorId.toString() === vendorId.toString());
+      if (subOrder) {
+        if (subOrder.subOrderStatus !== "Pending") {
+          throw new Error("Only pending orders can be rejected");
+        }
+        subOrder.subOrderStatus = "Rejected";
+      }
+
+      // Compute aggregate parent order status
+      const subStatuses = (order.vendorSubOrders || []).map(s => s.subOrderStatus);
+      const allRejected = subStatuses.every(s => s === "Rejected" || s === "Cancelled");
+      const someAccepted = subStatuses.some(s => s === "Accepted" || s === "Packed" || s === "Delivered");
+
+      if (allRejected) {
+        order.orderStatus = "Rejected";
+        order.deliveryStatus = "None";
+      } else if (someAccepted) {
+        order.orderStatus = "Partially_Accepted";
+      }
+
+      if (reason) {
+        order.ratingFeedback = `${order.ratingFeedback ? order.ratingFeedback + " | " : ""}Vendor Rejection Reason: ${reason}`;
+      }
+      await order.save({ session });
+
+      // Sync status in the commission ledger
+      await handleOrderStatusChange(order._id, order.orderStatus, session);
+      resultOrder = order;
+    });
+
+    // Notify customer and admin of order rejection
+    if (resultOrder.customerId) {
+      emitToRoom(`customer:${resultOrder.customerId._id || resultOrder.customerId}`, "order:rejected", {
+        orderId: resultOrder._id,
+        orderRef: resultOrder.orderId,
+        message: "Vendor was unable to fulfill item(s) in your order."
+      });
+    }
+    emitToRoom("admin:global", "order:rejected", { orderId: resultOrder._id, orderRef: resultOrder.orderId });
+
+    res.status(200).json({
+      success: true,
+      message: "Sub-order rejected successfully",
+      order: resultOrder
+    });
+  } catch (error) {
+    console.error("Reject Order Error:", error);
+    res.status(500).json({ success: false, message: error.message || "Server Error" });
+  }
+};
+
+// @desc    Unified search across vendor's products & orders
+// @route   GET /api/vendor/search?query=...
+// @access  Private (Vendor)
+export const searchVendorEntities = async (req, res) => {
+  try {
+    const vendorId = req.vendor._id;
+    const { query } = req.query;
+
+    if (!query || query.trim().length < 2) {
+      return res.status(200).json({
+        success: true,
+        products: [],
+        orders: []
+      });
+    }
+
+    // Clean query & strip leading '#' for order ID matching (e.g. #QK-136795 -> QK-136795)
+    const rawSearch = query.trim();
+    const cleanSearch = rawSearch.replace(/^#/, "").trim();
+
+    if (cleanSearch.length < 2) {
+      return res.status(200).json({
+        success: true,
+        products: [],
+        orders: []
+      });
+    }
+
+    const regex = new RegExp(cleanSearch, "i");
+
+    // 1. Search Vendor's Products (linked via VendorProduct / VendorListing or created by vendor)
+    const { Product, VendorProduct, VendorListing } = await import("../../models/catalog.js");
+
+    const vpLinks = await VendorProduct.find({ vendorId }).select("masterProductId stock").lean();
+    const vpMap = new Map();
+    const vendorProductIds = [];
+
+    for (const link of vpLinks) {
+      if (link && link.masterProductId) {
+        const idStr = link.masterProductId.toString();
+        vpMap.set(idStr, link.stock || 0);
+        vendorProductIds.push(link.masterProductId);
+      }
+    }
+
+    // Safely check VendorListing with null checks
+    const listings = await VendorListing.find({ vendorId }).select("masterProductId").lean();
+    for (const listing of listings) {
+      if (listing && listing.masterProductId) {
+        vendorProductIds.push(listing.masterProductId);
+      }
+    }
+
+    const products = await Product.find({
+      $or: [
+        { _id: { $in: vendorProductIds } },
+        { createdBy: vendorId }
+      ],
+      isDeleted: { $ne: true },
+      $and: [
+        {
+          $or: [
+            { name: regex },
+            { brand: regex }
+          ]
+        }
+      ]
+    })
+    .select("name brand images price category")
+    .limit(6)
+    .lean();
+
+    // 2. Search Vendor's Orders (orderId, customer name, orderStatus)
+    const orders = await CustomerOrder.find({
+      vendorId,
+      $or: [
+        { orderId: regex },
+        { "deliveryAddress.fullName": regex },
+        { orderStatus: regex }
+      ]
+    })
+    .select("orderId grandTotal orderStatus deliveryStatus createdAt deliveryAddress")
+    .sort({ createdAt: -1 })
+    .limit(6)
+    .lean();
+
+    res.status(200).json({
+      success: true,
+      products: products.map(p => ({
+        ...p,
+        stock: vpMap.get(p._id.toString()) || 0
+      })),
+      orders
+    });
+  } catch (error) {
+    console.error("Vendor Search Error:", error);
+    res.status(500).json({ success: false, message: "Search failed. Server Error" });
   }
 };

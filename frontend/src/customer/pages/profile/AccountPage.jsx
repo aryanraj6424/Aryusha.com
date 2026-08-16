@@ -36,10 +36,19 @@ export default function AccountPage() {
     if (!stored) return;
     try {
       const user = JSON.parse(stored);
+      
+      // Clean separation for legacy accounts where email was saved into phoneNumber field
+      const rawPhone = user.phoneNumber || "";
+      const rawEmail = user.email || "";
+      
+      const phoneIsEmail = rawPhone.includes("@");
+      const cleanPhone = phoneIsEmail ? "" : rawPhone;
+      const cleanEmail = rawEmail || (phoneIsEmail ? rawPhone : "");
+
       setFormData({
         fullName:    user.fullName || user.name || "",
-        phoneNumber: user.phoneNumber || "",
-        email:       user.email || "",
+        phoneNumber: cleanPhone,
+        email:       cleanEmail,
       });
       setIsGoogleUser(user.provider === "google" || !!user.googleId);
     } catch {
@@ -55,12 +64,24 @@ export default function AccountPage() {
 
   const validate = () => {
     const errs = {};
-    if (!formData.fullName.trim()) {
+    const nameTrim = formData.fullName.trim();
+    const emailTrim = formData.email.trim();
+    const phoneTrim = formData.phoneNumber.trim();
+
+    if (!nameTrim) {
       errs.fullName = "Full name is required.";
     }
-    if (formData.phoneNumber && !/^\d{10}$/.test(formData.phoneNumber.trim())) {
+
+    if (!emailTrim) {
+      errs.email = "Email address is required.";
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailTrim)) {
+      errs.email = "Please enter a valid email address.";
+    }
+
+    if (phoneTrim && !/^\d{10}$/.test(phoneTrim)) {
       errs.phoneNumber = "Enter a valid 10-digit phone number.";
     }
+
     return errs;
   };
 
@@ -72,6 +93,7 @@ export default function AccountPage() {
       setLoading(true);
       const { user: updatedUser } = await updateProfile({
         fullName: formData.fullName.trim(),
+        email: formData.email.trim().toLowerCase(),
         phoneNumber: formData.phoneNumber.trim(),
       });
 
@@ -116,6 +138,32 @@ export default function AccountPage() {
           {errors.fullName && <p className="text-red-500 text-xs mt-1">{errors.fullName}</p>}
         </Field>
 
+        {/* Email */}
+        <Field label={`Email ${isGoogleUser ? "(Google account — read only)" : ""}`} id="account-email" icon={Mail}>
+          <input
+            id="account-email"
+            type="email"
+            name="email"
+            value={formData.email}
+            onChange={handleChange}
+            readOnly={isGoogleUser}
+            placeholder="Email address"
+            className={`${inputBase} ${
+              isGoogleUser
+                ? "border-gray-100 bg-gray-50 text-gray-500 cursor-not-allowed"
+                : errors.email
+                ? "border-red-400 bg-red-50"
+                : "border-gray-200"
+            }`}
+          />
+          {errors.email && <p className="text-red-500 text-xs mt-1">{errors.email}</p>}
+          {isGoogleUser && (
+            <p className="text-xs text-gray-400 mt-1">
+              Email is managed by Google and cannot be changed here.
+            </p>
+          )}
+        </Field>
+
         {/* Phone Number */}
         <Field label="Phone Number" id="account-phone" icon={Phone}>
           <input
@@ -124,29 +172,11 @@ export default function AccountPage() {
             name="phoneNumber"
             value={formData.phoneNumber}
             onChange={handleChange}
-            placeholder="10-digit phone number"
+            placeholder="Add 10-digit phone number"
             maxLength={10}
             className={`${inputBase} ${errors.phoneNumber ? "border-red-400 bg-red-50" : "border-gray-200"}`}
           />
           {errors.phoneNumber && <p className="text-red-500 text-xs mt-1">{errors.phoneNumber}</p>}
-        </Field>
-
-        {/* Email — read-only for Google accounts */}
-        <Field label={`Email ${isGoogleUser ? "(Google account — read only)" : ""}`} id="account-email" icon={Mail}>
-          <input
-            id="account-email"
-            type="email"
-            name="email"
-            value={formData.email}
-            readOnly
-            placeholder="Email address"
-            className={`${inputBase} border-gray-100 bg-gray-50 text-gray-500 cursor-not-allowed`}
-          />
-          {isGoogleUser && (
-            <p className="text-xs text-gray-400 mt-1">
-              Email is managed by Google and cannot be changed here.
-            </p>
-          )}
         </Field>
 
         {/* Save button */}
@@ -154,7 +184,7 @@ export default function AccountPage() {
           id="account-save-btn"
           onClick={handleSave}
           disabled={loading}
-          className="flex items-center justify-center gap-2 w-full sm:w-auto bg-[#6B21D9] hover:bg-[#5B18C2] active:scale-[0.98] text-white font-bold px-8 py-3 rounded-xl shadow-md shadow-purple-200 transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
+          className="flex items-center justify-center gap-2 w-full sm:w-auto bg-[#0B2214] hover:bg-[#153e25] active:scale-[0.98] text-white font-bold px-8 py-3 rounded-xl shadow-md shadow-purple-200 transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
         >
           {loading ? (
             <><Loader2 size={16} className="animate-spin" /> Saving...</>

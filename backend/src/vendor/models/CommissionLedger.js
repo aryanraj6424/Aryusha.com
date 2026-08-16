@@ -51,7 +51,7 @@ const commissionLedgerSchema = new Schema(
     },
 
     // Commission fields
-    commissionType:         { type: String, enum: ["percentage", "flat"], required: true },
+    commissionType:         { type: String, enum: ["percentage", "flat", "mixed"], required: true },
     commissionRateApplied:  { type: Number, required: true, min: 0 },
     commissionAmount:       { type: Number, required: true, min: 0 },
 
@@ -64,12 +64,16 @@ const commissionLedgerSchema = new Schema(
 
     resolutionLevel: {
       type: String,
-      enum: ["product", "vendor", "global"],
+      enum: ["vendorProduct", "product", "vendor", "global"],
       required: true,
     },
     orderStatus: { type: String, required: true, index: true },
   },
   { timestamps: true }
 );
+
+// Compound index for vendor-filtered date-sorted financial queries
+commissionLedgerSchema.index({ vendorId: 1, orderDate: -1, orderStatus: 1 });
+commissionLedgerSchema.index({ orderDate: -1, orderStatus: 1 });
 
 export default mongoose.model("CommissionLedger", commissionLedgerSchema);

@@ -46,5 +46,6 @@ const dailyCommissionSummarySchema = new Schema(
 
 // One row per vendor (or platform null) per day
 dailyCommissionSummarySchema.index({ vendorId: 1, date: 1 }, { unique: true });
+dailyCommissionSummarySchema.index({ date: 1, vendorId: 1 });
 
 export default mongoose.model("DailyCommissionSummary", dailyCommissionSummarySchema);

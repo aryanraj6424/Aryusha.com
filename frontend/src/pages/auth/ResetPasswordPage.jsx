@@ -12,6 +12,8 @@ export default function ResetPasswordPage() {
 
   const phoneNumber =
     location.state?.phoneNumber || "";
+  const resetToken =
+    location.state?.resetToken || "";
 
   const [loading, setLoading] =
     useState(false);
@@ -70,6 +72,12 @@ export default function ResetPasswordPage() {
 
       e.preventDefault();
 
+      if (!phoneNumber || !resetToken) {
+        showToast({ type: "warning", message: "Session expired. Please request OTP again." });
+        navigate("/forgot-password");
+        return;
+      }
+
       if (
         formData.password !==
         formData.confirmPassword
@@ -85,8 +93,10 @@ export default function ResetPasswordPage() {
         const response =
           await resetPassword({
             phoneNumber,
-            password:
-              formData.password,
+            phone: phoneNumber,
+            resetToken,
+            newPassword: formData.password,
+            password: formData.password,
           });
 
         console.log(response);
@@ -117,7 +127,7 @@ export default function ResetPasswordPage() {
       <div className="w-full max-w-md bg-white rounded-[35px] shadow-2xl p-8">
 
         <h1 className="text-4xl font-bold text-purple-700 text-center">
-          QuickCart
+          Aryusha
         </h1>
 
         <h2 className="text-3xl font-bold text-center mt-8">
@@ -191,12 +201,12 @@ export default function ResetPasswordPage() {
                     style={{
                       width:
                         strength.label ===
-                        "Weak"
+                          "Weak"
                           ? "30%"
                           : strength.label ===
                             "Medium"
-                          ? "65%"
-                          : "100%",
+                            ? "65%"
+                            : "100%",
                     }}
                   />
 

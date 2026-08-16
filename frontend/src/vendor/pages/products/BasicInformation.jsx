@@ -206,6 +206,59 @@ export default function BasicInformation({ formData, setFormData }) {
           </select>
         </div>
       </div>
+
+      {/* Coupon Settings */}
+      <div className="pt-4 border-t space-y-4">
+        <h4 className="font-bold text-slate-800 text-sm">Coupon Settings</h4>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-xs uppercase tracking-wider text-slate-400 mb-2">
+              Coupon applicable on this product? *
+            </label>
+            <div className="flex gap-4 items-center h-12">
+              <label className="flex items-center gap-2 cursor-pointer font-bold text-sm">
+                <input
+                  type="radio"
+                  name="coupon_allowed"
+                  checked={formData.coupon_allowed === true || formData.coupon_allowed === "true"}
+                  onChange={() => setFormData({ ...formData, coupon_allowed: true })}
+                  className="accent-purple-600"
+                />
+                Yes
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer font-bold text-sm">
+                <input
+                  type="radio"
+                  name="coupon_allowed"
+                  checked={formData.coupon_allowed === false || formData.coupon_allowed === "false" || !formData.coupon_allowed}
+                  onChange={() => setFormData({ ...formData, coupon_allowed: false, max_discount_amount: "" })}
+                  className="accent-purple-600"
+                />
+                No
+              </label>
+            </div>
+          </div>
+
+          {(formData.coupon_allowed === true || formData.coupon_allowed === "true") && (
+            <div>
+              <label className="block text-xs uppercase tracking-wider text-slate-400 mb-2">
+                Max discount allowed on this product (₹) *
+              </label>
+              <input
+                type="number"
+                required={formData.coupon_allowed === true || formData.coupon_allowed === "true"}
+                min="0"
+                step="any"
+                name="max_discount_amount"
+                value={formData.max_discount_amount !== undefined && formData.max_discount_amount !== null ? formData.max_discount_amount : ""}
+                onChange={(e) => setFormData({ ...formData, max_discount_amount: e.target.value })}
+                placeholder="e.g. 50"
+                className="w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-purple-500 outline-none font-medium"
+              />
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

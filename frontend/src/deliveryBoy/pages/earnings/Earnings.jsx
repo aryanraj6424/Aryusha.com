@@ -58,11 +58,10 @@ export default function Earnings() {
     );
   }
 
-  // Calculate stats based on period
-  const multiplier = payoutPeriod === "daily" ? 1 : payoutPeriod === "weekly" ? 7 : 30;
-  const baseEarnings = (earnings?.totalEarnings || 0) * (multiplier / 7);
-  const baseIncentives = (earnings?.incentives || 0) * (multiplier / 7);
-  const baseCommissions = (earnings?.commissions || 0) * (multiplier / 7);
+  // Real state values returned directly by backend API
+  const baseEarnings = Number(earnings?.totalEarnings || 0);
+  const baseIncentives = Number(earnings?.incentives || 0);
+  const baseCommissions = Number(earnings?.commissions || 0);
 
   return (
     <div className="space-y-6">
@@ -106,7 +105,7 @@ export default function Earnings() {
             onClick={() => setPayoutPeriod(period)}
             className={`flex-1 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
               payoutPeriod === period
-                ? "bg-white text-[#6d28d9] shadow-sm font-extrabold"
+                ? "bg-white text-[#0B2214] shadow-sm font-extrabold"
                 : "text-slate-500 hover:text-slate-700"
             }`}
           >
@@ -141,7 +140,7 @@ export default function Earnings() {
           {/* Total Period Earnings */}
           <div className="py-3.5 flex justify-between font-black border-t border-slate-100 text-sm">
             <span className="text-slate-800">Total Period Pay</span>
-            <span className="text-[#6d28d9]">₹{(baseEarnings + baseIncentives + baseCommissions).toFixed(2)}</span>
+            <span className="text-[#0B2214]">₹{(baseEarnings + baseIncentives + baseCommissions).toFixed(2)}</span>
           </div>
 
         </div>
@@ -169,7 +168,7 @@ export default function Earnings() {
                   </p>
                 </div>
                 <div className="text-right">
-                  <span className="font-black text-emerald-700 text-xs block">+ ₹{(item.deliveryCharge || 35) + 7}</span>
+                  <span className="font-black text-emerald-700 text-xs block">+ ₹{item.riderPayout || item.deliveryCharge || 35}</span>
                   <span className="text-[8px] font-black uppercase text-slate-400 tracking-wider">Credits Applied</span>
                 </div>
               </div>

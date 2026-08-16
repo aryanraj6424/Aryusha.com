@@ -76,15 +76,15 @@ export default function ProductDetails() {
   const isEditable = product.status === "draft" || product.status === "rejected";
 
   return (
-    <div className="p-6 max-w-5xl mx-auto font-semibold text-slate-750">
+    <div className="p-4 sm:p-6 max-w-5xl mx-auto font-semibold text-slate-750">
 
       {/* Breadcrumb */}
       <div className="flex items-center gap-2 text-sm text-slate-500 mb-6">
-        <button onClick={() => navigate("/vendor/products")} className="hover:text-purple-650 flex items-center gap-1 font-semibold">
+        <button onClick={() => navigate("/vendor/products")} className="hover:text-purple-650 flex items-center gap-1 font-semibold cursor-pointer">
           <ChevronLeft className="w-4 h-4" /> Products
         </button>
         <span>/</span>
-        <span className="text-slate-800 font-medium">{product.name}</span>
+        <span className="text-slate-800 font-medium truncate">{product.name}</span>
       </div>
 
       <div className="grid lg:grid-cols-3 gap-6">
@@ -122,14 +122,14 @@ export default function ProductDetails() {
         <div className="lg:col-span-2 space-y-5">
 
           {/* Name + actions */}
-          <div className="flex justify-between items-start gap-4">
+          <div className="flex flex-col sm:flex-row justify-between items-start gap-4">
             <div>
-              <h1 className="text-2xl font-bold text-slate-800 leading-snug">{product.name}</h1>
+              <h1 className="text-xl sm:text-2xl font-bold text-slate-800 leading-snug">{product.name}</h1>
               {product.brand && (
                 <p className="text-slate-400 text-sm mt-0.5 font-medium">by {product.brand}</p>
               )}
             </div>
-            <div className="flex gap-2 shrink-0 font-bold">
+            <div className="flex flex-wrap gap-2 shrink-0 font-bold">
               {linkedInfo ? (
                 <span className="flex items-center gap-1.5 bg-purple-50 border border-purple-200 text-purple-700 text-xs px-3 py-1.5 rounded-xl">
                   <Link2 className="w-3.5 h-3.5" /> Linked Product Reference
@@ -146,7 +146,7 @@ export default function ProductDetails() {
                   )}
                   <Link
                     to={`/vendor/products/${id}/variants`}
-                    className="flex items-center gap-1.5 bg-purple-650 text-white text-sm px-3 py-1.5 rounded-xl hover:bg-purple-700 transition shadow"
+                    className="flex items-center gap-1.5 bg-purple-600 text-white text-sm px-3 py-1.5 rounded-xl hover:bg-purple-700 transition shadow"
                   >
                     <Tag className="w-3.5 h-3.5" /> Manage Variants
                   </Link>
@@ -200,7 +200,7 @@ export default function ProductDetails() {
               </div>
               <button
                 onClick={() => navigate("/vendor/products")}
-                className="text-xs bg-white hover:bg-slate-50 border px-3 py-1.5 rounded-xl text-slate-700 font-bold transition shadow-sm self-start md:self-auto"
+                className="text-xs bg-white hover:bg-slate-50 border px-3 py-1.5 rounded-xl text-slate-700 font-bold transition shadow-sm self-start md:self-auto cursor-pointer"
               >
                 Edit listing from products list
               </button>
@@ -210,7 +210,7 @@ export default function ProductDetails() {
           {/* Catalog hierarchy */}
           <div className="bg-slate-50 rounded-2xl p-4 text-sm border border-slate-100">
             <p className="text-slate-400 text-[10px] uppercase tracking-wider mb-2 font-bold">Catalog Hierarchy</p>
-            <div className="flex items-center gap-2 text-slate-700 font-semibold">
+            <div className="flex flex-wrap items-center gap-2 text-slate-700 font-semibold">
               <span>{product.categoryId?.name}</span>
               <span className="text-slate-400">›</span>
               <span>{product.subCategoryId?.name}</span>

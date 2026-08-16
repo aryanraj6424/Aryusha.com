@@ -1,7 +1,7 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { useState, useEffect, useRef } from "react";
 import axios from "axios";
-import { ArrowLeft, Shield, FileText, CheckSquare, Settings, User, Building2, Check, X, ShieldAlert, MapPin, Plus, Trash2, Edit, Search, Coins } from "lucide-react";
+import { ArrowLeft, Shield, FileText, CheckSquare, Settings, User, Building2, Check, X, ShieldAlert, MapPin, Plus, Trash2, Edit, Search } from "lucide-react";
 import CoverageMap from "../../../vendor/components/CoverageMap";
 import { useToast } from "../../../components/Toast";
 import ConfirmDialog from "../../../components/Toast/ConfirmDialog";
@@ -23,10 +23,7 @@ export default function VendorDetails() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("profile");
 
-  const [platformSettings, setPlatformSettings] = useState(null);
-  const [commissionType, setCommissionType] = useState("percentage");
-  const [commissionValue, setCommissionValue] = useState("");
-  const [savingCommission, setSavingCommission] = useState(false);
+
 
   // Location and Service Area States
   const [latInput, setLatInput] = useState("");
@@ -39,6 +36,77 @@ export default function VendorDetails() {
   const [saCity, setSaCity] = useState("");
   const [saState, setSaState] = useState("");
   const [editingSaIndex, setEditingSaIndex] = useState(null); // null if adding, number if editing
+
+  // Admin Vendor Edit Modal state
+  const [showAdminEditModal, setShowAdminEditModal] = useState(false);
+  const [adminEditSaving, setAdminEditSaving] = useState(false);
+  const [adminEditData, setAdminEditData] = useState({
+    shopName: "",
+    shopType: "",
+    phone: "",
+    businessEmail: "",
+    whatsapp: "",
+    yearsInBusiness: "",
+    address: { city: "", district: "", state: "", pincode: "", addressLine: "" },
+    ownerDetails: { ownerName: "", mobileNumber: "", email: "" },
+    documents: {
+      gstNumber: "", businessRegNo: "", aadhaar: "", pan: "",
+      bankDetails: { accountHolder: "", bankName: "", accountNumber: "", ifsc: "" }
+    }
+  });
+
+  const handleOpenAdminEditModal = () => {
+    if (!vendor) return;
+    setAdminEditData({
+      shopName: vendor.shopName || "",
+      shopType: vendor.shopType || "",
+      phone: vendor.phone || "",
+      businessEmail: vendor.businessEmail || "",
+      whatsapp: vendor.whatsapp || "",
+      yearsInBusiness: vendor.yearsInBusiness || "",
+      address: {
+        city: vendor.address?.city || "",
+        district: vendor.address?.district || "",
+        state: vendor.address?.state || "",
+        pincode: vendor.address?.pincode || "",
+        addressLine: vendor.address?.addressLine || ""
+      },
+      ownerDetails: {
+        ownerName: vendor.ownerDetails?.ownerName || "",
+        mobileNumber: vendor.ownerDetails?.mobileNumber || "",
+        email: vendor.ownerDetails?.email || ""
+      },
+      documents: {
+        gstNumber: vendor.documents?.gstNumber || "",
+        businessRegNo: vendor.documents?.businessRegNo || "",
+        aadhaar: vendor.documents?.aadhaar || "",
+        pan: vendor.documents?.pan || "",
+        bankDetails: {
+          accountHolder: vendor.documents?.bankDetails?.accountHolder || "",
+          bankName: vendor.documents?.bankDetails?.bankName || "",
+          accountNumber: vendor.documents?.bankDetails?.accountNumber || "",
+          ifsc: vendor.documents?.bankDetails?.ifsc || ""
+        }
+      }
+    });
+    setShowAdminEditModal(true);
+  };
+
+  const handleSaveAdminEdit = async (e) => {
+    e.preventDefault();
+    setAdminEditSaving(true);
+    try {
+      await axios.put(`${import.meta.env.VITE_API_URL}/admin/vendors/${id}`, adminEditData, getAuthHeaders());
+      showToast({ type: "success", message: "Vendor details updated successfully by Admin!" });
+      setShowAdminEditModal(false);
+      fetchVendorDetails();
+    } catch (error) {
+      console.error(error);
+      showToast({ type: "error", message: error.response?.data?.message || "Failed to update vendor details." });
+    } finally {
+      setAdminEditSaving(false);
+    }
+  };
 
   const getAuthHeaders = () => {
     const token = localStorage.getItem("adminToken");
@@ -62,15 +130,6 @@ export default function VendorDetails() {
         product: { view: true, add: true, edit: true, delete: true },
       });
 
-      // Fetch global commission settings
-      try {
-        const settingsRes = await axios.get(`${import.meta.env.VITE_API_URL}/admin/fee-settings`, getAuthHeaders());
-        if (settingsRes.data?.success) {
-          setPlatformSettings(settingsRes.data.data);
-        }
-      } catch (settingsErr) {
-        console.error("Error fetching fee settings:", settingsErr);
-      }
     } catch (error) {
       console.error(error);
       showToast({ type: "error", message: "Failed to fetch vendor details." });
@@ -85,40 +144,8 @@ export default function VendorDetails() {
     }
   }, [id]);
 
-  useEffect(() => {
-    if (vendor) {
-      setCommissionType(vendor.commissionType || "percentage");
-      setCommissionValue(vendor.commissionValue !== null && vendor.commissionValue !== undefined ? vendor.commissionValue : "");
-    }
-  }, [vendor]);
 
-  const handleSaveCommission = async () => {
-    setSavingCommission(true);
-    try {
-      const commVal = commissionValue === "" ? null : Number(commissionValue);
-      if (commVal !== null && (isNaN(commVal) || commVal < 0)) {
-        showToast({ type: "warning", message: "Commission value must be a positive number." });
-        setSavingCommission(false);
-        return;
-      }
-      
-      await axios.put(`${import.meta.env.VITE_API_URL}/admin/finance/vendors/${id}`, {
-        commissionType,
-        commissionValue: commVal
-      }, getAuthHeaders());
-
-      showToast({ type: "success", message: "Commission settings saved successfully." });
-      fetchVendorDetails();
-    } catch (error) {
-      console.error(error);
-      showToast({ type: "error", message: error.response?.data?.message || "Failed to save commission settings." });
-    } finally {
-      setSavingCommission(false);
-    }
-  };
-
-
-  // Autocomplete address search
+  // Autocomplete address search via Google Maps location search service
   const handleAddressSearch = async (val) => {
     setAddressSearch(val);
     if (val.trim().length < 3) {
@@ -127,19 +154,11 @@ export default function VendorDetails() {
     }
     setSearchLoading(true);
     try {
-      const res = await axios.get(`https://nominatim.openstreetmap.org/search`, {
-        params: {
-          q: val,
-          format: "json",
-          addressdetails: 1,
-          limit: 5,
-          countrycodes: "in"
-        },
-        headers: {
-          "User-Agent": "QuickCartAdmin"
-        }
+      // Replaced direct Nominatim API call with Google Maps location search endpoint
+      const res = await axios.get(`${import.meta.env.VITE_API_URL}/location/search`, {
+        params: { text: val },
       });
-      setSearchSuggestions(res.data || []);
+      setSearchSuggestions(res.data.results || []);
     } catch (err) {
       console.error("Address Autocomplete Error:", err);
     } finally {
@@ -148,19 +167,19 @@ export default function VendorDetails() {
   };
 
   const handleSelectAddressSuggestion = (item) => {
-    const lat = parseFloat(item.lat);
-    const lng = parseFloat(item.lon);
+    const lat = parseFloat(item.lat || item.properties?.lat);
+    const lng = parseFloat(item.lon || item.lng || item.properties?.lon);
     setLatInput(lat.toFixed(6));
     setLngInput(lng.toFixed(6));
     setSearchSuggestions([]);
     setAddressSearch("");
     
     // Auto populate pincode/city/state if available
-    const addr = item.address || {};
+    const addr = item.address || item || {};
     const postcode = addr.postcode || "";
     const city = addr.city || addr.town || addr.village || addr.municipality || "";
     const state = addr.state || "";
-    const area = addr.suburb || addr.neighbourhood || addr.road || "";
+    const area = addr.road || addr.suburb || addr.area || addr.neighbourhood || "";
 
     if (postcode) setSaPincode(postcode);
     if (area || city) setSaAreaName(area || city);
@@ -402,6 +421,13 @@ export default function VendorDetails() {
               )}
             </>
           )}
+          <button
+            type="button"
+            onClick={handleOpenAdminEditModal}
+            className="flex items-center gap-1.5 bg-purple-600 hover:bg-purple-700 text-white px-4 py-2.5 rounded-xl font-bold text-xs transition cursor-pointer shadow-sm"
+          >
+            <Edit size={16} /> Edit Vendor Details
+          </button>
         </div>
       </div>
 
@@ -437,16 +463,7 @@ export default function VendorDetails() {
         >
           <Settings size={16} /> Permissions Control
         </button>
-        <button
-          onClick={() => setActiveTab("commission")}
-          className={`flex items-center gap-2 px-5 py-3 border-b-2 font-semibold text-sm transition-colors ${
-            activeTab === "commission"
-              ? "border-green-600 text-green-600"
-              : "border-transparent text-gray-500 hover:text-gray-700"
-          }`}
-        >
-          <Coins size={16} /> Commission Settings
-        </button>
+
         <button
           onClick={() => setActiveTab("serviceAreas")}
           className={`flex items-center gap-2 px-5 py-3 border-b-2 font-semibold text-sm transition-colors ${
@@ -743,83 +760,7 @@ export default function VendorDetails() {
           </div>
         )}
 
-        {activeTab === "commission" && (
-          <div className="space-y-6">
-            <div className="border p-6 rounded-2xl bg-white shadow-sm space-y-6">
-              <h3 className="text-lg font-bold text-slate-800 border-b pb-2 flex items-center gap-2">
-                <Coins className="text-green-600" size={20} />
-                Commission Configuration
-              </h3>
 
-              <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 space-y-2">
-                <p className="text-xs text-slate-500 font-bold uppercase tracking-wider">Platform Default Reference</p>
-                <div className="flex items-center gap-4 text-sm font-semibold text-slate-700">
-                  <div>
-                    Type: <span className="text-slate-900 font-bold uppercase">{platformSettings?.defaultCommissionType || "percentage"}</span>
-                  </div>
-                  <div>
-                    Value: <span className="text-slate-900 font-bold">{platformSettings?.defaultCommissionValue ?? 8}%</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid md:grid-cols-2 gap-6 pt-2">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-slate-500 block">Commission Type</label>
-                  <select
-                    value={commissionType}
-                    onChange={(e) => setCommissionType(e.target.value)}
-                    className="w-full border rounded-xl px-3 py-2.5 outline-none focus:border-green-600 bg-white font-semibold text-sm"
-                  >
-                    <option value="percentage">Percentage (%)</option>
-                    <option value="flat">Flat (Fixed amount per order)</option>
-                  </select>
-                  <p className="text-[10px] text-slate-400 font-semibold">
-                    Whether the commission is calculated as a percentage of product subtotal or a fixed amount per order.
-                  </p>
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-slate-500 block">
-                    Custom Commission Value {commissionType === "percentage" ? "(%)" : "(₹)"}
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="any"
-                    value={commissionValue}
-                    onChange={(e) => setCommissionValue(e.target.value)}
-                    placeholder="Leave empty to use platform default"
-                    className="w-full border rounded-xl px-3 py-2.5 outline-none focus:border-green-600 font-semibold text-sm"
-                  />
-                  <p className="text-[10px] text-slate-400 font-semibold">
-                    If blank/cleared, the vendor uses the platform default.
-                  </p>
-                </div>
-              </div>
-
-              <div className="border-t pt-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                <div className="text-sm font-semibold text-slate-600">
-                  Effective commission:{" "}
-                  <span className="font-extrabold text-green-700 bg-green-50 border border-green-150 px-2.5 py-0.5 rounded-full text-xs">
-                    {commissionValue !== "" && commissionValue !== null && commissionValue !== undefined
-                      ? `${commissionValue}${commissionType === "percentage" ? "%" : " flat"} (Custom Override)`
-                      : `${platformSettings?.defaultCommissionValue ?? 8}% (Platform Default)`}
-                  </span>
-                </div>
-
-                <button
-                  type="button"
-                  disabled={savingCommission}
-                  onClick={handleSaveCommission}
-                  className="bg-[#1a5d1a] hover:bg-[#154a15] text-white px-6 py-2.5 rounded-xl text-sm font-black transition disabled:opacity-50 flex items-center gap-2 cursor-pointer shadow-sm"
-                >
-                  {savingCommission ? "Saving..." : "Save Settings"}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
 
         {activeTab === "serviceAreas" && (
           <div className="space-y-6">
@@ -1098,6 +1039,353 @@ export default function VendorDetails() {
           onConfirm={confirmState.onConfirm}
           onCancel={() => setConfirmState(null)}
         />
+      )}
+
+      {/* Admin Edit Vendor Details Modal */}
+      {showAdminEditModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-3xl w-full max-h-[90vh] flex flex-col overflow-hidden shadow-2xl animate-scale-in">
+            {/* Header */}
+            <div className="p-5 border-b flex justify-between items-center bg-slate-50 shrink-0">
+              <div>
+                <h3 className="font-extrabold text-slate-800 text-lg">Admin Edit — Vendor Profile & Documents</h3>
+                <p className="text-xs text-slate-500 font-semibold">Update vendor store, owner, sensitive documents, and bank payout details</p>
+              </div>
+              <button
+                onClick={() => setShowAdminEditModal(false)}
+                className="p-1.5 hover:bg-slate-200 rounded-xl transition text-slate-500 cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Form Body */}
+            <form onSubmit={handleSaveAdminEdit} className="p-6 overflow-y-auto flex-1 space-y-6">
+              {/* Store & Contact Info */}
+              <div className="space-y-3">
+                <h4 className="text-xs uppercase tracking-widest text-purple-700 border-b pb-1.5 font-extrabold">Store & Contact Information</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-xs block text-slate-600 mb-1 font-bold">Shop Name *</label>
+                    <input
+                      type="text"
+                      required
+                      value={adminEditData.shopName}
+                      onChange={(e) => setAdminEditData({ ...adminEditData, shopName: e.target.value })}
+                      className="w-full px-3 py-2 border rounded-xl outline-none focus:ring-2 focus:ring-purple-500 text-sm font-medium"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs block text-slate-600 mb-1 font-bold">Shop Type</label>
+                    <input
+                      type="text"
+                      value={adminEditData.shopType}
+                      onChange={(e) => setAdminEditData({ ...adminEditData, shopType: e.target.value })}
+                      className="w-full px-3 py-2 border rounded-xl outline-none focus:ring-2 focus:ring-purple-500 text-sm font-medium"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs block text-slate-600 mb-1 font-bold">Business Phone</label>
+                    <input
+                      type="text"
+                      value={adminEditData.phone}
+                      onChange={(e) => setAdminEditData({ ...adminEditData, phone: e.target.value })}
+                      className="w-full px-3 py-2 border rounded-xl outline-none focus:ring-2 focus:ring-purple-500 text-sm font-medium"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs block text-slate-600 mb-1 font-bold">Business Email</label>
+                    <input
+                      type="email"
+                      value={adminEditData.businessEmail}
+                      onChange={(e) => setAdminEditData({ ...adminEditData, businessEmail: e.target.value })}
+                      className="w-full px-3 py-2 border rounded-xl outline-none focus:ring-2 focus:ring-purple-500 text-sm font-medium"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs block text-slate-600 mb-1 font-bold">WhatsApp Number</label>
+                    <input
+                      type="text"
+                      value={adminEditData.whatsapp}
+                      onChange={(e) => setAdminEditData({ ...adminEditData, whatsapp: e.target.value })}
+                      className="w-full px-3 py-2 border rounded-xl outline-none focus:ring-2 focus:ring-purple-500 text-sm font-medium"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs block text-slate-600 mb-1 font-bold">Years in Business</label>
+                    <input
+                      type="number"
+                      value={adminEditData.yearsInBusiness}
+                      onChange={(e) => setAdminEditData({ ...adminEditData, yearsInBusiness: e.target.value })}
+                      className="w-full px-3 py-2 border rounded-xl outline-none focus:ring-2 focus:ring-purple-500 text-sm font-medium"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Owner Info */}
+              <div className="space-y-3">
+                <h4 className="text-xs uppercase tracking-widest text-purple-700 border-b pb-1.5 font-extrabold">Owner Details</h4>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div>
+                    <label className="text-xs block text-slate-600 mb-1 font-bold">Owner Name</label>
+                    <input
+                      type="text"
+                      value={adminEditData.ownerDetails.ownerName}
+                      onChange={(e) => setAdminEditData({
+                        ...adminEditData,
+                        ownerDetails: { ...adminEditData.ownerDetails, ownerName: e.target.value }
+                      })}
+                      className="w-full px-3 py-2 border rounded-xl outline-none focus:ring-2 focus:ring-purple-500 text-sm font-medium"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs block text-slate-600 mb-1 font-bold">Owner Mobile</label>
+                    <input
+                      type="text"
+                      value={adminEditData.ownerDetails.mobileNumber}
+                      onChange={(e) => setAdminEditData({
+                        ...adminEditData,
+                        ownerDetails: { ...adminEditData.ownerDetails, mobileNumber: e.target.value }
+                      })}
+                      className="w-full px-3 py-2 border rounded-xl outline-none focus:ring-2 focus:ring-purple-500 text-sm font-medium"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs block text-slate-600 mb-1 font-bold">Owner Email</label>
+                    <input
+                      type="email"
+                      value={adminEditData.ownerDetails.email}
+                      onChange={(e) => setAdminEditData({
+                        ...adminEditData,
+                        ownerDetails: { ...adminEditData.ownerDetails, email: e.target.value }
+                      })}
+                      className="w-full px-3 py-2 border rounded-xl outline-none focus:ring-2 focus:ring-purple-500 text-sm font-medium"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Store Address */}
+              <div className="space-y-3">
+                <h4 className="text-xs uppercase tracking-widest text-purple-700 border-b pb-1.5 font-extrabold">Store Address</h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                  <div>
+                    <label className="text-xs block text-slate-600 mb-1 font-bold">City / Town</label>
+                    <input
+                      type="text"
+                      value={adminEditData.address.city}
+                      onChange={(e) => setAdminEditData({
+                        ...adminEditData,
+                        address: { ...adminEditData.address, city: e.target.value }
+                      })}
+                      className="w-full px-3 py-2 border rounded-xl outline-none focus:ring-2 focus:ring-purple-500 text-sm font-medium"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs block text-slate-600 mb-1 font-bold">District</label>
+                    <input
+                      type="text"
+                      value={adminEditData.address.district}
+                      onChange={(e) => setAdminEditData({
+                        ...adminEditData,
+                        address: { ...adminEditData.address, district: e.target.value }
+                      })}
+                      className="w-full px-3 py-2 border rounded-xl outline-none focus:ring-2 focus:ring-purple-500 text-sm font-medium"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs block text-slate-600 mb-1 font-bold">State</label>
+                    <input
+                      type="text"
+                      value={adminEditData.address.state}
+                      onChange={(e) => setAdminEditData({
+                        ...adminEditData,
+                        address: { ...adminEditData.address, state: e.target.value }
+                      })}
+                      className="w-full px-3 py-2 border rounded-xl outline-none focus:ring-2 focus:ring-purple-500 text-sm font-medium"
+                    />
+                  </div>
+                  <div className="col-span-2">
+                    <label className="text-xs block text-slate-600 mb-1 font-bold">Address Line</label>
+                    <input
+                      type="text"
+                      value={adminEditData.address.addressLine}
+                      onChange={(e) => setAdminEditData({
+                        ...adminEditData,
+                        address: { ...adminEditData.address, addressLine: e.target.value }
+                      })}
+                      className="w-full px-3 py-2 border rounded-xl outline-none focus:ring-2 focus:ring-purple-500 text-sm font-medium"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs block text-slate-600 mb-1 font-bold">Pincode</label>
+                    <input
+                      type="text"
+                      value={adminEditData.address.pincode}
+                      onChange={(e) => setAdminEditData({
+                        ...adminEditData,
+                        address: { ...adminEditData.address, pincode: e.target.value }
+                      })}
+                      className="w-full px-3 py-2 border rounded-xl outline-none focus:ring-2 focus:ring-purple-500 text-sm font-medium"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Sensitive Documents (Admin Editable) */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between border-b pb-1.5">
+                  <h4 className="text-xs uppercase tracking-widest text-purple-700 font-extrabold">Verification Documents (Admin Managed)</h4>
+                  <span className="text-[10px] font-bold bg-purple-50 text-purple-700 px-2 py-0.5 rounded-md border border-purple-200">
+                    Admin Exclusive Permission
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-xs block text-slate-600 mb-1 font-bold">GST Number</label>
+                    <input
+                      type="text"
+                      value={adminEditData.documents.gstNumber}
+                      onChange={(e) => setAdminEditData({
+                        ...adminEditData,
+                        documents: { ...adminEditData.documents, gstNumber: e.target.value }
+                      })}
+                      className="w-full px-3 py-2 border rounded-xl outline-none focus:ring-2 focus:ring-purple-500 uppercase text-sm font-medium"
+                      placeholder="22AAAAA0000A1Z5"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs block text-slate-600 mb-1 font-bold">Business Registration No</label>
+                    <input
+                      type="text"
+                      value={adminEditData.documents.businessRegNo}
+                      onChange={(e) => setAdminEditData({
+                        ...adminEditData,
+                        documents: { ...adminEditData.documents, businessRegNo: e.target.value }
+                      })}
+                      className="w-full px-3 py-2 border rounded-xl outline-none focus:ring-2 focus:ring-purple-500 text-sm font-medium"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs block text-slate-600 mb-1 font-bold">Aadhaar Number</label>
+                    <input
+                      type="text"
+                      value={adminEditData.documents.aadhaar}
+                      onChange={(e) => setAdminEditData({
+                        ...adminEditData,
+                        documents: { ...adminEditData.documents, aadhaar: e.target.value }
+                      })}
+                      className="w-full px-3 py-2 border rounded-xl outline-none focus:ring-2 focus:ring-purple-500 text-sm font-medium"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs block text-slate-600 mb-1 font-bold">PAN Number</label>
+                    <input
+                      type="text"
+                      value={adminEditData.documents.pan}
+                      onChange={(e) => setAdminEditData({
+                        ...adminEditData,
+                        documents: { ...adminEditData.documents, pan: e.target.value }
+                      })}
+                      className="w-full px-3 py-2 border rounded-xl outline-none focus:ring-2 focus:ring-purple-500 uppercase text-sm font-medium"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Bank Payout Account (Admin Editable) */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between border-b pb-1.5">
+                  <h4 className="text-xs uppercase tracking-widest text-purple-700 font-extrabold">Bank Payout Account (Admin Managed)</h4>
+                  <span className="text-[10px] font-bold bg-purple-50 text-purple-700 px-2 py-0.5 rounded-md border border-purple-200">
+                    Admin Exclusive Permission
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs block text-slate-600 mb-1 font-bold">Account Holder</label>
+                    <input
+                      type="text"
+                      value={adminEditData.documents.bankDetails.accountHolder}
+                      onChange={(e) => setAdminEditData({
+                        ...adminEditData,
+                        documents: {
+                          ...adminEditData.documents,
+                          bankDetails: { ...adminEditData.documents.bankDetails, accountHolder: e.target.value }
+                        }
+                      })}
+                      className="w-full px-3 py-2 border rounded-xl outline-none focus:ring-2 focus:ring-purple-500 text-sm font-medium"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs block text-slate-600 mb-1 font-bold">Bank Name</label>
+                    <input
+                      type="text"
+                      value={adminEditData.documents.bankDetails.bankName}
+                      onChange={(e) => setAdminEditData({
+                        ...adminEditData,
+                        documents: {
+                          ...adminEditData.documents,
+                          bankDetails: { ...adminEditData.documents.bankDetails, bankName: e.target.value }
+                        }
+                      })}
+                      className="w-full px-3 py-2 border rounded-xl outline-none focus:ring-2 focus:ring-purple-500 text-sm font-medium"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs block text-slate-600 mb-1 font-bold">Account Number</label>
+                    <input
+                      type="text"
+                      value={adminEditData.documents.bankDetails.accountNumber}
+                      onChange={(e) => setAdminEditData({
+                        ...adminEditData,
+                        documents: {
+                          ...adminEditData.documents,
+                          bankDetails: { ...adminEditData.documents.bankDetails, accountNumber: e.target.value }
+                        }
+                      })}
+                      className="w-full px-3 py-2 border rounded-xl outline-none focus:ring-2 focus:ring-purple-500 text-sm font-medium"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs block text-slate-600 mb-1 font-bold">IFSC Code</label>
+                    <input
+                      type="text"
+                      value={adminEditData.documents.bankDetails.ifsc}
+                      onChange={(e) => setAdminEditData({
+                        ...adminEditData,
+                        documents: {
+                          ...adminEditData.documents,
+                          bankDetails: { ...adminEditData.documents.bankDetails, ifsc: e.target.value }
+                        }
+                      })}
+                      className="w-full px-3 py-2 border rounded-xl outline-none focus:ring-2 focus:ring-purple-500 uppercase text-sm font-medium"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex gap-3 pt-4 border-t justify-end shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setShowAdminEditModal(false)}
+                  className="px-5 py-2.5 border rounded-xl hover:bg-slate-50 font-bold transition cursor-pointer text-sm"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={adminEditSaving}
+                  className="px-6 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-bold transition shadow-md disabled:bg-slate-300 cursor-pointer text-sm"
+                >
+                  {adminEditSaving ? "Saving Changes..." : "Save All Changes"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
     </div>
   );

@@ -1,6 +1,17 @@
 import axios from "axios";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+const API_URL = import.meta.env.VITE_API_URL;
+
+const getAuthHeaders = () => {
+  const token =
+    localStorage.getItem("adminToken") ||
+    localStorage.getItem("vendorToken") ||
+    localStorage.getItem("userToken") ||
+    localStorage.getItem("deliveryBoyToken") ||
+    localStorage.getItem("token");
+
+  return token ? { Authorization: `Bearer ${token}` } : {};
+};
 
 /**
  * Uploads a single file to Cloudinary via the backend proxy.
@@ -16,6 +27,7 @@ export const uploadFile = async (file, folder = "general") => {
   const response = await axios.post(`${API_URL}/upload`, formData, {
     headers: {
       "Content-Type": "multipart/form-data",
+      ...getAuthHeaders(),
     },
   });
 
@@ -28,9 +40,11 @@ export const uploadFile = async (file, folder = "general") => {
  * @returns {Promise<any>}
  */
 export const deleteFile = async (publicId) => {
-  const response = await axios.post(`${API_URL}/upload/delete`, {
-    public_id: publicId,
-  });
+  const response = await axios.post(
+    `${API_URL}/upload/delete`,
+    { public_id: publicId },
+    { headers: getAuthHeaders() }
+  );
 
   return response.data;
 };

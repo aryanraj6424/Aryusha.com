@@ -4,6 +4,7 @@ import VendorProtectedRoute from "../components/VendorProtectedRoute";
 // Lazy load components for better performance
 const VendorDashboard = lazy(() => import("../pages/dashboard/VendorDashboard"));
 const ProductList = lazy(() => import("../pages/products/ProductList"));
+const VendorTopSelling = lazy(() => import("../pages/products/VendorTopSelling"));
 const AddProduct = lazy(() => import("../pages/products/AddProduct"));
 const EditProduct = lazy(() => import("../pages/products/EditProduct"));
 const ManageVariants = lazy(() => import("../pages/products/ManageVariants"));
@@ -44,6 +45,14 @@ const vendorRoutes = [
     element: (
       <VendorProtectedRoute>
         <VendorDashboard />
+      </VendorProtectedRoute>
+    ),
+  },
+  {
+    path: "/vendor/top-selling",
+    element: (
+      <VendorProtectedRoute>
+        <VendorTopSelling />
       </VendorProtectedRoute>
     ),
   },

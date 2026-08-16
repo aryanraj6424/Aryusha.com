@@ -12,6 +12,7 @@ export default function EditProductFamily() {
   const [categories, setCategories] = useState([]);
   const [subCategories, setSubCategories] = useState([]);
   const [brands, setBrands] = useState([]);
+  const [units, setUnits] = useState([]);
 
   const [formData, setFormData] = useState({
     categoryId: "",
@@ -98,17 +99,19 @@ export default function EditProductFamily() {
         const token = localStorage.getItem("adminToken") || localStorage.getItem("vendorToken");
         const headers = { Authorization: `Bearer ${token}` };
         
-        const [familyRes, catsRes, subCatsRes, brandsRes] = await Promise.all([
+        const [familyRes, catsRes, subCatsRes, brandsRes, unitsRes] = await Promise.all([
           axios.get(`${import.meta.env.VITE_API_URL}/product-families/${id}`, { headers }),
           axios.get(`${import.meta.env.VITE_API_URL}/categories`),
           axios.get(`${import.meta.env.VITE_API_URL}/sub-categories`),
-          axios.get(`${import.meta.env.VITE_API_URL}/brands`)
+          axios.get(`${import.meta.env.VITE_API_URL}/brands`),
+          axios.get(`${import.meta.env.VITE_API_URL}/admin/units/all`, { headers }).catch(() => ({ data: {} }))
         ]);
 
         const fam = familyRes.data;
         setCategories(catsRes.data.categories || []);
         setSubCategories(subCatsRes.data.subCategories || []);
         setBrands(brandsRes.data.brands || []);
+        setUnits(unitsRes.data.units || unitsRes.data.data || []);
 
         setFormData({
           categoryId: fam.categoryId?._id || fam.categoryId || "",
@@ -121,6 +124,7 @@ export default function EditProductFamily() {
           status: fam.status === "active" ? "Active" : "Inactive",
           tags: fam.tags ? fam.tags.join(", ") : "",
           unitType: fam.unitType || "weight",
+          unitId: fam.unitId?._id || fam.unitId || "",
           shelfLife: fam.shelfLife || "",
           storageInstructions: fam.storageInstructions || "",
           countryOfOrigin: fam.countryOfOrigin || "India",
@@ -445,6 +449,22 @@ export default function EditProductFamily() {
               <option value="weight">Weight (g, kg)</option>
               <option value="volume">Volume (ml, l)</option>
               <option value="count">Count (pcs, pack)</option>
+            </select>
+          </div>
+          <div>
+            <label className="font-semibold block mb-1 text-sm text-gray-700">Linked Unit Step Presets</label>
+            <select
+              name="unitId"
+              value={formData.unitId || ""}
+              onChange={handleChange}
+              className="w-full mt-1 border rounded-lg p-2.5 bg-white outline-none focus:border-blue-500"
+            >
+              <option value="">None (Custom Free-text Pack Sizes)</option>
+              {units.map((u) => (
+                <option key={u._id} value={u._id}>
+                  {u.name} ({u.shortName}) — {u.stepOptions?.length || 0} Pack Steps
+                </option>
+              ))}
             </select>
           </div>
           <div>

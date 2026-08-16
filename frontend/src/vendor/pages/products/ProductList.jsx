@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { useVendor } from "../../context/VendorContext";
 import {
   Search,
@@ -27,6 +27,7 @@ import ConfirmDialog from "../../../components/Toast/ConfirmDialog";
 
 export default function ProductList() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { hasPermission } = useVendor();
   const fileInputRef = useRef(null);
   const { showToast } = useToast();
@@ -46,12 +47,47 @@ export default function ProductList() {
   const [sortBy, setSortBy] = useState("latest");
   const [selectedProducts, setSelectedProducts] = useState([]);
 
+  useEffect(() => {
+    const savedName = sessionStorage.getItem("vendor_selected_product_name") || location.state?.productName;
+    if (savedName) {
+      setSearchTerm(savedName);
+      sessionStorage.removeItem("vendor_selected_product_name");
+    }
+  }, [location.state]);
+
+  useEffect(() => {
+    const handleProductEvent = (e) => {
+      if (e.detail?.productName) {
+        setSearchTerm(e.detail.productName);
+      }
+    };
+    window.addEventListener("vendor-product-selected", handleProductEvent);
+    return () => window.removeEventListener("vendor-product-selected", handleProductEvent);
+  }, []);
+
   // Details Modal State
   const [viewingProduct, setViewingProduct] = useState(null);
 
   // Linked Listing Edit State
   const [editingLink, setEditingLink] = useState(null);
   const [showLinkEditModal, setShowLinkEditModal] = useState(false);
+  const [linkCommissionInfo, setLinkCommissionInfo] = useState(null);
+
+  useEffect(() => {
+    if (editingLink) {
+      const masterId = editingLink.masterProductId?._id || editingLink.masterProductId || editingLink._id;
+      if (masterId) {
+        const token = localStorage.getItem("vendorToken");
+        axios.get(`${import.meta.env.VITE_API_URL}/vendor/products/${masterId}/commission-preview`, {
+          headers: { Authorization: `Bearer ${token}` }
+        }).then(res => {
+          setLinkCommissionInfo(res.data?.commission || null);
+        }).catch(err => console.error("Error fetching commission preview:", err));
+      }
+    } else {
+      setLinkCommissionInfo(null);
+    }
+  }, [editingLink]);
   const [linkEditForm, setLinkEditForm] = useState({
     price: "",
     stock: "",
@@ -89,6 +125,8 @@ export default function ProductList() {
           sku: link.sku,
           condition: link.condition,
           vendorNotes: link.vendorNotes,
+          coupon_allowed: link.coupon_allowed !== undefined ? link.coupon_allowed : link.masterProductId.coupon_allowed,
+          max_discount_amount: link.max_discount_amount !== undefined && link.max_discount_amount !== null ? link.max_discount_amount : link.masterProductId.max_discount_amount,
           originalVariants: link.masterProductId.variants || [],
           variants: link.masterProductId.variants && link.masterProductId.variants.length > 0
             ? link.masterProductId.variants.map(v => {
@@ -96,7 +134,7 @@ export default function ProductList() {
                 return {
                   variantLabel: v.variantLabel,
                   basePrice: vl?.sellingPrice || link.price,
-                  mrp: v.mrp || link.mrp,
+                  mrp: vl?.mrp || link.mrp || v.mrp,
                   stock: vl?.stock?.quantity || link.stock || 0,
                   sku: link.sku
                 };
@@ -155,6 +193,10 @@ export default function ProductList() {
         sku: p.sku,
         condition: p.condition || "New",
         vendorNotes: p.vendorNotes || "",
+        coupon_allowed: p.coupon_allowed || false,
+        max_discount_amount: p.max_discount_amount !== undefined && p.max_discount_amount !== null ? p.max_discount_amount : "",
+        commissionType: p.commissionType || "inherit",
+        commissionValue: p.commissionValue !== undefined && p.commissionValue !== null ? p.commissionValue : "",
         variants: (p.originalVariants || []).map(v => {
           const vl = v.vendorListings?.[0];
           return {
@@ -162,7 +204,7 @@ export default function ProductList() {
             label: v.variantLabel,
             isAvailable: vl ? !!vl.isAvailable : true,
             sellingPrice: vl?.sellingPrice || "",
-            mrp: vl?.mrp || "",
+            mrp: vl?.mrp || p.mrp || v.mrp || "",
             stock: vl ? (vl.stock?.quantity || 0) : ""
           };
         })
@@ -868,29 +910,31 @@ export default function ProductList() {
 
       {/* ── EDIT LINKED REFERENCE MODAL ── */}
       {showLinkEditModal && editingLink && (
-        <div className="fixed inset-0 bg-slate-900/60 flex items-center justify-center z-50 backdrop-blur-sm">
-          <div className="bg-white rounded-3xl p-6 max-w-md w-full mx-4 shadow-2xl border border-slate-100 font-semibold text-slate-700">
-            <div className="flex justify-between items-center mb-6">
+        <div className="fixed inset-0 bg-slate-900/60 flex items-center justify-center z-50 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-3xl max-h-[90vh] w-full max-w-md shadow-2xl border border-slate-100 font-semibold text-slate-700 flex flex-col overflow-hidden">
+            {/* Modal Header — Sticky / Fixed at top */}
+            <div className="p-5 sm:p-6 border-b border-slate-100 flex justify-between items-center shrink-0 bg-white">
               <h3 className="text-lg font-bold text-slate-800">Edit Listing Details</h3>
               <button
                 onClick={() => { setShowLinkEditModal(false); setEditingLink(null); }}
-                className="text-slate-400 hover:text-slate-600 bg-slate-50 p-1.5 rounded-full hover:scale-105 transition"
+                className="text-slate-400 hover:text-slate-600 bg-slate-50 p-1.5 rounded-full hover:scale-105 transition cursor-pointer"
               >
                 <X size={16} />
               </button>
             </div>
 
-            <div className="mb-4 bg-slate-50 p-3 rounded-2xl border border-slate-100 flex gap-3">
-              {editingLink.images?.[0] && (
-                <img src={editingLink.images[0]} alt="" className="w-10 h-10 object-cover rounded-xl border border-slate-200" />
-              )}
-              <div className="min-w-0">
-                <h4 className="font-bold text-slate-800 truncate text-sm">{editingLink.name}</h4>
-                <p className="text-xs text-slate-450 font-medium">Brand: {editingLink.brand || "Generic"}</p>
+            {/* Modal Body — Internal Vertical Scrolling */}
+            <div className="p-5 sm:p-6 overflow-y-auto flex-1 space-y-4">
+              <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100 flex gap-3">
+                {editingLink.images?.[0] && (
+                  <img src={editingLink.images[0]} alt="" className="w-10 h-10 object-cover rounded-xl border border-slate-200 shrink-0" />
+                )}
+                <div className="min-w-0">
+                  <h4 className="font-bold text-slate-800 truncate text-sm">{editingLink.name}</h4>
+                  <p className="text-xs text-slate-450 font-medium">Brand: {editingLink.brand || "Generic"}</p>
+                </div>
               </div>
-            </div>
 
-            <div className="space-y-4">
               <div>
                 <label className="block text-xs uppercase tracking-wider text-slate-400 mb-2">MRP (Original Price) (optional)</label>
                 <input
@@ -929,6 +973,60 @@ export default function ProductList() {
                 />
               </div>
 
+              {/* Role-Based Commission Section */}
+              {Boolean(localStorage.getItem("adminToken")) ? (
+                <div className="p-4 border rounded-2xl bg-purple-50/40 border-purple-200 space-y-3 col-span-1 sm:col-span-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className="text-xs font-bold text-purple-900 uppercase tracking-wider block">Listing Commission Override (Admin Only)</span>
+                      <span className="text-[11px] text-slate-500 font-medium">
+                        Set custom commission for this specific listing. If unset, falls back to: <strong className="text-purple-700">{linkCommissionInfo ? linkCommissionInfo.displayText : "Platform default"}</strong>
+                      </span>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+                    <div>
+                      <label className="block text-xs uppercase tracking-wider text-slate-500 mb-1.5 font-bold">Commission Type</label>
+                      <select
+                        value={linkEditForm.commissionType}
+                        onChange={(e) => setLinkEditForm({ ...linkEditForm, commissionType: e.target.value })}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:outline-none bg-white text-sm font-semibold"
+                      >
+                        <option value="inherit">Inherit (Use Resolved Fallback Rate)</option>
+                        <option value="percentage">Percentage (%)</option>
+                        <option value="flat">Flat Rate (Fixed ₹ per order)</option>
+                      </select>
+                    </div>
+                    {linkEditForm.commissionType !== "inherit" && (
+                      <div>
+                        <label className="block text-xs uppercase tracking-wider text-slate-500 mb-1.5 font-bold">
+                          Custom Value {linkEditForm.commissionType === "percentage" ? "(%)" : "(₹)"}
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="any"
+                          value={linkEditForm.commissionValue}
+                          onChange={(e) => setLinkEditForm({ ...linkEditForm, commissionValue: e.target.value })}
+                          placeholder={linkEditForm.commissionType === "percentage" ? "e.g. 5" : "e.g. 20"}
+                          className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:outline-none bg-white text-sm font-semibold"
+                        />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="p-3.5 border rounded-xl bg-purple-50/70 border-purple-150 flex items-center justify-between col-span-1 sm:col-span-3">
+                  <div>
+                    <span className="text-xs font-bold text-slate-800 block">Platform Commission</span>
+                    <span className="text-[11px] text-slate-500 font-medium">Read-only platform rate applied to sales</span>
+                  </div>
+                  <span className="text-xs font-extrabold text-purple-700 bg-white px-3 py-1.5 rounded-lg border border-purple-200 shadow-sm">
+                    {linkCommissionInfo ? linkCommissionInfo.displayText : "Loading..."}
+                  </span>
+                </div>
+              )}
+
               <div>
                 <label className="block text-xs uppercase tracking-wider text-slate-400 mb-2">Your Store SKU *</label>
                 <input
@@ -944,7 +1042,7 @@ export default function ProductList() {
                 <select
                   value={linkEditForm.condition}
                   onChange={(e) => setLinkEditForm({ ...linkEditForm, condition: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:outline-none bg-white font-semibold text-slate-750"
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:outline-none bg-white font-semibold text-slate-750 cursor-pointer"
                 >
                   <option value="New">New / Fresh</option>
                   <option value="Refurbished">Refurbished</option>
@@ -962,10 +1060,61 @@ export default function ProductList() {
                 />
               </div>
 
+              {/* Coupon Settings */}
+              <div className="p-3.5 border rounded-xl bg-slate-50 space-y-3">
+                <h4 className="font-bold text-slate-800 text-xs uppercase tracking-wider">Coupon Settings</h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] uppercase tracking-wider text-slate-500 mb-1 font-bold">
+                      Coupon Applicable? *
+                    </label>
+                    <div className="flex gap-4 items-center h-9">
+                      <label className="flex items-center gap-1.5 cursor-pointer font-bold text-xs">
+                        <input
+                          type="radio"
+                          name="modal_coupon_allowed"
+                          checked={linkEditForm.coupon_allowed === true || linkEditForm.coupon_allowed === "true"}
+                          onChange={() => setLinkEditForm({ ...linkEditForm, coupon_allowed: true })}
+                          className="accent-purple-600"
+                        />
+                        Yes
+                      </label>
+                      <label className="flex items-center gap-1.5 cursor-pointer font-bold text-xs">
+                        <input
+                          type="radio"
+                          name="modal_coupon_allowed"
+                          checked={linkEditForm.coupon_allowed === false || linkEditForm.coupon_allowed === "false" || !linkEditForm.coupon_allowed}
+                          onChange={() => setLinkEditForm({ ...linkEditForm, coupon_allowed: false, max_discount_amount: "" })}
+                          className="accent-purple-600"
+                        />
+                        No
+                      </label>
+                    </div>
+                  </div>
+
+                  {(linkEditForm.coupon_allowed === true || linkEditForm.coupon_allowed === "true") && (
+                    <div>
+                      <label className="block text-[11px] uppercase tracking-wider text-slate-500 mb-1 font-bold">
+                        Max discount allowed on this product (₹) *
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="any"
+                        value={linkEditForm.max_discount_amount !== undefined && linkEditForm.max_discount_amount !== null ? linkEditForm.max_discount_amount : ""}
+                        onChange={(e) => setLinkEditForm({ ...linkEditForm, max_discount_amount: e.target.value })}
+                        placeholder="e.g. 50"
+                        className="w-full px-3 py-1.5 border rounded-xl focus:ring-2 focus:ring-purple-500 outline-none font-semibold text-xs bg-white"
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+
               {linkEditForm.variants && linkEditForm.variants.length > 0 && (
                 <div className="space-y-4 pt-4 border-t border-slate-100">
                   <h3 className="font-bold text-slate-800 text-sm">Available Variants</h3>
-                  <div className="max-h-60 overflow-y-auto space-y-3">
+                  <div className="space-y-3">
                     {linkEditForm.variants.map((v, idx) => (
                       <div key={v.variantId} className="flex flex-col gap-2 p-3 border rounded-xl bg-slate-50 items-start shadow-sm">
                         <div className="flex items-center gap-2 w-full">
@@ -977,45 +1126,54 @@ export default function ProductList() {
                               newV[idx].isAvailable = e.target.checked;
                               setLinkEditForm({ ...linkEditForm, variants: newV });
                             }}
-                            className="w-4 h-4 accent-purple-600 rounded cursor-pointer"
+                            className="w-4 h-4 accent-purple-600 rounded cursor-pointer shrink-0"
                           />
                           <span className="font-bold text-slate-800 text-sm">{v.label}</span>
                         </div>
                         {v.isAvailable && (
-                          <div className="grid grid-cols-3 gap-2 w-full pl-6">
-                            <input 
-                              type="number" 
-                              placeholder="Price" 
-                              value={v.sellingPrice} 
-                              onChange={(e) => {
-                                const newV = [...linkEditForm.variants];
-                                newV[idx].sellingPrice = e.target.value;
-                                setLinkEditForm({ ...linkEditForm, variants: newV });
-                              }} 
-                              className="px-2 py-1.5 border rounded-lg text-xs w-full focus:ring-2 focus:ring-purple-500 focus:outline-none"
-                            />
-                            <input 
-                              type="number" 
-                              placeholder="MRP" 
-                              value={v.mrp} 
-                              onChange={(e) => {
-                                const newV = [...linkEditForm.variants];
-                                newV[idx].mrp = e.target.value;
-                                setLinkEditForm({ ...linkEditForm, variants: newV });
-                              }} 
-                              className="px-2 py-1.5 border rounded-lg text-xs w-full focus:ring-2 focus:ring-purple-500 focus:outline-none"
-                            />
-                            <input 
-                              type="number" 
-                              placeholder="Stock" 
-                              value={v.stock} 
-                              onChange={(e) => {
-                                const newV = [...linkEditForm.variants];
-                                newV[idx].stock = e.target.value;
-                                setLinkEditForm({ ...linkEditForm, variants: newV });
-                              }} 
-                              className="px-2 py-1.5 border rounded-lg text-xs w-full focus:ring-2 focus:ring-purple-500 focus:outline-none"
-                            />
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 w-full pl-2 sm:pl-6">
+                            <div>
+                              <label className="block text-[10px] text-slate-400 font-bold mb-1 uppercase sm:hidden">Price</label>
+                              <input 
+                                type="number" 
+                                placeholder="Price" 
+                                value={v.sellingPrice} 
+                                onChange={(e) => {
+                                  const newV = [...linkEditForm.variants];
+                                  newV[idx].sellingPrice = e.target.value;
+                                  setLinkEditForm({ ...linkEditForm, variants: newV });
+                                }} 
+                                className="px-2.5 py-1.5 border rounded-lg text-xs w-full focus:ring-2 focus:ring-purple-500 focus:outline-none font-semibold text-slate-700"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[10px] text-slate-400 font-bold mb-1 uppercase sm:hidden">MRP</label>
+                              <input 
+                                type="number" 
+                                placeholder="MRP" 
+                                value={v.mrp} 
+                                onChange={(e) => {
+                                  const newV = [...linkEditForm.variants];
+                                  newV[idx].mrp = e.target.value;
+                                  setLinkEditForm({ ...linkEditForm, variants: newV });
+                                }} 
+                                className="px-2.5 py-1.5 border rounded-lg text-xs w-full focus:ring-2 focus:ring-purple-500 focus:outline-none font-semibold text-slate-700"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[10px] text-slate-400 font-bold mb-1 uppercase sm:hidden">Stock</label>
+                              <input 
+                                type="number" 
+                                placeholder="Stock" 
+                                value={v.stock} 
+                                onChange={(e) => {
+                                  const newV = [...linkEditForm.variants];
+                                  newV[idx].stock = e.target.value;
+                                  setLinkEditForm({ ...linkEditForm, variants: newV });
+                                }} 
+                                className="px-2.5 py-1.5 border rounded-lg text-xs w-full focus:ring-2 focus:ring-purple-500 focus:outline-none font-semibold text-slate-700"
+                              />
+                            </div>
                           </div>
                         )}
                       </div>
@@ -1023,62 +1181,67 @@ export default function ProductList() {
                   </div>
                 </div>
               )}
+            </div>
 
-              <div className="flex gap-3 pt-4 border-t border-slate-100 font-bold">
-                <button
-                  type="button"
-                  onClick={() => { setShowLinkEditModal(false); setEditingLink(null); }}
-                  className="flex-1 py-2.5 border border-slate-350 text-slate-750 rounded-xl text-sm hover:bg-slate-50 transition"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={async () => {
-                    if (!linkEditForm.price || Number(linkEditForm.price) <= 0) {
-                      showToast({ type: "warning", message: "Please enter a valid price." });
-                      return;
-                    }
-                    if (linkEditForm.mrp && Number(linkEditForm.mrp) <= 0) {
-                      showToast({ type: "warning", message: "MRP must be greater than 0 if specified." });
-                      return;
-                    }
-                    if (linkEditForm.mrp && Number(linkEditForm.price) > Number(linkEditForm.mrp)) {
-                      showToast({ type: "warning", message: "Selling price cannot exceed MRP." });
-                      return;
-                    }
-                    try {
-                      setLoading(true);
-                      await updateLinkedProduct(editingLink.linkId, {
-                        price: Number(linkEditForm.price),
-                        mrp: linkEditForm.mrp ? Number(linkEditForm.mrp) : null,
-                        stock: Number(linkEditForm.stock || 0),
-                        sku: linkEditForm.sku.trim(),
-                        condition: linkEditForm.condition,
-                        vendorNotes: linkEditForm.vendorNotes.trim(),
-                        variants: linkEditForm.variants.filter(v => v.isAvailable).map(v => ({
-                          variantId: v.variantId,
-                          sellingPrice: v.sellingPrice ? Number(v.sellingPrice) : Number(linkEditForm.price),
-                          mrp: v.mrp ? Number(v.mrp) : (linkEditForm.mrp ? Number(linkEditForm.mrp) : null),
-                          stock: v.stock ? Number(v.stock) : Number(linkEditForm.stock || 0),
-                          isAvailable: true
-                        }))
-                      });
-                      setShowLinkEditModal(false);
-                      setEditingLink(null);
-                      showToast({ type: "success", message: "Listing updated successfully!" });
-                      fetchData();
-                    } catch (err) {
-                      console.error(err);
-                      showToast({ type: "error", message: "Failed to update listing." });
-                      setLoading(false);
-                    }
-                  }}
-                  className="flex-1 bg-purple-650 hover:bg-purple-700 text-white py-2.5 rounded-xl transition flex items-center justify-center gap-1 shadow"
-                >
-                  <Check size={14} className="font-bold" /> Save Changes
-                </button>
-              </div>
+            {/* Modal Footer — Sticky / Fixed at bottom */}
+            <div className="p-5 sm:p-6 border-t border-slate-100 flex gap-3 shrink-0 bg-white font-bold">
+              <button
+                type="button"
+                onClick={() => { setShowLinkEditModal(false); setEditingLink(null); }}
+                className="flex-1 py-2.5 border border-slate-350 text-slate-750 rounded-xl text-sm hover:bg-slate-50 transition cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  if (!linkEditForm.price || Number(linkEditForm.price) <= 0) {
+                    showToast({ type: "warning", message: "Please enter a valid price." });
+                    return;
+                  }
+                  if (linkEditForm.mrp && Number(linkEditForm.mrp) <= 0) {
+                    showToast({ type: "warning", message: "MRP must be greater than 0 if specified." });
+                    return;
+                  }
+                  if (linkEditForm.mrp && Number(linkEditForm.price) > Number(linkEditForm.mrp)) {
+                    showToast({ type: "warning", message: "Selling price cannot exceed MRP." });
+                    return;
+                  }
+                  try {
+                    setLoading(true);
+                    await updateLinkedProduct(editingLink.linkId, {
+                      price: Number(linkEditForm.price),
+                      mrp: linkEditForm.mrp ? Number(linkEditForm.mrp) : null,
+                      stock: Number(linkEditForm.stock || 0),
+                      sku: linkEditForm.sku.trim(),
+                      condition: linkEditForm.condition,
+                      vendorNotes: linkEditForm.vendorNotes.trim(),
+                      coupon_allowed: linkEditForm.coupon_allowed,
+                      max_discount_amount: linkEditForm.coupon_allowed && linkEditForm.max_discount_amount ? Number(linkEditForm.max_discount_amount) : null,
+                      commissionType: linkEditForm.commissionType,
+                      commissionValue: linkEditForm.commissionValue !== "" && linkEditForm.commissionValue !== null && linkEditForm.commissionValue !== undefined ? Number(linkEditForm.commissionValue) : null,
+                      variants: linkEditForm.variants.filter(v => v.isAvailable).map(v => ({
+                        variantId: v.variantId,
+                        sellingPrice: v.sellingPrice ? Number(v.sellingPrice) : Number(linkEditForm.price),
+                        mrp: v.mrp ? Number(v.mrp) : (linkEditForm.mrp ? Number(linkEditForm.mrp) : null),
+                        stock: v.stock ? Number(v.stock) : Number(linkEditForm.stock || 0),
+                        isAvailable: true
+                      }))
+                    });
+                    setShowLinkEditModal(false);
+                    setEditingLink(null);
+                    showToast({ type: "success", message: "Listing updated successfully!" });
+                    fetchData();
+                  } catch (err) {
+                    console.error(err);
+                    showToast({ type: "error", message: "Failed to update listing." });
+                    setLoading(false);
+                  }
+                }}
+                className="flex-1 bg-purple-600 hover:bg-purple-700 text-white py-2.5 rounded-xl transition flex items-center justify-center gap-1 shadow cursor-pointer"
+              >
+                <Check size={14} className="font-bold" /> Save Changes
+              </button>
             </div>
           </div>
         </div>

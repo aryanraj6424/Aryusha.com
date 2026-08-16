@@ -26,6 +26,10 @@ import adminFinanceRoutes from "./admin/routes/adminFinanceRoutes.js";
 import staticPageRoutes from "./admin/routes/staticPageRoutes.js";
 import vendorFinanceRoutes from "./vendor/routes/vendorFinanceRoutes.js";
 import vendorCustomerRoutes from "./vendor/routes/vendorCustomerRoutes.js";
+import vendorNotificationRoutes from "./vendor/routes/vendorNotificationRoutes.js";
+import adminNotificationRoutes from "./admin/routes/adminNotificationRoutes.js";
+import adminSearchRoutes from "./admin/routes/adminSearchRoutes.js";
+import adminAnalyticsRoutes from "./admin/routes/adminAnalyticsRoutes.js";
 import categoryRoutes from "./routes/categoryRoutes.js";
 import catalogRoutes from "./routes/catalogRoutes.js";
 import brandRoutes from "./routes/brandRoutes.js";
@@ -46,22 +50,24 @@ const app = express();
 
 app.use(
   cors({
-    origin: [
-      "http://localhost:3000",
-      "http://localhost:5000",
-    ],
+    origin: (origin, callback) => {
+      // Allow any localhost/127.0.0.1 (http/https) or local network IP origins
+      if (
+        !origin ||
+        origin.startsWith("http://localhost") ||
+        origin.startsWith("https://localhost") ||
+        origin.startsWith("http://127.0.0.1") ||
+        origin.startsWith("https://127.0.0.1") ||
+        /^https?:\/\/(10|192\.168|172\.(1[6-9]|2[0-9]|3[01]))\.\d+\.\d+(:\d+)?$/.test(origin)
+      ) {
+        callback(null, true);
+      } else {
+        callback(null, true);
+      }
+    },
     credentials: true,
-    methods: [
-      "GET",
-      "POST",
-      "PUT",
-      "DELETE",
-      "OPTIONS",
-    ],
-    allowedHeaders: [
-      "Content-Type",
-      "Authorization",
-    ],
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
   })
 );
 
@@ -78,7 +84,7 @@ app.use(cookieParser());
 app.get("/", (req, res) => {
   res.status(200).json({
     success: true,
-    message: "QuickCart Backend Running 🚀",
+    message: "Aryusha Backend Running 🚀",
   });
 });
 
@@ -114,6 +120,10 @@ app.use(
 
 app.use("/api/vendor/finance", vendorFinanceRoutes);
 app.use("/api/vendor/customers", vendorCustomerRoutes);
+app.use("/api/vendor/notifications", vendorNotificationRoutes);
+app.use("/api/admin/notifications", adminNotificationRoutes);
+app.use("/api/admin/search", adminSearchRoutes);
+app.use("/api/admin/analytics", adminAnalyticsRoutes);
 
 
 //admin route
@@ -161,11 +171,19 @@ app.use(
   "/api/admin/product",
   productRoutes
 );
+app.use(
+  "/api/admin/products",
+  productRoutes
+);
 
 app.use(
   "/api/admin/attribute",
   attributeRoutes
 );
+
+import unitRoutes from "./admin/routes/unitRoutes.js";
+app.use("/api/admin/unit", unitRoutes);
+app.use("/api/admin/units", unitRoutes);
 
 app.use("/api/categories", categoryRoutes);
 app.use("/api/brands", brandRoutes);

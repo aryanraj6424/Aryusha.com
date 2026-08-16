@@ -7,6 +7,12 @@ import DOMPurify from "dompurify";
 import useProductVariant from "../hooks/useProductVariant";
 import SEO from "../../components/SEO";
 
+const formatDescriptionHtml = (rawHtml) => {
+  if (!rawHtml) return "No description provided for this product.";
+  const cleanHtml = rawHtml.replace(/&nbsp;|\u00a0/g, " ");
+  return DOMPurify.sanitize(cleanHtml);
+};
+
 export default function ProductDetailsPage() {
   const { id, slug } = useParams();
   const targetParam = slug || id;
@@ -181,7 +187,7 @@ export default function ProductDetailsPage() {
 
             <button
               type="submit"
-              className="bg-[#6B21D9] hover:bg-[#5B18C2] text-white font-extrabold text-xs px-5 py-2.5 rounded-xl transition cursor-pointer shadow-sm active:scale-[0.98]"
+              className="bg-[#0B2214] hover:bg-[#153e25] text-white font-extrabold text-xs px-5 py-2.5 rounded-xl transition cursor-pointer shadow-sm active:scale-[0.98]"
             >
               Submit Rating
             </button>
@@ -191,7 +197,7 @@ export default function ProductDetailsPage() {
             <p className="text-xs text-slate-500 font-bold mb-2">You must be logged in to rate this product.</p>
             <Link
               to="/customer/login"
-              className="inline-block bg-[#6B21D9] hover:bg-[#5B18C2] text-white font-extrabold text-xs px-4 py-2 rounded-xl transition cursor-pointer"
+              className="inline-block bg-[#0B2214] hover:bg-[#153e25] text-white font-extrabold text-xs px-4 py-2 rounded-xl transition cursor-pointer"
             >
               Log In
             </Link>
@@ -576,7 +582,7 @@ export default function ProductDetailsPage() {
 
           {/* Carousel dots indicator overlay */}
           <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5 z-10">
-            <span className="w-4 h-1.5 rounded-full bg-[#6B21D9]" />
+            <span className="w-4 h-1.5 rounded-full bg-[#0B2214]" />
             <span className="w-1.5 h-1.5 rounded-full bg-slate-300" />
             <span className="w-1.5 h-1.5 rounded-full bg-slate-300" />
           </div>
@@ -658,7 +664,7 @@ export default function ProductDetailsPage() {
                   onClick={() => handleVariantChange(v)}
                   className={`px-3 py-1.5 rounded-xl border text-xs font-black transition ${
                     selectedVariant?._id === v._id
-                      ? "border-purple-600 bg-purple-50 text-[#6B21D9] shadow-sm"
+                      ? "border-purple-600 bg-purple-50 text-[#0B2214] shadow-sm"
                       : "border-slate-200 text-slate-650 hover:border-slate-300 hover:bg-slate-50"
                   }`}
                 >
@@ -686,19 +692,36 @@ export default function ProductDetailsPage() {
           </div>
           <button
             onClick={() => navigate("/customer/location")}
-            className="text-[#6B21D9] font-black text-xs hover:underline flex-shrink-0 cursor-pointer"
+            className="text-[#0B2214] font-black text-xs hover:underline flex-shrink-0 cursor-pointer"
           >
             Change
           </button>
         </div>
-        {/* Scoped CSS Styles for mobile product description rendering */}
+        {/* Scoped CSS Styles for mobile & desktop product description rendering */}
         <style>{`
-          .mobile-product-description p {
+          .mobile-product-description,
+          .desktop-product-description {
+            overflow-wrap: break-word;
+            word-break: normal;
+            white-space: normal;
+          }
+          .mobile-product-description p,
+          .desktop-product-description p {
             margin-bottom: 0.5rem;
             line-height: 1.6;
             color: #4b5563;
+            overflow-wrap: break-word;
+            word-break: normal;
+            white-space: normal;
           }
-          .mobile-product-description strong {
+          .mobile-product-description span,
+          .desktop-product-description span {
+            overflow-wrap: break-word;
+            word-break: normal;
+            white-space: normal;
+          }
+          .mobile-product-description strong,
+          .desktop-product-description strong {
             display: block;
             font-weight: 800;
             color: #1f2937;
@@ -707,18 +730,27 @@ export default function ProductDetailsPage() {
             font-size: 0.8rem;
             border-bottom: 1px solid #f3f4f6;
             padding-bottom: 0.15rem;
+            overflow-wrap: break-word;
+            word-break: normal;
+            white-space: normal;
           }
-          .mobile-product-description strong:first-of-type {
+          .mobile-product-description strong:first-of-type,
+          .desktop-product-description strong:first-of-type {
             margin-top: 0.15rem;
           }
-          .mobile-product-description ul, .mobile-product-description ol {
+          .mobile-product-description ul, .mobile-product-description ol,
+          .desktop-product-description ul, .desktop-product-description ol {
             margin-bottom: 0.5rem;
             padding-left: 1rem;
             list-style-type: disc;
           }
-          .mobile-product-description li {
+          .mobile-product-description li,
+          .desktop-product-description li {
             margin-bottom: 0.2rem;
             color: #4b5563;
+            overflow-wrap: break-word;
+            word-break: normal;
+            white-space: normal;
           }
         `}</style>
 
@@ -736,10 +768,10 @@ export default function ProductDetailsPage() {
             </span>
           </button>
           
-          <div className={`overflow-hidden transition-all duration-300 text-slate-655 text-xs leading-relaxed font-medium break-words ${
-            descExpanded ? "max-h-[1000px] opacity-100 mt-2" : "max-h-0 opacity-0"
+          <div className={`overflow-hidden transition-all duration-300 text-slate-655 text-xs leading-relaxed font-medium [overflow-wrap:break-word] [word-break:normal] whitespace-normal ${
+            descExpanded ? "max-h-[2000px] opacity-100 mt-2" : "max-h-0 opacity-0"
           }`}>
-            <div className="mobile-product-description" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(product.description || "No description provided for this product.") }} />
+            <div className="mobile-product-description" dangerouslySetInnerHTML={{ __html: formatDescriptionHtml(product.description) }} />
             {family?.shortDescription && <p className="text-slate-500 italic mt-2 font-semibold">Note: {family.shortDescription}</p>}
           </div>
         </div>
@@ -757,6 +789,14 @@ export default function ProductDetailsPage() {
                 {product.isReturnable ? "Yes" : "No"}
               </span>
             </div>
+            {(selectedVariant?.barcode || product.variants?.[0]?.barcode) && (
+              <div className="py-2.5 flex justify-between">
+                <span className="text-slate-400">EAN Code</span>
+                <span className="text-slate-700 font-mono font-extrabold text-right">
+                  {selectedVariant?.barcode || product.variants?.[0]?.barcode}
+                </span>
+              </div>
+            )}
             {family?.shelfLife && (
               <div className="py-2.5 flex justify-between">
                 <span className="text-slate-400">Shelf Life</span>
@@ -837,14 +877,14 @@ export default function ProductDetailsPage() {
               <div className="flex items-center justify-between bg-purple-50 border border-purple-200 rounded-xl overflow-hidden shadow-sm h-10 w-full">
                 <button
                   onClick={() => handleDecrementCart()}
-                  className="h-full w-10 flex-shrink-0 hover:bg-purple-100 text-[#6B21D9] font-black transition flex items-center justify-center cursor-pointer"
+                  className="h-full w-10 flex-shrink-0 hover:bg-purple-100 text-[#0B2214] font-black transition flex items-center justify-center cursor-pointer"
                 >
                   <Minus size={14} />
                 </button>
                 <span className="text-xs font-black text-purple-800 flex-1 text-center select-none">{cartQty}</span>
                 <button
                   onClick={() => handleAddToCart(1)}
-                  className="h-full w-10 flex-shrink-0 hover:bg-purple-100 text-[#6B21D9] font-black transition flex items-center justify-center cursor-pointer"
+                  className="h-full w-10 flex-shrink-0 hover:bg-purple-100 text-[#0B2214] font-black transition flex items-center justify-center cursor-pointer"
                 >
                   <Plus size={14} />
                 </button>
@@ -852,7 +892,7 @@ export default function ProductDetailsPage() {
             ) : (
               <button
                 onClick={() => handleAddToCart(qty)}
-                className="w-full py-2.5 bg-[#6B21D9] hover:bg-[#5B18C2] active:scale-[0.98] text-white font-black rounded-xl text-xs flex items-center justify-center gap-1.5 h-10 transition cursor-pointer"
+                className="w-full py-2.5 bg-[#0B2214] hover:bg-[#153e25] active:scale-[0.98] text-white font-black rounded-xl text-xs flex items-center justify-center gap-1.5 h-10 transition cursor-pointer"
               >
                 <ShoppingCart size={14} className="stroke-[2.5]" /> Add to Cart
               </button>
@@ -1128,8 +1168,8 @@ export default function ProductDetailsPage() {
               }`}
             >
               <div 
-                className="text-slate-600 text-sm leading-relaxed font-medium whitespace-pre-wrap break-words overflow-hidden"
-                dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(product.description || "No description provided for this product.") }}
+                className="desktop-product-description text-slate-600 text-sm leading-relaxed font-medium whitespace-normal [overflow-wrap:break-word] [word-break:normal] overflow-hidden"
+                dangerouslySetInnerHTML={{ __html: formatDescriptionHtml(product.description) }}
               />
               {family?.shortDescription && (
                 <p className="text-slate-500 text-xs italic font-semibold mt-2">
@@ -1158,6 +1198,14 @@ export default function ProductDetailsPage() {
                   {product.isReturnable ? "Yes" : "No"}
                 </span>
               </div>
+              {(selectedVariant?.barcode || product.variants?.[0]?.barcode) && (
+                <div className="py-2.5 flex justify-between">
+                  <span className="text-slate-400">EAN Code</span>
+                  <span className="text-slate-700 font-mono font-extrabold text-right">
+                    {selectedVariant?.barcode || product.variants?.[0]?.barcode}
+                  </span>
+                </div>
+              )}
               {family?.shelfLife && (
                 <div className="py-2.5 flex justify-between">
                   <span className="text-slate-400">Shelf Life</span>
@@ -1339,7 +1387,7 @@ function ProductCard({ product }) {
       <div>
         {/* Price details */}
         <div className="flex items-baseline gap-1.5 mb-2">
-          <span className="text-[#6B21D9] font-black text-sm sm:text-base">
+          <span className="text-[#0B2214] font-black text-sm sm:text-base">
             ₹{displayPrice}
           </span>
           {displayMrp > displayPrice && (
@@ -1358,7 +1406,7 @@ function ProductCard({ product }) {
                 onClick={() => handleVariantChange(v)}
                 className={`flex-shrink-0 px-2 py-0.5 text-[9px] font-black rounded-md border transition ${
                   selectedVariant?._id === v._id
-                    ? "border-purple-600 bg-purple-50 text-[#6B21D9]"
+                    ? "border-purple-600 bg-purple-50 text-[#0B2214]"
                     : "border-slate-200 text-slate-500 hover:border-slate-300 hover:bg-slate-50"
                 }`}
               >
@@ -1380,14 +1428,14 @@ function ProductCard({ product }) {
           <div className="flex items-center justify-between bg-purple-50 border border-purple-200 rounded-lg overflow-hidden shadow-sm h-[34px] w-full">
             <button
               onClick={() => handleDecrementCart()}
-              className="h-full w-8 flex-shrink-0 hover:bg-purple-100 text-[#6B21D9] font-black transition flex items-center justify-center cursor-pointer"
+              className="h-full w-8 flex-shrink-0 hover:bg-purple-100 text-[#0B2214] font-black transition flex items-center justify-center cursor-pointer"
             >
               <Minus size={12} />
             </button>
             <span className="text-xs font-black text-purple-800 flex-1 text-center select-none">{cartQty}</span>
             <button
               onClick={() => handleAddToCart(1)}
-              className="h-full w-8 flex-shrink-0 hover:bg-purple-100 text-[#6B21D9] font-black transition flex items-center justify-center cursor-pointer"
+              className="h-full w-8 flex-shrink-0 hover:bg-purple-100 text-[#0B2214] font-black transition flex items-center justify-center cursor-pointer"
             >
               <Plus size={12} />
             </button>
@@ -1395,7 +1443,7 @@ function ProductCard({ product }) {
         ) : (
           <button
             onClick={() => handleAddToCart(1)}
-            className="w-full py-1.5 rounded-lg font-black bg-[#6B21D9] hover:bg-[#5B18C2] text-white shadow-sm transition flex items-center justify-center gap-1 text-[11px] h-[34px] cursor-pointer"
+            className="w-full py-1.5 rounded-lg font-black bg-[#0B2214] hover:bg-[#153e25] text-white shadow-sm transition flex items-center justify-center gap-1 text-[11px] h-[34px] cursor-pointer"
           >
             <ShoppingCart size={11} className="stroke-[2.5]" /> Add
           </button>

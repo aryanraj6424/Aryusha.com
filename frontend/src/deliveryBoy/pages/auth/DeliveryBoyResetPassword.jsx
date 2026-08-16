@@ -61,7 +61,7 @@ export default function DeliveryBoyResetPassword() {
         
         {/* Header */}
         <div className="text-center space-y-2">
-          <div className="w-16 h-16 bg-purple-100 text-[#6d28d9] rounded-2xl flex items-center justify-center mx-auto shadow-inner">
+          <div className="w-16 h-16 bg-purple-100 text-[#0B2214] rounded-2xl flex items-center justify-center mx-auto shadow-inner">
             <Shield size={32} />
           </div>
           <h2 className="text-2xl font-black text-slate-800 tracking-tight">Set New Password</h2>
@@ -110,7 +110,7 @@ export default function DeliveryBoyResetPassword() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-4 bg-[#6d28d9] hover:bg-[#5b21b6] text-white rounded-2xl font-bold transition shadow-lg shadow-purple-200 flex items-center justify-center gap-2 cursor-pointer"
+            className="w-full py-4 bg-[#0B2214] hover:bg-[#153e25] text-white rounded-2xl font-bold transition shadow-lg shadow-purple-200 flex items-center justify-center gap-2 cursor-pointer"
           >
             {loading ? "Saving..." : "Save Password"} <CheckSquare size={18} />
           </button>

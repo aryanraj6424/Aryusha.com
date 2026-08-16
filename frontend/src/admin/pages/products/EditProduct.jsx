@@ -104,7 +104,7 @@ export default function EditProduct() {
         subCategoryId: form.subCategoryId,
         familyId: form.familyId,
         unitType: form.unitType,
-        description: form.description.trim(),
+        description: form.description.replace(/&nbsp;|\u00a0/g, " ").trim(),
         status: form.status,
         isReturnable: form.isReturnable,
         metaTitle: form.metaTitle ? form.metaTitle.trim() : "",

@@ -1,4 +1,4 @@
-import { Product, VendorProduct, VendorListing } from "../../models/catalog.js";
+import { Product, VendorProduct, VendorListing, CommissionChangeHistory } from "../../models/catalog.js";
 
 /**
  * ============================================================================
@@ -15,7 +15,11 @@ import { Product, VendorProduct, VendorListing } from "../../models/catalog.js";
 export const searchMasterProducts = async (req, res) => {
   try {
     const { query } = req.query;
-    const vendorId = req.vendor._id;
+    const vendorId = req.vendor?._id;
+
+    if (!vendorId) {
+      return res.status(400).json({ success: false, message: "vendorId is required" });
+    }
 
     // 1. Get IDs of products already linked to this vendor
     const linkedReferences = await VendorProduct.find({ vendorId })
@@ -65,8 +69,12 @@ export const searchMasterProducts = async (req, res) => {
 // @access  Private/Vendor
 export const createVendorProductReference = async (req, res) => {
   try {
-    const { masterProductId, price, mrp, stock, sku, condition, vendorNotes, variants } = req.body;
-    const vendorId = req.vendor._id;
+    const { masterProductId, price, mrp, stock, sku, condition, vendorNotes, variants, commissionType, commissionValue } = req.body;
+    const vendorId = req.vendor?._id;
+
+    if (!vendorId) {
+      return res.status(400).json({ success: false, message: "vendorId is required" });
+    }
 
     if (!masterProductId || !price || !sku) {
       return res.status(400).json({ success: false, message: "masterProductId, price, and sku are required" });
@@ -88,6 +96,19 @@ export const createVendorProductReference = async (req, res) => {
       return res.status(400).json({ success: false, message: "This product is already linked to your store" });
     }
 
+    const { coupon_allowed, couponAllowed, max_discount_amount, maxDiscountAmount } = req.body;
+    const finalCouponAllowed = coupon_allowed !== undefined ? Boolean(coupon_allowed) : Boolean(couponAllowed);
+    const finalMaxDiscount = max_discount_amount !== undefined ? max_discount_amount : maxDiscountAmount;
+
+    // Process commission override if set by Admin
+    let targetCommType = "inherit";
+    let targetCommVal = null;
+
+    if (req.admin && (commissionType !== undefined || commissionValue !== undefined)) {
+      targetCommType = commissionType || "inherit";
+      targetCommVal = commissionValue !== "" && commissionValue !== null && commissionValue !== undefined ? Number(commissionValue) : null;
+    }
+
     // 3. Create the reference entry
     const link = await VendorProduct.create({
       masterProductId,
@@ -97,8 +118,25 @@ export const createVendorProductReference = async (req, res) => {
       stock: Number(stock || 0),
       sku: sku.trim(),
       condition: condition || "New",
-      vendorNotes: vendorNotes || ""
+      vendorNotes: vendorNotes || "",
+      coupon_allowed: finalCouponAllowed,
+      max_discount_amount: finalMaxDiscount !== "" && finalMaxDiscount !== null && finalMaxDiscount !== undefined ? Number(finalMaxDiscount) : null,
+      commissionType: targetCommType,
+      commissionValue: targetCommVal
     });
+
+    // 4. Audit trail: log if custom commission was assigned by Admin at creation
+    if (req.admin && targetCommType !== "inherit" && targetCommVal !== null) {
+      await CommissionChangeHistory.create({
+        vendorProductId: link._id,
+        previousType: "inherit",
+        previousValue: null,
+        newType: targetCommType,
+        newValue: targetCommVal,
+        changedBy: req.admin._id,
+        changedAt: new Date()
+      });
+    }
 
     if (variants && Array.isArray(variants) && variants.length > 0) {
       const listings = variants.map(v => ({
@@ -134,7 +172,11 @@ export const createVendorProductReference = async (req, res) => {
 // @access  Private/Vendor
 export const getMyLinkedProducts = async (req, res) => {
   try {
-    const vendorId = req.vendor._id;
+    const vendorId = req.vendor?._id;
+    if (!vendorId) {
+      return res.status(400).json({ success: false, message: "vendorId is required" });
+    }
+
     const linked = await VendorProduct.find({ vendorId })
       .populate({
         path: "masterProductId",
@@ -156,15 +198,18 @@ export const getMyLinkedProducts = async (req, res) => {
   }
 };
 
-// @desc    Update linked product details (price, stock, notes)
+// @desc    Update linked product details (price, stock, notes, commission)
 // @route   PUT /api/vendor/products/link/:id
 // @access  Private/Vendor
 export const updateLinkedProductDetails = async (req, res) => {
   try {
-    const { price, mrp, stock, sku, condition, vendorNotes, variants } = req.body;
-    const vendorId = req.vendor._id;
+    const { price, mrp, stock, sku, condition, vendorNotes, variants, commissionType, commissionValue } = req.body;
+    const vendorId = req.vendor?._id;
 
-    const link = await VendorProduct.findOne({ _id: req.params.id, vendorId });
+    const query = { _id: req.params.id };
+    if (vendorId) query.vendorId = vendorId;
+
+    const link = await VendorProduct.findOne(query);
     if (!link) {
       return res.status(404).json({ success: false, message: "Linked product reference not found" });
     }
@@ -183,15 +228,50 @@ export const updateLinkedProductDetails = async (req, res) => {
     if (condition !== undefined) link.condition = condition;
     if (vendorNotes !== undefined) link.vendorNotes = vendorNotes;
 
+    const { coupon_allowed, couponAllowed, max_discount_amount, maxDiscountAmount } = req.body;
+    if (coupon_allowed !== undefined || couponAllowed !== undefined) {
+      link.coupon_allowed = coupon_allowed !== undefined ? Boolean(coupon_allowed) : Boolean(couponAllowed);
+    }
+    if (max_discount_amount !== undefined || maxDiscountAmount !== undefined) {
+      const val = max_discount_amount !== undefined ? max_discount_amount : maxDiscountAmount;
+      link.max_discount_amount = val !== "" && val !== null && val !== undefined ? Number(val) : null;
+    }
+
+    // Admin-only commission update with Change History audit log
+    if (req.admin && (commissionType !== undefined || commissionValue !== undefined)) {
+      const targetType = commissionType || link.commissionType || "inherit";
+      const targetVal = commissionValue !== "" && commissionValue !== null && commissionValue !== undefined ? Number(commissionValue) : null;
+
+      if (link.commissionType !== targetType || link.commissionValue !== targetVal) {
+        const prevType = link.commissionType || "inherit";
+        const prevVal = link.commissionValue;
+
+        link.commissionType = targetType;
+        link.commissionValue = targetVal;
+
+        await CommissionChangeHistory.create({
+          vendorProductId: link._id,
+          previousType: prevType,
+          previousValue: prevVal,
+          newType: targetType,
+          newValue: targetVal,
+          changedBy: req.admin._id,
+          changedAt: new Date()
+        });
+      }
+    }
+
     await link.save();
 
     if (variants && Array.isArray(variants)) {
+      const targetVendorId = vendorId || link.vendorId;
       for (const v of variants) {
         await VendorListing.findOneAndUpdate(
-          { vendorId, variantId: v.variantId },
+          { vendorId: targetVendorId, variantId: v.variantId },
           { 
             $set: { 
               sellingPrice: Number(v.sellingPrice), 
+              mrp: v.mrp ? Number(v.mrp) : null,
               "stock.quantity": Number(v.stock || 0), 
               isAvailable: v.isAvailable !== false 
             } 
@@ -212,8 +292,11 @@ export const updateLinkedProductDetails = async (req, res) => {
 // @access  Private/Vendor
 export const unlinkProductFromStore = async (req, res) => {
   try {
-    const vendorId = req.vendor._id;
-    const link = await VendorProduct.findOne({ _id: req.params.id, vendorId });
+    const vendorId = req.vendor?._id;
+    const query = { _id: req.params.id };
+    if (vendorId) query.vendorId = vendorId;
+
+    const link = await VendorProduct.findOne(query);
     if (!link) {
       return res.status(404).json({ success: false, message: "Linked product reference not found" });
     }
@@ -221,11 +304,47 @@ export const unlinkProductFromStore = async (req, res) => {
     const product = await Product.findById(link.masterProductId).populate("variants");
     if (product && product.variants) {
       const variantIds = product.variants.map(v => v._id);
-      await VendorListing.deleteMany({ vendorId, variantId: { $in: variantIds } });
+      await VendorListing.deleteMany({ vendorId: link.vendorId, variantId: { $in: variantIds } });
     }
 
     await VendorProduct.deleteOne({ _id: req.params.id });
     res.json({ success: true, message: "Product unlinked successfully" });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Get read-only commission preview for a product
+// @route   GET /api/vendor/products/:productId/commission-preview
+// @access  Private
+export const getCommissionPreview = async (req, res) => {
+  try {
+    const { productId } = req.params;
+    const vendorId = req.vendor?._id || req.query.vendorId;
+
+    const { getCommissionPreviewForProduct } = await import("../../utils/commissionCalculator.js");
+    const preview = await getCommissionPreviewForProduct(productId, vendorId);
+
+    res.json({
+      success: true,
+      commission: preview
+    });
+  } catch (error) {
+    console.error("Error fetching commission preview:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Get commission change history for a vendor product listing
+// @route   GET /api/vendor/products/link/:id/history
+// @access  Private
+export const getCommissionHistory = async (req, res) => {
+  try {
+    const history = await CommissionChangeHistory.find({ vendorProductId: req.params.id })
+      .sort({ changedAt: -1 })
+      .populate("changedBy", "name email");
+
+    res.json({ success: true, history });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }

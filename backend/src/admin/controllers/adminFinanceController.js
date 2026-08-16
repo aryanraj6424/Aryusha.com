@@ -78,20 +78,47 @@ export const updateVendorCommissionConfig = async (req, res) => {
   }
 };
 
+// Helper for end-of-day date range parsing
+const parseDateRange = (startDate, endDate) => {
+  const filter = {};
+  if (startDate) filter.$gte = new Date(startDate);
+  if (endDate) {
+    const end = new Date(endDate);
+    end.setHours(23, 59, 59, 999);
+    filter.$lte = end;
+  }
+  return Object.keys(filter).length ? filter : null;
+};
+
 // @desc    Get aggregated financial summary — full waterfall breakdown
 // @route   GET /api/admin/finance/summary
 export const getFinanceSummary = async (req, res) => {
   try {
     const { vendorId, startDate, endDate } = req.query;
 
-    const query = { vendorId: vendorId || null };
-    if (startDate || endDate) {
-      query.date = {};
-      if (startDate) query.date.$gte = new Date(startDate);
-      if (endDate)   query.date.$lte = new Date(endDate);
+    // Auto-sync check: if ledger entries are missing compared to CustomerOrder, trigger backfill
+    const orderCount = await CustomerOrder.countDocuments();
+    const ledgerCount = await CommissionLedger.countDocuments();
+    if (orderCount > 0 && ledgerCount < orderCount) {
+      try {
+        await runBackfillMigration();
+      } catch (e) {
+        console.warn("[getFinanceSummary] Auto-sync backfill warning:", e.message);
+      }
     }
 
-    const summaries = await DailyCommissionSummary.find(query).sort({ date: 1 });
+    const dateFilter = parseDateRange(startDate, endDate);
+    const query = { vendorId: vendorId || null };
+    if (dateFilter) query.date = dateFilter;
+
+    let summaries = await DailyCommissionSummary.find(query).sort({ date: 1 });
+
+    // Fallback: if no platform-wide (vendorId: null) rows exist, aggregate per-vendor rows
+    if (summaries.length === 0 && !vendorId) {
+      const allVendorQuery = { vendorId: { $ne: null } };
+      if (dateFilter) allVendorQuery.date = dateFilter;
+      summaries = await DailyCommissionSummary.find(allVendorQuery).sort({ date: 1 });
+    }
 
     const totalOrders          = summaries.reduce((s, r) => s + r.totalOrders, 0);
     const totalItemSubtotal    = summaries.reduce((s, r) => s + (r.totalItemSubtotal ?? r.totalSalesAmount ?? 0), 0);
@@ -129,13 +156,10 @@ export const getOrderBreakdownList = async (req, res) => {
   try {
     const { vendorId, startDate, endDate, page = 1, limit = 50 } = req.query;
 
+    const dateFilter = parseDateRange(startDate, endDate);
     const query = {};
-    if (vendorId)             query.vendorId  = vendorId;
-    if (startDate || endDate) {
-      query.orderDate = {};
-      if (startDate) query.orderDate.$gte = new Date(startDate);
-      if (endDate)   query.orderDate.$lte = new Date(endDate);
-    }
+    if (vendorId)   query.vendorId = vendorId;
+    if (dateFilter) query.orderDate = dateFilter;
 
     const skip  = (Number(page) - 1) * Number(limit);
     const total = await CommissionLedger.countDocuments(query);

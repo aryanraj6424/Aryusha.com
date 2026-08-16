@@ -15,9 +15,10 @@ export default function VendorResetPassword() {
     e.preventDefault();
 
     const phone = localStorage.getItem("vendorResetPhone");
+    const resetToken = localStorage.getItem("vendorResetToken");
 
-    if (!phone) {
-      showToast({ type: "warning", message: "Session expired. Please try again." });
+    if (!phone || !resetToken) {
+      showToast({ type: "warning", message: "Session expired. Please request OTP again." });
       return navigate("/vendor/forgot-password");
     }
 
@@ -35,12 +36,14 @@ export default function VendorResetPassword() {
       setLoading(true);
 
       const response = await axios.post(
-        `${import.meta.env.VITE_API_URL}/vendor/auth/reset-password`,
-        { phone, newPassword: password }
+        `${import.meta.env.VITE_API_URL}/vendor/auth/forgot-password/reset`,
+        { phone, resetToken, newPassword: password }
       );
 
       if (response.data.success) {
         localStorage.removeItem("vendorResetPhone");
+        localStorage.removeItem("vendorResetToken");
+
         showToast({ type: "success", message: "Password reset successfully!" });
         navigate("/vendor/login");
       }
@@ -57,9 +60,7 @@ export default function VendorResetPassword() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-100 px-4">
-
       <div className="bg-white p-8 rounded-2xl shadow w-full max-w-md">
-
         <h2 className="text-3xl font-bold mb-2 text-center">
           Reset Password
         </h2>
@@ -69,7 +70,6 @@ export default function VendorResetPassword() {
         </p>
 
         <form onSubmit={handleReset} className="space-y-4">
-
           <input
             type="password"
             placeholder="New Password"
@@ -91,15 +91,12 @@ export default function VendorResetPassword() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-purple-600 text-white p-3 rounded-xl hover:bg-purple-700 transition"
+            className="w-full bg-purple-600 text-white p-3 rounded-xl hover:bg-purple-700 transition cursor-pointer disabled:opacity-60 font-semibold"
           >
             {loading ? "Resetting..." : "Reset Password"}
           </button>
-
         </form>
-
       </div>
-
     </div>
   );
 }

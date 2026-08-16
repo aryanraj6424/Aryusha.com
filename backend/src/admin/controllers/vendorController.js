@@ -636,6 +636,7 @@ export const updateVendor = async (req, res) => {
     if (shopType) vendor.shopType = shopType;
     if (businessEmail) vendor.businessEmail = businessEmail;
     if (phone) vendor.phone = phone;
+    if (req.body.whatsapp !== undefined) vendor.whatsapp = req.body.whatsapp;
     if (status) vendor.status = status;
     if (accountStatus) vendor.accountStatus = accountStatus;
 
@@ -643,6 +644,13 @@ export const updateVendor = async (req, res) => {
     if (longitude !== undefined) vendor.longitude = (longitude === null || longitude === "") ? null : Number(longitude);
     if (deliveryRadius !== undefined) vendor.deliveryRadius = (deliveryRadius === null || deliveryRadius === "") ? null : Number(deliveryRadius);
     if (serviceAreas !== undefined) vendor.serviceAreas = serviceAreas;
+
+    if (req.body.address) {
+      vendor.address = {
+        ...(vendor.address || {}),
+        ...req.body.address
+      };
+    }
 
 
 

@@ -122,7 +122,7 @@ export default function EnterOtp() {
             <button 
               type="button" 
               onClick={handleResend}
-              className="text-[#6d28d9] hover:underline uppercase tracking-wider"
+              className="text-[#0B2214] hover:underline uppercase tracking-wider"
             >
               Resend OTP SMS
             </button>

@@ -559,7 +559,8 @@ export const getProductFamilyById = async (req, res) => {
   try {
     const family = await ProductFamily.findOne({ _id: req.params.id, isDeleted: { $ne: true } })
       .populate("categoryId", "name")
-      .populate("subCategoryId", "name");
+      .populate("subCategoryId", "name")
+      .populate("unitId");
     
     if (!family) {
       return res.status(404).json({ message: 'Product family not found' });
@@ -586,6 +587,7 @@ export const createProductFamily = async (req, res) => {
       images,
       tags,
       unitType,
+      unitId,
       shelfLife,
       storageInstructions,
       countryOfOrigin,
@@ -646,6 +648,7 @@ export const createProductFamily = async (req, res) => {
       images: images || [],
       tags: tags || [],
       unitType: unitType || "",
+      unitId: unitId || null,
       shelfLife: shelfLife || "",
       storageInstructions: storageInstructions || "",
       countryOfOrigin: countryOfOrigin || "",
@@ -674,7 +677,8 @@ export const createProductFamily = async (req, res) => {
     const populated = await ProductFamily.findById(family._id)
       .populate("categoryId", "name")
       .populate("subCategoryId", "name")
-      .populate("brandId", "name");
+      .populate("brandId", "name")
+      .populate("unitId");
     res.status(201).json(populated);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -696,6 +700,7 @@ export const updateProductFamily = async (req, res) => {
       images,
       tags,
       unitType,
+      unitId,
       shelfLife,
       storageInstructions,
       countryOfOrigin,
@@ -757,6 +762,7 @@ export const updateProductFamily = async (req, res) => {
     if (fallbackMetaDesc.length > 160) fallbackMetaDesc = fallbackMetaDesc.slice(0, 160);
 
     family.brandId = brandId !== undefined ? (brandId || null) : family.brandId;
+    family.unitId = unitId !== undefined ? (unitId || null) : family.unitId;
     family.description = description !== undefined ? description : family.description;
     family.shortDescription = shortDescription !== undefined ? shortDescription : family.shortDescription;
     family.image = image !== undefined ? image : family.image;
@@ -931,9 +937,9 @@ export const getCustomerProducts = async (req, res) => {
       availability
     } = req.query;
 
-    // 1. Resolve the single nearest vendor covering the location
     let nearestVendor = null;
     let minDistance = Infinity;
+    let servingVendorIds = [];
 
     if (latitude && longitude) {
       const latVal = parseFloat(latitude);
@@ -980,7 +986,8 @@ export const getCustomerProducts = async (req, res) => {
           }
         ]);
 
-        if (nearbyVendors.length > 0) {
+        if (nearbyVendors && nearbyVendors.length > 0) {
+          servingVendorIds = nearbyVendors.map(v => v._id);
           nearestVendor = nearbyVendors[0];
           minDistance = nearbyVendors[0].distanceKm;
         }
@@ -988,7 +995,7 @@ export const getCustomerProducts = async (req, res) => {
     }
 
     // Fallback: search by pincode if coordinates did not yield a vendor, or weren't provided
-    if (!nearestVendor && pincode) {
+    if (servingVendorIds.length === 0 && pincode) {
       const activeVendors = await Vendor.find({
         status: "approved",
         accountStatus: "active"
@@ -1002,11 +1009,12 @@ export const getCustomerProducts = async (req, res) => {
       });
 
       if (servingVendors.length > 0) {
+        servingVendorIds = servingVendors.map(v => v._id);
         nearestVendor = servingVendors[0];
       }
     }
 
-    if (!nearestVendor) {
+    if (servingVendorIds.length === 0) {
       return res.status(200).json({
         success: true,
         serviceAvailable: false,
@@ -1015,9 +1023,9 @@ export const getCustomerProducts = async (req, res) => {
       });
     }
 
-    // 4. Find listed admin products by this single nearest vendor
+    // 4. Find listed admin products by all serving vendors
     const matchingListings = await VendorListing.find({
-      vendorId: nearestVendor._id,
+      vendorId: { $in: servingVendorIds },
       isAvailable: true,
       "stock.quantity": { $gt: 0 } // Inventory Quantity > 0
     }).select("variantId");
@@ -1028,7 +1036,7 @@ export const getCustomerProducts = async (req, res) => {
 
     // Get linked master products from VendorProduct references
     const matchingVendorProducts = await VendorProduct.find({
-      vendorId: nearestVendor._id,
+      vendorId: { $in: servingVendorIds },
       status: "active",
       stock: { $gt: 0 }
     });
@@ -1044,7 +1052,7 @@ export const getCustomerProducts = async (req, res) => {
       status: { $in: ["active", "approved"] },
       isDeleted: { $ne: true },
       $or: [
-        { creatorModel: "Vendor", createdBy: nearestVendor._id },
+        { creatorModel: "Vendor", createdBy: { $in: servingVendorIds } },
         { _id: { $in: combinedProductIds } }
       ]
     };
@@ -1148,7 +1156,7 @@ export const getCustomerProducts = async (req, res) => {
             const matchingListing = listings.find((l) => l.vendorId.toString() === nearestVendor._id.toString());
 
             let sellingPrice = matchingListing ? matchingListing.sellingPrice : linkPrice;
-            let mrp = matchingListing ? (matchingListing.mrp || variant.mrp) : (variant.mrp || linkPrice);
+            let mrp = matchingListing ? (matchingListing.mrp || vpLink.mrp || variant.mrp) : (vpLink.mrp || variant.mrp || linkPrice);
             let stockQty = matchingListing ? (matchingListing.stock?.quantity ?? 0) : linkStock;
 
             variantsList.push({

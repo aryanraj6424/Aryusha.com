@@ -28,6 +28,8 @@ const INITIAL_FORM = {
   unitType: "",
   status: "draft",
   isReturnable: false,
+  commissionType: "inherit",
+  commissionValue: "",
   // Description
   description: "",
   // Images (array of URL strings)
@@ -83,7 +85,9 @@ export default function AddProduct() {
         unitType:      form.unitType,
         status:        form.status,
         isReturnable:  form.isReturnable,
-        description:   form.description.trim(),
+        commissionType: form.commissionType || "inherit",
+        commissionValue: form.commissionType !== "inherit" && form.commissionValue !== "" ? Number(form.commissionValue) : null,
+        description:   form.description.replace(/&nbsp;|\u00a0/g, " ").trim(),
         images:        form.images,
         metaTitle:       form.metaTitle ? form.metaTitle.trim() : "",
         metaDescription: form.metaDescription ? form.metaDescription.trim() : "",

@@ -17,7 +17,7 @@
 //       <div className="w-64 bg-black text-white p-5 flex flex-col">
 
 //         <h2 className="text-2xl font-bold mb-8">
-//           QuickCart Admin
+//           Aryusha Admin
 //         </h2>
 
 //         <nav className="flex flex-col gap-4">

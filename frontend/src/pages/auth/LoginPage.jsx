@@ -7,7 +7,7 @@ import { useToast } from "../../components/Toast";
 import AuthLayout, { InputField, PasswordToggle, Divider, GoogleButton } from "./AuthLayout";
 import axios from "axios";
 
-const API_BASE = "http://localhost:5000/api";
+const API_BASE = import.meta.env.VITE_API_URL;
 
 import SEO from "../../components/SEO";
 
@@ -132,7 +132,7 @@ export default function LoginPage() {
             <button
               type="button"
               onClick={() => navigate("/forgot-password")}
-              className="text-xs font-extrabold text-[#6B21D9] hover:text-purple-800 hover:underline cursor-pointer"
+              className="text-xs font-extrabold text-[#0B2214] hover:text-purple-800 hover:underline cursor-pointer"
             >
               Forgot Password?
             </button>
@@ -143,7 +143,7 @@ export default function LoginPage() {
           type="submit"
           id="login-submit-btn"
           disabled={loading}
-          className="w-full py-3.5 sm:py-4 rounded-2xl bg-gradient-to-r from-[#6B21D9] via-[#7C3AED] to-[#6B21D9] hover:from-[#5B18C2] hover:to-[#6D28D9] active:scale-[0.99] text-white text-sm sm:text-base font-extrabold flex items-center justify-center gap-2 shadow-lg shadow-purple-600/25 focus:outline-none focus:ring-4 focus:ring-[#6B21D9]/20 transition-all duration-200 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed mt-5"
+          className="w-full py-3.5 sm:py-4 rounded-2xl bg-gradient-to-r from-[#0B2214] via-[#0B2214] to-[#0B2214] hover:from-[#153e25] hover:to-[#0B2214] active:scale-[0.99] text-white text-sm sm:text-base font-extrabold flex items-center justify-center gap-2 shadow-lg shadow-purple-600/25 focus:outline-none focus:ring-4 focus:ring-[#0B2214]/20 transition-all duration-200 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed mt-5"
         >
           {loading ? (
             <><Loader2 size={18} className="animate-spin" /> Logging In...</>
@@ -160,7 +160,7 @@ export default function LoginPage() {
         New to Aryusha?{" "}
         <span
           onClick={() => navigate("/signup")}
-          className="text-[#6B21D9] font-extrabold cursor-pointer hover:underline ml-1"
+          className="text-[#0B2214] font-extrabold cursor-pointer hover:underline ml-1"
         >
           Sign Up
         </span>

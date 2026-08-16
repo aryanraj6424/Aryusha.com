@@ -344,7 +344,7 @@ export default function OrdersPage() {
                       {order.deliveryStatus !== "Delivered" && order.deliveryOtp && (
                         <div className="bg-white px-3 py-2 border border-purple-150 rounded-xl text-center shadow-sm w-full sm:w-auto">
                           <span className="text-[8px] font-black uppercase text-slate-400 tracking-wider block mb-0.5">Delivery OTP</span>
-                          <span className="text-sm font-black text-[#6d28d9] tracking-widest bg-[#f5f3ff] px-2.5 py-0.5 rounded border border-purple-200">
+                          <span className="text-sm font-black text-[#0B2214] tracking-widest bg-[#f5f3ff] px-2.5 py-0.5 rounded border border-purple-200">
                             {order.deliveryOtp}
                           </span>
                         </div>

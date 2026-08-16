@@ -144,6 +144,7 @@ import OnboardingRequests from "../pages/deliveries/OnboardingRequests";
 import DocumentVerification from "../pages/deliveries/DocumentVerification";
 import StoreAssignment from "../pages/deliveries/StoreAssignment";
 import PayoutSettingsPage from "../pages/deliveries/PayoutSettingsPage";
+import DeliveryTimeSlots from "../pages/deliveries/DeliveryTimeSlots";
 
 // ==============================
 // Settings
@@ -292,6 +293,7 @@ export default function AdminRoutes() {
         <Route path="delivery-kyc" element={<DocumentVerification />} />
         <Route path="delivery-assignment" element={<StoreAssignment />} />
         <Route path="delivery-payout-settings" element={<PayoutSettingsPage />} />
+        <Route path="delivery-time" element={<DeliveryTimeSlots />} />
         <Route path="delivery-boys" element={<DeliveryBoyOverview />} />
         <Route path="delivery-boys/:id" element={<DeliveryBoyDetail />} />
 

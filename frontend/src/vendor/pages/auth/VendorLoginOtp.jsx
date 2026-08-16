@@ -1,8 +1,7 @@
-import { useState, useRef } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import axios from "axios";
 import { useToast } from "../../../components/Toast";
-import { auth } from "../../../services/firebase";
-import { RecaptchaVerifier, signInWithPhoneNumber } from "firebase/auth";
 
 export default function VendorLoginOtp() {
   const navigate = useNavigate();
@@ -10,7 +9,6 @@ export default function VendorLoginOtp() {
 
   const [phone, setPhone] = useState("");
   const [loading, setLoading] = useState(false);
-  const recaptchaVerifierRef = useRef(null);
 
   const handleSendOtp = async (e) => {
     e.preventDefault();
@@ -21,50 +19,31 @@ export default function VendorLoginOtp() {
       return;
     }
 
-    // Build E.164 format
-    const e164Phone = rawPhone.startsWith("+")
-      ? rawPhone
-      : `+91${rawPhone.replace(/\D/g, "").slice(-10)}`;
-
     try {
       setLoading(true);
 
-      if (recaptchaVerifierRef.current) {
-        recaptchaVerifierRef.current.clear();
-        recaptchaVerifierRef.current = null;
+      const response = await axios.post(
+        `${import.meta.env.VITE_API_URL}/vendor/auth/send-login-otp`,
+        { phone: rawPhone }
+      );
+
+      if (response.data.success) {
+        localStorage.setItem("vendorLoginPhone", rawPhone);
+        showToast({ type: "success", message: response.data.message || "OTP sent successfully!" });
+
+        navigate("/vendor/verify-login-otp", {
+          state: {
+            phone: rawPhone,
+            role: "vendor",
+          },
+        });
       }
-
-      recaptchaVerifierRef.current = new RecaptchaVerifier(
-        auth,
-        "recaptcha-container-vendor-otp",
-        { size: "invisible" }
-      );
-
-      const confirmationResult = await signInWithPhoneNumber(
-        auth,
-        e164Phone,
-        recaptchaVerifierRef.current
-      );
-
-      showToast({ type: "success", message: "OTP sent successfully!" });
-
-      navigate("/vendor/verify-login-otp", {
-        state: {
-          phone: rawPhone,
-          e164Phone,
-          confirmationResult,
-          role: "vendor",
-        },
-      });
     } catch (error) {
-      console.error("Firebase Vendor OTP error:", error);
-      const msg =
-        error.code === "auth/too-many-requests"
-          ? "Too many requests. Please try again later."
-          : error.code === "auth/invalid-phone-number"
-          ? "Invalid phone number format."
-          : error.message || "Failed to send OTP";
-      showToast({ type: "error", message: msg });
+      console.error("Vendor OTP error:", error);
+      showToast({
+        type: "error",
+        message: error.response?.data?.message || "Failed to send OTP",
+      });
     } finally {
       setLoading(false);
     }
@@ -72,9 +51,7 @@ export default function VendorLoginOtp() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 to-white flex items-center justify-center px-4">
-
       <div className="bg-white border border-purple-100 p-8 rounded-3xl shadow-lg w-full max-w-md">
-
         <h2 className="text-3xl font-bold mb-2 text-center">
           Login with OTP
         </h2>
@@ -84,7 +61,6 @@ export default function VendorLoginOtp() {
         </p>
 
         <form onSubmit={handleSendOtp} className="space-y-4">
-
           <input
             type="tel"
             placeholder="Phone Number (e.g. 9876543210)"
@@ -97,18 +73,12 @@ export default function VendorLoginOtp() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-gradient-to-r from-purple-600 to-violet-700 text-white py-3 rounded-2xl font-semibold disabled:opacity-60"
+            className="w-full bg-gradient-to-r from-purple-600 to-violet-700 text-white py-3 rounded-2xl font-semibold disabled:opacity-60 cursor-pointer"
           >
             {loading ? "Sending OTP..." : "Send OTP"}
           </button>
-
         </form>
-
       </div>
-
-      {/* Invisible reCAPTCHA container */}
-      <div id="recaptcha-container-vendor-otp" />
-
     </div>
   );
 }

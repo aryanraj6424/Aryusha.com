@@ -34,6 +34,7 @@ import ProductList from "./vendor/pages/products/ProductList";
 import AddProduct from "./vendor/pages/products/AddProduct";
 import EditProduct from "./vendor/pages/products/EditProduct";
 import VendorAssignedArea from "./vendor/pages/areas/VendorAssignedArea";
+import VendorTopSelling from "./vendor/pages/products/VendorTopSelling";
 // Profile Section
 import CustomerProfilePage from "./customer/pages/profile/CustomerProfilePage";
 import AccountPage from "./customer/pages/profile/AccountPage";
@@ -182,6 +183,7 @@ function App() {
   <Route path="products/add" element={<AddProduct />} />
   <Route path="products/edit/:id" element={<EditProduct />} />
   <Route path="assigned-area" element={<VendorAssignedArea />} />
+  <Route path="top-selling" element={<VendorTopSelling />} />
 </Route>
 
 

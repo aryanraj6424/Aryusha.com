@@ -6,7 +6,9 @@ import {
   forgotPassword,
   verifyOtp,
   resetPassword,
-  firebaseLogin,
+  sendCustomerForgotPasswordOtp,
+  verifyCustomerForgotPasswordOtp,
+  resetCustomerPassword,
   googleLogin,
   updateProfile,
 } from "../controllers/authController.js";
@@ -21,6 +23,13 @@ router.get("/test", (req, res) => {
 
 router.post("/signup", signup);
 router.post("/login", login);
+
+// WhatsApp OTP 3-Step Forgot Password Routes
+router.post("/forgot-password/send-otp", sendCustomerForgotPasswordOtp);
+router.post("/forgot-password/verify-otp", verifyCustomerForgotPasswordOtp);
+router.post("/forgot-password/reset", resetCustomerPassword);
+
+// Compatibility alias routes
 router.post("/forgot-password", forgotPassword);
 router.post("/verify-otp", verifyOtp);
 router.post("/reset-password", resetPassword);
@@ -57,11 +66,6 @@ router.post("/token-refresh", async (req, res) => {
   }
 });
 
-/*
-|--------------------------------------------------------------------------
-| Firebase Phone OTP Login — Customer / Vendor / Delivery Boy / Admin
-|--------------------------------------------------------------------------
-*/
-router.post("/firebase-login", firebaseLogin);
+
 
 export default router;

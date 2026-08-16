@@ -1,19 +1,19 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Navigation, MapPin, Store, CheckCircle } from "lucide-react";
-import L from "leaflet";
-import "leaflet/dist/leaflet.css";
 import axios from "axios";
 import { useToast } from "../../../components/Toast";
+import { loadGoogleMaps } from "../../../utils/googleMapsLoader";
 
-// Fix Leaflet icons
-delete L.Icon.Default.prototype._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: "https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon-2x.png",
-  iconUrl: "https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon.png",
-  shadowUrl: "https://unpkg.com/leaflet@1.7.1/dist/images/marker-shadow.png",
-});
-
+/**
+ * Delivery partner active order map showing route from merchant store to customer dropoff address.
+ * 
+ * MIGRATED FROM LEAFLET TO GOOGLE MAPS JS API:
+ * - Replaced Leaflet `L.map` & `L.tileLayer` with `google.maps.Map`
+ * - Replaced Leaflet `L.divIcon` markers with Google Maps `google.maps.Marker` using SVG Data URIs matching original Leaflet styling
+ * - Replaced Leaflet `L.polyline` with Google Maps dashed `google.maps.Polyline`
+ * - Replaced Leaflet `L.latLngBounds` and `fitBounds([50,50])` with `google.maps.LatLngBounds`
+ */
 export default function OnTheWay() {
   const navigate = useNavigate();
   const { id } = useParams();
@@ -24,6 +24,9 @@ export default function OnTheWay() {
 
   const mapRef = useRef(null);
   const mapInstanceRef = useRef(null);
+  const storeMarkerRef = useRef(null);
+  const customerMarkerRef = useRef(null);
+  const polylineRef = useRef(null);
 
   const fetchOrderDetails = async () => {
     try {
@@ -47,69 +50,167 @@ export default function OnTheWay() {
   useEffect(() => {
     if (!order || !mapRef.current) return;
 
-    // Use order coordinates, fallback to default Delhi values if missing
-    const storeLat = Number(order.vendorId?.latitude) || 28.6139;
-    const storeLng = Number(order.vendorId?.longitude) || 77.2090;
+    // Collect all vendor pickup stores (multi-vendor support)
+    const subOrders = order.vendorSubOrders || [];
+    const pickupStores = subOrders.length > 0
+      ? subOrders.map((sub, idx) => {
+          const v = sub.vendorId || {};
+          return {
+            id: v._id || idx,
+            shopName: v.shopName || `Store #${idx + 1}`,
+            lat: Number(v.latitude || order.vendorId?.latitude || 0),
+            lng: Number(v.longitude || order.vendorId?.longitude || 0),
+            isPicked: sub.pickupStatus === "PICKED"
+          };
+        }).filter(s => s.lat !== 0 && s.lng !== 0)
+      : [
+          {
+            id: order.vendorId?._id || "single",
+            shopName: order.vendorId?.shopName || "Merchant Store",
+            lat: Number(order.vendorId?.latitude || 0),
+            lng: Number(order.vendorId?.longitude || 0),
+            isPicked: false
+          }
+        ].filter(s => s.lat !== 0 && s.lng !== 0);
 
-    const customerLat = Number(order.deliveryAddress?.latitude) || 28.6289;
-    const customerLng = Number(order.deliveryAddress?.longitude) || 77.3659;
+    const customerLat = Number(order.deliveryAddress?.latitude || 0);
+    const customerLng = Number(order.deliveryAddress?.longitude || 0);
+    const hasCustomerCoords = customerLat !== 0 && customerLng !== 0;
 
-    if (!mapInstanceRef.current) {
-      // Setup Leaflet map
-      mapInstanceRef.current = L.map(mapRef.current).setView([storeLat, storeLng], 12);
+    let isMounted = true;
 
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        attribution: '&copy; <a href="https://osm.org/copyright">OpenStreetMap</a> contributors'
-      }).addTo(mapInstanceRef.current);
+    loadGoogleMaps().then((google) => {
+      if (!isMounted || !mapRef.current) return;
 
-      // Create Custom Icons using simple Leaflet divIcon
-      const storeIcon = L.divIcon({
-        html: `<div class="bg-purple-600 text-white p-2 rounded-full border border-white shadow flex items-center justify-center w-8 h-8"><svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg></div>`,
-        className: 'custom-leaflet-icon',
-        iconSize: [32, 32],
-        iconAnchor: [16, 32]
-      });
+      const customerPos = hasCustomerCoords ? { lat: customerLat, lng: customerLng } : null;
 
-      const customerIcon = L.divIcon({
-        html: `<div class="bg-rose-600 text-white p-2 rounded-full border border-white shadow flex items-center justify-center w-8 h-8"><svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg></div>`,
-        className: 'custom-leaflet-icon',
-        iconSize: [32, 32],
-        iconAnchor: [16, 32]
-      });
+      // Helper to generate SVG Data URI for Store Markers (Green if picked up, Purple if pending)
+      const getStoreIcon = (isPicked, stopNum) => {
+        const bg = isPicked ? "#10b981" : "#0B2214";
+        const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 36 36">
+          <circle cx="18" cy="18" r="16" fill="${bg}" stroke="#ffffff" stroke-width="2"/>
+          <text x="18" y="22" font-size="12" font-weight="bold" fill="#ffffff" text-anchor="middle">${stopNum}</text>
+        </svg>`;
+        return {
+          url: "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(svg),
+          scaledSize: new google.maps.Size(36, 36),
+          anchor: new google.maps.Point(18, 18),
+        };
+      };
 
-      // Add Markers
-      const storeMarker = L.marker([storeLat, storeLng], { icon: storeIcon })
-        .addTo(mapInstanceRef.current)
-        .bindPopup(`<strong>Store:</strong> ${order.vendorId?.shopName || "Merchant"}`);
+      const getCustomerIcon = () => {
+        const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 36 36">
+          <circle cx="18" cy="18" r="16" fill="#e11d48" stroke="#ffffff" stroke-width="2"/>
+          <g transform="translate(6, 6)" stroke="#ffffff" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+            <circle cx="12" cy="10" r="3"></circle>
+          </g>
+        </svg>`;
+        return {
+          url: "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(svg),
+          scaledSize: new google.maps.Size(36, 36),
+          anchor: new google.maps.Point(18, 18),
+        };
+      };
 
-      const customerMarker = L.marker([customerLat, customerLng], { icon: customerIcon })
-        .addTo(mapInstanceRef.current)
-        .bindPopup(`<strong>Dropoff:</strong> ${order.deliveryAddress?.fullName}`);
+      const bounds = new google.maps.LatLngBounds();
+      const pathWaypoints = [];
 
-      // Draw routing polyline path
-      const routePath = L.polyline([[storeLat, storeLng], [customerLat, customerLng]], {
-        color: '#6d28d9',
-        weight: 4,
-        opacity: 0.8,
-        dashArray: '8, 12'
-      }).addTo(mapInstanceRef.current);
+      if (!mapInstanceRef.current) {
+        const initialCenter = pickupStores[0] ? { lat: pickupStores[0].lat, lng: pickupStores[0].lng } : (customerPos || { lat: 25.6727, lng: 85.8361 });
 
-      // Fit map view to coordinate bounds
-      const bounds = L.latLngBounds([
-        [storeLat, storeLng],
-        [customerLat, customerLng]
-      ]);
-      mapInstanceRef.current.fitBounds(bounds, { padding: [50, 50] });
-    }
-
-    // Invalidate Leaflet map layout dimensions after loading
-    const timer = setTimeout(() => {
-      if (mapInstanceRef.current) {
-        mapInstanceRef.current.invalidateSize();
+        mapInstanceRef.current = new google.maps.Map(mapRef.current, {
+          center: initialCenter,
+          zoom: 13,
+          zoomControl: true,
+          streetViewControl: false,
+          mapTypeControl: false,
+          fullscreenControl: false,
+        });
       }
-    }, 200);
 
-    return () => clearTimeout(timer);
+      // Add Store Markers for all pickup stops
+      pickupStores.forEach((store, idx) => {
+        const pos = { lat: store.lat, lng: store.lng };
+        pathWaypoints.push(pos);
+        bounds.extend(pos);
+
+        const marker = new google.maps.Marker({
+          position: pos,
+          map: mapInstanceRef.current,
+          icon: getStoreIcon(store.isPicked, idx + 1),
+          title: `Stop #${idx + 1}: ${store.shopName}`,
+        });
+
+        const infoWindow = new google.maps.InfoWindow({
+          content: `<div><strong>Stop #${idx + 1}:</strong> ${store.shopName}<br/>Status: ${store.isPicked ? '✓ Picked Up' : 'Pending Pickup'}</div>`,
+        });
+        marker.addListener("click", () => infoWindow.open(mapInstanceRef.current, marker));
+      });
+
+      // Add Customer Dropoff Marker
+      if (customerPos) {
+        pathWaypoints.push(customerPos);
+        bounds.extend(customerPos);
+
+        const customerMarker = new google.maps.Marker({
+          position: customerPos,
+          map: mapInstanceRef.current,
+          icon: getCustomerIcon(),
+          title: `Dropoff: ${order.deliveryAddress?.fullName || "Customer"}`,
+        });
+
+        const customerInfoWindow = new google.maps.InfoWindow({
+          content: `<strong>Customer Dropoff:</strong> ${order.deliveryAddress?.fullName || "Customer"}`,
+        });
+        customerMarker.addListener("click", () => customerInfoWindow.open(mapInstanceRef.current, customerMarker));
+      }
+
+      // Draw routing polyline path through all waypoints
+      if (pathWaypoints.length >= 2) {
+        const lineSymbol = {
+          path: "M 0,-1 0,1",
+          strokeOpacity: 1,
+          scale: 4,
+        };
+
+        if (polylineRef.current) polylineRef.current.setMap(null);
+
+        polylineRef.current = new google.maps.Polyline({
+          path: pathWaypoints,
+          geodesic: true,
+          strokeColor: '#0B2214',
+          strokeOpacity: 0,
+          icons: [
+            {
+              icon: lineSymbol,
+              offset: "0",
+              repeat: "16px",
+            },
+          ],
+          map: mapInstanceRef.current,
+        });
+      }
+
+      // Fit map view to bounds
+      if (!bounds.isEmpty()) {
+        mapInstanceRef.current.fitBounds(bounds, { top: 60, bottom: 60, left: 60, right: 60 });
+      }
+
+      const timer = setTimeout(() => {
+        if (mapInstanceRef.current && google.maps.event) {
+          google.maps.event.trigger(mapInstanceRef.current, "resize");
+        }
+      }, 200);
+
+      return () => clearTimeout(timer);
+    }).catch((err) => {
+      console.error("Google Maps Load Error in OnTheWay:", err);
+    });
+
+    return () => {
+      isMounted = false;
+    };
   }, [order]);
 
   const handleUpdateStatus = async (nextStatus) => {
@@ -191,7 +292,7 @@ export default function OnTheWay() {
           <button
             onClick={() => handleUpdateStatus("Reached_Customer")}
             disabled={updating}
-            className="w-full py-4 bg-[#6d28d9] hover:bg-[#5b21b6] text-white rounded-2xl font-bold transition shadow-lg shadow-purple-200 flex items-center justify-center gap-2 cursor-pointer"
+            className="w-full py-4 bg-[#0B2214] hover:bg-[#153e25] text-white rounded-2xl font-bold transition shadow-lg shadow-purple-200 flex items-center justify-center gap-2 cursor-pointer"
           >
             <CheckCircle size={18} /> {updating ? "Updating..." : "I have Reached Customer"}
           </button>

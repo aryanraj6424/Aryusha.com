@@ -52,6 +52,9 @@ import {
   forgotPassword,
   verifyOtp,
   resetPassword,
+  sendVendorForgotPasswordOtp,
+  verifyVendorForgotPasswordOtp,
+  resetVendorPassword,
   sendLoginOtp,
   verifyLoginOtp,
 } from "../controllers/vendorAuthController.js";
@@ -82,19 +85,33 @@ router.post(
   verifyLoginOtp
 );
 
-// Forgot Password
+// WhatsApp OTP 3-Step Forgot Password Routes
+router.post(
+  "/forgot-password/send-otp",
+  sendVendorForgotPasswordOtp
+);
+
+router.post(
+  "/forgot-password/verify-otp",
+  verifyVendorForgotPasswordOtp
+);
+
+router.post(
+  "/forgot-password/reset",
+  resetVendorPassword
+);
+
+// Compatibility alias routes
 router.post(
   "/forgot-password",
   forgotPassword
 );
 
-// Verify OTP
 router.post(
   "/verify-otp",
   verifyOtp
 );
 
-// Reset Password
 router.post(
   "/reset-password",
   resetPassword

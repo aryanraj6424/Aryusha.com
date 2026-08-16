@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import axios from "axios";
 import { Search, Plus, Tag, Info, ChevronLeft, Check, Package } from "lucide-react";
 import {
   createVendorProduct,
@@ -23,6 +24,8 @@ const INITIAL_FORM = {
   status: "pending",
   description: "",
   images: [],
+  coupon_allowed: false,
+  max_discount_amount: "",
 };
 
 const INITIAL_LINK_FORM = {
@@ -32,6 +35,10 @@ const INITIAL_LINK_FORM = {
   sku: "",
   condition: "New",
   vendorNotes: "",
+  coupon_allowed: false,
+  max_discount_amount: "",
+  commissionType: "inherit",
+  commissionValue: "",
 };
 
 export default function AddProduct() {
@@ -54,6 +61,20 @@ export default function AddProduct() {
   const [selectedMasterProduct, setSelectedMasterProduct] = useState(null);
   const [linkForm, setLinkForm] = useState(INITIAL_LINK_FORM);
   const [linkVariants, setLinkVariants] = useState([]);
+  const [linkCommissionInfo, setLinkCommissionInfo] = useState(null);
+
+  useEffect(() => {
+    if (selectedMasterProduct?._id) {
+      const token = localStorage.getItem("vendorToken");
+      axios.get(`${import.meta.env.VITE_API_URL}/vendor/products/${selectedMasterProduct._id}/commission-preview`, {
+        headers: { Authorization: `Bearer ${token}` }
+      }).then(res => {
+        setLinkCommissionInfo(res.data?.commission || null);
+      }).catch(err => console.error("Error fetching commission preview:", err));
+    } else {
+      setLinkCommissionInfo(null);
+    }
+  }, [selectedMasterProduct]);
   const [linking, setLinking] = useState(false);
 
   // ── Search Handlers ──────────────────────────────────────────────────────
@@ -128,6 +149,10 @@ export default function AddProduct() {
         sku: linkForm.sku.trim(),
         condition: linkForm.condition,
         vendorNotes: linkForm.vendorNotes.trim(),
+        coupon_allowed: linkForm.coupon_allowed,
+        max_discount_amount: linkForm.coupon_allowed && linkForm.max_discount_amount ? Number(linkForm.max_discount_amount) : null,
+        commissionType: linkForm.commissionType,
+        commissionValue: linkForm.commissionValue !== "" && linkForm.commissionValue !== null && linkForm.commissionValue !== undefined ? Number(linkForm.commissionValue) : null,
         variants: linkVariants.filter(v => v.isAvailable).map(v => ({
           variantId: v.variantId,
           sellingPrice: v.sellingPrice ? Number(v.sellingPrice) : Number(linkForm.price),
@@ -154,6 +179,9 @@ export default function AddProduct() {
       if (!form.familyId) return "Please select a Product Family.";
       if (!form.name.trim()) return "Product name is required.";
       if (!form.unitType) return "Please select a Unit Type.";
+      if (form.coupon_allowed && (!form.max_discount_amount || Number(form.max_discount_amount) < 0)) {
+        return "Please enter a valid Max discount allowed amount when coupon is allowed.";
+      }
     }
     return null;
   };
@@ -183,8 +211,10 @@ export default function AddProduct() {
         brand:         form.brand.trim(),
         unitType:      form.unitType,
         status:        submitStatus,
-        description:   form.description.trim(),
+        description:   form.description.replace(/&nbsp;|\u00a0/g, " ").trim(),
         images:        form.images,
+        coupon_allowed: form.coupon_allowed,
+        max_discount_amount: form.coupon_allowed && form.max_discount_amount ? Number(form.max_discount_amount) : null,
       };
 
       const res = await createVendorProduct(payload);
@@ -270,7 +300,7 @@ export default function AddProduct() {
               <button
                 type="submit"
                 disabled={searching}
-                className="bg-purple-650 hover:bg-purple-700 text-white font-bold px-6 py-3 rounded-xl transition shadow"
+                className="bg-purple-600 hover:bg-purple-700 text-white font-bold px-6 py-3 rounded-xl transition shadow cursor-pointer"
               >
                 {searching ? "Searching…" : "Search"}
               </button>
@@ -306,7 +336,7 @@ export default function AddProduct() {
                     </div>
                     <button
                       onClick={() => handleSelectMaster(prod)}
-                      className="bg-purple-50 text-purple-700 hover:bg-purple-100 font-bold text-xs px-4 py-2 rounded-xl transition shrink-0"
+                      className="bg-purple-50 text-purple-700 hover:bg-purple-100 font-bold text-xs px-4 py-2 rounded-xl transition shrink-0 cursor-pointer"
                     >
                       Sell this Item
                     </button>
@@ -323,7 +353,7 @@ export default function AddProduct() {
             <div className="flex items-center justify-between pb-4 border-b border-slate-100">
               <button
                 onClick={() => setSelectedMasterProduct(null)}
-                className="flex items-center gap-1 text-slate-500 hover:text-slate-800 font-semibold"
+                className="flex items-center gap-1 text-slate-500 hover:text-slate-800 font-semibold cursor-pointer"
               >
                 <ChevronLeft className="w-4 h-4" /> Back to results
               </button>
@@ -343,7 +373,7 @@ export default function AddProduct() {
             </div>
 
             <form onSubmit={handleLinkSubmit} className="space-y-4">
-              <div className="grid md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-xs uppercase tracking-wider text-slate-400 mb-2">MRP (Original Price) (optional)</label>
                   <input
@@ -383,6 +413,60 @@ export default function AddProduct() {
                 </div>
               </div>
 
+              {/* Role-Based Commission Section */}
+              {Boolean(localStorage.getItem("adminToken")) ? (
+                <div className="p-4 border rounded-2xl bg-purple-50/40 border-purple-200 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className="text-xs font-bold text-purple-900 uppercase tracking-wider block">Listing Commission Override (Admin Only)</span>
+                      <span className="text-[11px] text-slate-500 font-medium">
+                        Set custom commission for this specific listing. If unset, falls back to: <strong className="text-purple-700">{linkCommissionInfo ? linkCommissionInfo.displayText : "Platform default"}</strong>
+                      </span>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+                    <div>
+                      <label className="block text-xs uppercase tracking-wider text-slate-500 mb-1.5 font-bold">Commission Type</label>
+                      <select
+                        value={linkForm.commissionType}
+                        onChange={(e) => setLinkForm({ ...linkForm, commissionType: e.target.value })}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:outline-none bg-white text-sm font-semibold"
+                      >
+                        <option value="inherit">Inherit (Use Resolved Fallback Rate)</option>
+                        <option value="percentage">Percentage (%)</option>
+                        <option value="flat">Flat Rate (Fixed ₹ per order)</option>
+                      </select>
+                    </div>
+                    {linkForm.commissionType !== "inherit" && (
+                      <div>
+                        <label className="block text-xs uppercase tracking-wider text-slate-500 mb-1.5 font-bold">
+                          Custom Value {linkForm.commissionType === "percentage" ? "(%)" : "(₹)"}
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="any"
+                          value={linkForm.commissionValue}
+                          onChange={(e) => setLinkForm({ ...linkForm, commissionValue: e.target.value })}
+                          placeholder={linkForm.commissionType === "percentage" ? "e.g. 5" : "e.g. 20"}
+                          className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:outline-none bg-white text-sm font-semibold"
+                        />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="p-3.5 border rounded-xl bg-purple-50/70 border-purple-150 flex items-center justify-between">
+                  <div>
+                    <span className="text-xs font-bold text-slate-800 block">Platform Commission</span>
+                    <span className="text-[11px] text-slate-500 font-medium">Read-only platform rate applied to sales</span>
+                  </div>
+                  <span className="text-xs font-extrabold text-purple-700 bg-white px-3 py-1.5 rounded-lg border border-purple-200 shadow-sm">
+                    {linkCommissionInfo ? linkCommissionInfo.displayText : "Loading..."}
+                  </span>
+                </div>
+              )}
+
               <div className="grid md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs uppercase tracking-wider text-slate-400 mb-2">Your Store SKU *</label>
@@ -417,6 +501,58 @@ export default function AddProduct() {
                   placeholder="Low stock triggers, specific supplier details etc..."
                   className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:outline-none font-medium resize-none"
                 />
+              </div>
+
+              {/* Coupon Settings */}
+              <div className="p-4 border rounded-xl bg-slate-50 space-y-3">
+                <h4 className="font-bold text-slate-800 text-sm">Coupon Settings</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs uppercase tracking-wider text-slate-400 mb-2">
+                      Coupon applicable on this product? *
+                    </label>
+                    <div className="flex gap-4 items-center h-10">
+                      <label className="flex items-center gap-2 cursor-pointer font-bold text-sm">
+                        <input
+                          type="radio"
+                          name="link_coupon_allowed"
+                          checked={linkForm.coupon_allowed === true || linkForm.coupon_allowed === "true"}
+                          onChange={() => setLinkForm({ ...linkForm, coupon_allowed: true })}
+                          className="accent-purple-600"
+                        />
+                        Yes
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer font-bold text-sm">
+                        <input
+                          type="radio"
+                          name="link_coupon_allowed"
+                          checked={linkForm.coupon_allowed === false || linkForm.coupon_allowed === "false" || !linkForm.coupon_allowed}
+                          onChange={() => setLinkForm({ ...linkForm, coupon_allowed: false, max_discount_amount: "" })}
+                          className="accent-purple-600"
+                        />
+                        No
+                      </label>
+                    </div>
+                  </div>
+
+                  {(linkForm.coupon_allowed === true || linkForm.coupon_allowed === "true") && (
+                    <div>
+                      <label className="block text-xs uppercase tracking-wider text-slate-400 mb-2">
+                        Max discount allowed on this product (₹) *
+                      </label>
+                      <input
+                        type="number"
+                        required={linkForm.coupon_allowed === true || linkForm.coupon_allowed === "true"}
+                        min="0"
+                        step="any"
+                        value={linkForm.max_discount_amount !== undefined && linkForm.max_discount_amount !== null ? linkForm.max_discount_amount : ""}
+                        onChange={(e) => setLinkForm({ ...linkForm, max_discount_amount: e.target.value })}
+                        placeholder="e.g. 50"
+                        className="w-full px-4 py-2 border rounded-xl focus:ring-2 focus:ring-purple-500 outline-none font-medium text-sm bg-white"
+                      />
+                    </div>
+                  )}
+                </div>
               </div>
 
               {selectedMasterProduct.variants && selectedMasterProduct.variants.length > 0 && (

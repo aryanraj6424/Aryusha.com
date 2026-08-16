@@ -91,8 +91,8 @@ function MobileBottomNavbar() {
               className={`relative flex flex-col items-center justify-center gap-1 transition
                 ${
                   isActive
-                    ? "text-[#6B21D9]"
-                    : "text-gray-500 hover:text-[#6B21D9]"
+                    ? "text-[#0B2214]"
+                    : "text-gray-500 hover:text-[#0B2214]"
                 }`}
             >
               <div className="relative">
@@ -120,12 +120,12 @@ function MobileBottomNavbar() {
                 )}
               </div>
 
-              <span className={`text-[10px] font-bold ${isActive ? "text-[#6B21D9]" : "text-gray-500"}`}>
+              <span className={`text-[10px] font-bold ${isActive ? "text-[#0B2214]" : "text-gray-500"}`}>
                 {item.label}
               </span>
 
               {isActive && (
-                <div className="absolute top-0 w-10 h-1 bg-[#6B21D9] rounded-b-full" />
+                <div className="absolute top-0 w-10 h-1 bg-[#0B2214] rounded-b-full" />
               )}
             </button>
           );

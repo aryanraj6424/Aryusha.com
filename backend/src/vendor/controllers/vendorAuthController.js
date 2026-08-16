@@ -5,6 +5,16 @@ import bcrypt from "bcryptjs";
 
 import { generateVendorOtp } from "../utils/generateVendorOtp.js";
 import { generateVendorToken } from "../utils/generateVendorToken.js";
+import {
+  normalizePhoneNumber,
+  findAccountByPhone,
+  generateRandomOtp,
+  sendWhatsappOtp,
+  storeOtp,
+  verifyOtpToken,
+  validateResetToken,
+  consumeResetToken
+} from "../../utils/whatsappOtpService.js";
 
 // =========================
 // Register Vendor
@@ -93,11 +103,27 @@ export const registerVendor = async (
           storeBackImage,
         },
 
+        ownerDetails: {
+          ownerName: shopName || "",
+          mobileNumber: phone || "",
+          email: businessEmail || "",
+        },
+
         password:
           hashedPassword,
 
         status: "pending",
       });
+
+    // Trigger Admin Notification for New Vendor Onboarding
+    import("../../utils/adminNotificationHelper.js").then(({ createAdminNotification }) => {
+      createAdminNotification({
+        title: "New Vendor Registration",
+        message: `New vendor onboarding request from "${shopName || vendor.storeDetails?.storeName || 'New Store'}"`,
+        type: "NEW_VENDOR_ONBOARDING",
+        relatedVendorId: vendor._id
+      });
+    }).catch(err => console.error("Admin notification trigger error:", err));
 
     res.status(201).json({
       success: true,
@@ -121,285 +147,185 @@ export const registerVendor = async (
 // Login Vendor
 // =========================
 
-export const loginVendor =
-  async (req, res) => {
-    try {
-      const {
-        phone,
-        password,
-      } = req.body;
+export const loginVendor = async (req, res) => {
+  try {
+    const { phone, email, password } = req.body;
+    const identifier = String(phone || email || "").trim();
 
-      const vendor =
-        await Vendor.findOne({
-          phone,
-        });
-
-      if (!vendor) {
-        return res.status(404).json({
-          success: false,
-          message:
-            "Vendor not found",
-        });
-      }
-
-      // Registration Approval Check
-
-      if (
-        vendor.status ===
-        "pending"
-      ) {
-        return res.status(403).json({
-          success: false,
-          message:
-            "Your account is under verification. Please wait for admin approval.",
-        });
-      }
-
-      if (
-        vendor.status ===
-        "rejected"
-      ) {
-        return res.status(403).json({
-          success: false,
-          message:
-            "Your vendor account has been rejected.",
-        });
-      }
-
-      // Account Status Check
-
-      if (
-        vendor.accountStatus ===
-        "hold"
-      ) {
-        return res.status(403).json({
-          success: false,
-          message:
-            "Your account is currently on hold.",
-        });
-      }
-
-      if (
-        vendor.accountStatus ===
-        "suspended"
-      ) {
-        return res.status(403).json({
-          success: false,
-          message:
-            "Your account has been suspended by admin.",
-        });
-      }
-
-      if (
-        vendor.accountStatus ===
-        "deactivated"
-      ) {
-        return res.status(403).json({
-          success: false,
-          message:
-            "Your account has been deactivated.",
-        });
-      }
-
-      const isMatch =
-        await bcrypt.compare(
-          password,
-          vendor.password
-        );
-
-      if (!isMatch) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Invalid credentials",
-        });
-      }
-
-      const token =
-        generateVendorToken(
-          vendor._id
-        );
-
-      res.status(200).json({
-        success: true,
-        message:
-          "Login Successful",
-        token,
-        vendor,
-      });
-
-    } catch (error) {
-      console.log(error);
-
-      res.status(500).json({
+    if (!identifier || !password) {
+      return res.status(400).json({
         success: false,
-        message:
-          "Server Error",
+        message: "Phone number/Email and password are required",
       });
     }
-  };
 
-// =========================
-// Forgot Password
-// =========================
-
-export const forgotPassword = async (
-  req,
-  res
-) => {
-  try {
-
-    console.log(
-      "========== OTP API HIT =========="
-    );
-
-    console.log(
-      "Request Body:",
-      req.body
-    );
-
-    const { phone } = req.body;
-
-    console.log(
-      "Phone Received:",
-      phone
-    );
-
-    const vendor =
-      await Vendor.findOne({
-        phone,
-      });
-
-    console.log(
-      "Vendor Found:",
-      vendor
-    );
+    const vendor = await Vendor.findOne({
+      $or: [
+        { phone: identifier },
+        { businessEmail: identifier.toLowerCase() },
+        { "ownerDetails.mobileNumber": identifier },
+        { "ownerDetails.email": identifier.toLowerCase() }
+      ]
+    });
 
     if (!vendor) {
       return res.status(404).json({
         success: false,
-        message:
-          "Vendor not found",
+        message: "Vendor account not found with this mobile number or email",
       });
     }
 
-    const otp =
-      generateVendorOtp();
+    // Registration Approval Check
+    if (vendor.status === "pending") {
+      return res.status(403).json({
+        success: false,
+        message: "Your account is under verification. Please wait for admin approval.",
+      });
+    }
 
-    console.log(
-      "Generated OTP:",
-      otp
-    );
+    if (vendor.status === "rejected") {
+      return res.status(403).json({
+        success: false,
+        message: "Your vendor account has been rejected.",
+      });
+    }
 
-    vendor.otp = otp;
+    // Account Status Check
+    if (vendor.accountStatus === "hold") {
+      return res.status(403).json({
+        success: false,
+        message: "Your account is currently on hold.",
+      });
+    }
 
-    vendor.otpExpiry =
-      Date.now() +
-      10 * 60 * 1000;
+    if (vendor.accountStatus === "suspended") {
+      return res.status(403).json({
+        success: false,
+        message: "Your account has been suspended by admin.",
+      });
+    }
 
-    await vendor.save();
+    if (vendor.accountStatus === "deactivated") {
+      return res.status(403).json({
+        success: false,
+        message: "Your account has been deactivated.",
+      });
+    }
 
-    console.log(
-      "OTP Saved Successfully"
-    );
+    let isMatch = false;
+    if (vendor.password) {
+      isMatch = await bcrypt.compare(password, vendor.password);
+      if (!isMatch && vendor.password === password) {
+        isMatch = true;
+      }
+    }
 
-    console.log(
-      "================================"
-    );
+    if (!isMatch) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid password. Please check your credentials.",
+      });
+    }
 
-    console.log(
-      "Vendor OTP:",
-      otp
-    );
-
-    console.log(
-      "================================"
-    );
+    const token = generateVendorToken(vendor._id);
 
     res.status(200).json({
       success: true,
-      message:
-        "OTP sent successfully",
+      message: "Login Successful",
+      token,
+      vendor,
     });
 
   } catch (error) {
-
-    console.log(
-      "Forgot Password Error:"
-    );
-
-    console.log(error);
-
+    console.error("Vendor Login Error:", error);
     res.status(500).json({
       success: false,
-      message:
-        error.message ||
-        "Server Error",
+      message: "Server Error",
+      error: error.message,
     });
   }
 };
 
 // =========================
-// Verify OTP
+// =========================
+// Forgot Password - WhatsApp OTP Flow (Vendor)
 // =========================
 
-export const verifyOtp =
-  async (req, res) => {
-    try {
-      const {
-        phone,
-        otp,
-      } = req.body;
+export const sendVendorForgotPasswordOtp = async (req, res) => {
+  try {
+    const phoneInput = req.body.phone || req.body.phoneNumber;
+    const normalizedPhone = normalizePhoneNumber(phoneInput);
 
-      const vendor =
-        await Vendor.findOne({
-          phone,
-        });
-
-      if (!vendor) {
-        return res.status(404).json({
-          success: false,
-          message:
-            "Vendor not found",
-        });
-      }
-
-      if (
-        vendor.otp !== otp
-      ) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Invalid OTP",
-        });
-      }
-
-      if (
-        new Date() >
-        vendor.otpExpiry
-      ) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "OTP expired",
-        });
-      }
-
-      res.status(200).json({
-        success: true,
-        message:
-          "OTP verified successfully",
-      });
-    } catch (error) {
-      console.log(error);
-
-      res.status(500).json({
+    if (!normalizedPhone) {
+      return res.status(400).json({
         success: false,
-        message:
-          "Server Error",
+        message: "Invalid phone number. Please enter a valid 10-digit mobile number.",
       });
     }
-  };
+
+    const vendor = await findAccountByPhone(Vendor, "phone", normalizedPhone);
+    if (!vendor) {
+      return res.status(404).json({
+        success: false,
+        message: "Vendor account not found with this mobile number.",
+      });
+    }
+
+    const otp = generateRandomOtp();
+    await sendWhatsappOtp(normalizedPhone, otp);
+    storeOtp("vendor", normalizedPhone, otp);
+
+    res.status(200).json({
+      success: true,
+      message: "WhatsApp OTP sent successfully.",
+    });
+  } catch (error) {
+    console.error("sendVendorForgotPasswordOtp Error:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message || "Failed to send WhatsApp OTP.",
+    });
+  }
+};
+
+export const forgotPassword = sendVendorForgotPasswordOtp;
+
+export const verifyVendorForgotPasswordOtp = async (req, res) => {
+  try {
+    const phoneInput = req.body.phone || req.body.phoneNumber;
+    const { otp } = req.body;
+    const normalizedPhone = normalizePhoneNumber(phoneInput);
+
+    if (!normalizedPhone || !otp) {
+      return res.status(400).json({
+        success: false,
+        message: "Phone number and OTP are required.",
+      });
+    }
+
+    const result = verifyOtpToken("vendor", normalizedPhone, otp);
+    if (!result.success) {
+      return res.status(400).json({
+        success: false,
+        message: result.message,
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "OTP verified successfully.",
+      resetToken: result.resetToken,
+    });
+  } catch (error) {
+    console.error("verifyVendorForgotPasswordOtp Error:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message || "Failed to verify OTP.",
+    });
+  }
+};
+
+export const verifyOtp = verifyVendorForgotPasswordOtp;
 
 
 
@@ -665,56 +591,65 @@ export const verifyLoginOtp =
     }
   };
 // =========================
-// Reset Password
+// Reset Password (Vendor)
 // =========================
 
-export const resetPassword =
-  async (req, res) => {
-    try {
-      const {
-        phone,
-        newPassword,
-      } = req.body;
+export const resetVendorPassword = async (req, res) => {
+  try {
+    const phoneInput = req.body.phone || req.body.phoneNumber;
+    const newPassword = req.body.newPassword || req.body.password;
+    const { resetToken } = req.body;
 
-      const vendor =
-        await Vendor.findOne({
-          phone,
-        });
+    const normalizedPhone = normalizePhoneNumber(phoneInput);
 
-      if (!vendor) {
-        return res.status(404).json({
-          success: false,
-          message:
-            "Vendor not found",
-        });
-      }
-
-      const hashedPassword =
-        await bcrypt.hash(
-          newPassword,
-          10
-        );
-
-      vendor.password =
-        hashedPassword;
-
-      vendor.otp = null;
-      vendor.otpExpiry = null;
-
-      await vendor.save();
-
-      res.status(200).json({
-        success: true,
-        message:
-          "Password reset successfully",
-      });
-    } catch (error) {
-      console.log(error);
-
-      res.status(500).json({
+    if (!normalizedPhone || !resetToken || !newPassword) {
+      return res.status(400).json({
         success: false,
-        message:
-          "Server Error",
+        message: "Phone number, resetToken, and newPassword are required.",
       });
     }
-  };
+
+    if (String(newPassword).length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: "New password must be at least 6 characters long.",
+      });
+    }
+
+    const tokenValidation = validateResetToken("vendor", normalizedPhone, resetToken);
+    if (!tokenValidation.success) {
+      return res.status(400).json({
+        success: false,
+        message: tokenValidation.message,
+      });
+    }
+
+    const vendor = await findAccountByPhone(Vendor, "phone", normalizedPhone);
+    if (!vendor) {
+      return res.status(404).json({
+        success: false,
+        message: "Vendor account not found.",
+      });
+    }
+
+    vendor.password = await bcrypt.hash(newPassword, 10);
+    vendor.otp = null;
+    vendor.otpExpiry = null;
+    await vendor.save();
+
+    consumeResetToken(tokenValidation.tokenKey);
+
+    res.status(200).json({
+      success: true,
+      message: "Password reset successfully.",
+    });
+  } catch (error) {
+    console.error("resetVendorPassword Error:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message || "Failed to reset password.",
+    });
+  }
+};
+
+export const resetPassword = resetVendorPassword;

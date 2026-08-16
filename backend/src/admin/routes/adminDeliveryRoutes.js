@@ -18,7 +18,11 @@ import {
   assignRiderStore,
   getPayoutSettings,
   updatePayoutSettings,
-  updateRiderPayoutOverride
+  updateRiderPayoutOverride,
+  getAdminDeliverySlots,
+  createAdminDeliverySlot,
+  updateAdminDeliverySlot,
+  deleteAdminDeliverySlot
 } from "../controllers/adminDeliveryController.js";
 
 const router = express.Router();
@@ -36,6 +40,12 @@ router.get("/reports/deliveries/export", exportDeliveryReports);
 // Payout Settings
 router.get("/payout-settings", getPayoutSettings);
 router.put("/payout-settings", updatePayoutSettings);
+
+// Delivery Time Slots Admin CRUD
+router.get("/delivery-slots", getAdminDeliverySlots);
+router.post("/delivery-slots", createAdminDeliverySlot);
+router.put("/delivery-slots/:id", updateAdminDeliverySlot);
+router.delete("/delivery-slots/:id", deleteAdminDeliverySlot);
 
 router.get("/delivery-boys", getDeliveryBoys);
 router.get("/delivery-boys/onboarding", getOnboardingRequests);

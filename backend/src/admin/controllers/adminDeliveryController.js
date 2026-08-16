@@ -5,6 +5,7 @@ import DeliveryBoyEarnings from "../../deliveryBoy/models/DeliveryBoyEarnings.js
 import PayoutSettings from "../../deliveryBoy/models/PayoutSettings.js";
 import RiderNotification from "../../deliveryBoy/models/RiderNotification.js";
 import Vendor from "../../vendor/models/Vendor.js";
+import DeliverySlot from "../../customer/models/DeliverySlot.js";
 import { emitToRoom } from "../../socket/socketManager.js";
 
 // Helper: Convert array of objects to CSV string
@@ -899,6 +900,7 @@ export const updatePayoutSettings = async (req, res) => {
     if (onTimeThresholdMinutes !== undefined) settings.onTimeThresholdMinutes = onTimeThresholdMinutes;
 
     await settings.save();
+    emitToRoom("admin:global", "payout:updated", { settings });
     res.status(200).json({ success: true, message: "Payout settings updated successfully", settings });
   } catch (error) {
     console.error("Update Payout Settings Error:", error);
@@ -926,9 +928,81 @@ export const updateRiderPayoutOverride = async (req, res) => {
     };
 
     await rider.save();
+    emitToRoom(`deliveryBoy:${id}`, "payout:updated", { rider });
+    emitToRoom("admin:global", "payout:updated", { riderId: id, override: rider.payoutOverride });
     res.status(200).json({ success: true, message: "Rider custom payout settings override updated", rider });
   } catch (error) {
     console.error("Update Rider Payout Override Error:", error);
     res.status(500).json({ success: false, message: "Server Error" });
+  }
+};
+
+// --- DELIVERY TIME SLOTS ADMIN MANAGEMENT ---
+export const getAdminDeliverySlots = async (req, res) => {
+  try {
+    const slots = await DeliverySlot.find()
+      .populate("vendorIds", "shopName ownerName city")
+      .sort({ cutoffTime: 1, startTime: 1 });
+    res.status(200).json({ success: true, slots });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const createAdminDeliverySlot = async (req, res) => {
+  try {
+    const { name, startTime, endTime, cutoffTime, isGlobal, vendorIds, isActive, city } = req.body;
+    if (!name || !startTime || !endTime || !cutoffTime) {
+      return res.status(400).json({ success: false, message: "Name, startTime, endTime, and cutoffTime are required." });
+    }
+    const newSlot = await DeliverySlot.create({
+      name,
+      startTime,
+      endTime,
+      cutoffTime,
+      isGlobal: isGlobal !== undefined ? isGlobal : true,
+      vendorIds: Array.isArray(vendorIds) ? vendorIds : [],
+      isActive: isActive !== undefined ? isActive : true,
+      city: city ? city.trim() : null
+    });
+
+    // Real-time socket notification broadcast
+    emitToRoom("slots:global", "slots:updated", { type: "create", slotId: newSlot._id });
+
+    res.status(201).json({ success: true, message: "Delivery slot created successfully", slot: newSlot });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const updateAdminDeliverySlot = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updated = await DeliverySlot.findByIdAndUpdate(id, req.body, { new: true, runValidators: true })
+      .populate("vendorIds", "shopName ownerName city");
+    if (!updated) {
+      return res.status(404).json({ success: false, message: "Delivery slot not found." });
+    }
+
+    // Real-time socket notification broadcast
+    emitToRoom("slots:global", "slots:updated", { type: "update", slotId: id });
+
+    res.status(200).json({ success: true, message: "Delivery slot updated successfully", slot: updated });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const deleteAdminDeliverySlot = async (req, res) => {
+  try {
+    const { id } = req.params;
+    await DeliverySlot.findByIdAndDelete(id);
+
+    // Real-time socket notification broadcast
+    emitToRoom("slots:global", "slots:updated", { type: "delete", slotId: id });
+
+    res.status(200).json({ success: true, message: "Delivery slot deleted successfully." });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
   }
 };

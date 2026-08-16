@@ -63,7 +63,7 @@ function CategorySection({ selectedCategory, onSelectCategory }) {
           <h2 className="text-base sm:text-lg font-extrabold text-slate-800 tracking-tight">Shop by Category</h2>
           <button
             onClick={() => onSelectCategory(null)}
-            className="text-xs font-bold text-[#6B21D9] hover:text-[#5B18C2] flex items-center gap-0.5 transition duration-200 bg-transparent border-none cursor-pointer"
+            className="text-xs font-bold text-[#0B2214] hover:text-[#153e25] flex items-center gap-0.5 transition duration-200 bg-transparent border-none cursor-pointer"
           >
             View all <ChevronRight size={14} className="stroke-[2.5]" />
           </button>
@@ -99,7 +99,7 @@ function CategorySection({ selectedCategory, onSelectCategory }) {
                   <div
                     className={`w-14 h-14 md:w-18 md:h-18 rounded-2xl flex items-center justify-center overflow-hidden border transition-all duration-200 shadow-2xs ${
                       selected
-                        ? "border-[#5B21B6] ring-3 ring-purple-100 bg-purple-50"
+                        ? "border-[#153e25] ring-3 ring-purple-100 bg-purple-50"
                         : "border-slate-100 bg-slate-50 group-hover:scale-105 group-hover:border-purple-300"
                     }`}
                   >
@@ -117,7 +117,7 @@ function CategorySection({ selectedCategory, onSelectCategory }) {
                   {/* Name Label */}
                   <span
                     className={`text-[10px] md:text-[12px] mt-2 font-bold line-clamp-2 leading-tight max-w-[65px] md:max-w-[85px] transition-colors duration-200 ${
-                      selected ? "text-[#5B21B6] font-black" : "text-slate-700 group-hover:text-[#5B21B6]"
+                      selected ? "text-[#153e25] font-black" : "text-slate-700 group-hover:text-[#153e25]"
                     }`}
                   >
                     {category.name}
@@ -160,7 +160,7 @@ function CategorySection({ selectedCategory, onSelectCategory }) {
                 </h3>
                 <button
                   onClick={() => onSelectCategory(cat._id)}
-                  className="text-xs font-bold text-[#6B21D9] hover:text-[#5B18C2] flex items-center gap-0.5 transition duration-200 bg-transparent border-none cursor-pointer"
+                  className="text-xs font-bold text-[#0B2214] hover:text-[#153e25] flex items-center gap-0.5 transition duration-200 bg-transparent border-none cursor-pointer"
                 >
                   View all <ChevronRight size={14} className="stroke-[2.5]" />
                 </button>
@@ -180,7 +180,7 @@ function CategorySection({ selectedCategory, onSelectCategory }) {
                       className="flex flex-col items-center cursor-pointer text-center group"
                     >
                       {/* Rounded Square Subcategory Image Container */}
-                      <div className="w-full aspect-square rounded-2xl flex items-center justify-center overflow-hidden border border-slate-100 bg-slate-50 group-hover:scale-105 group-hover:border-[#5B21B6] transition-all duration-200 shadow-2xs">
+                      <div className="w-full aspect-square rounded-2xl flex items-center justify-center overflow-hidden border border-slate-100 bg-slate-50 group-hover:scale-105 group-hover:border-[#153e25] transition-all duration-200 shadow-2xs">
                         {sub.image ? (
                           <img
                             src={sub.image}
@@ -195,7 +195,7 @@ function CategorySection({ selectedCategory, onSelectCategory }) {
                       </div>
 
                       {/* Plain-text Label */}
-                      <span className="text-[10px] md:text-[12px] mt-2 font-bold line-clamp-2 leading-tight max-w-full text-slate-700 group-hover:text-[#5B21B6] transition-colors duration-205">
+                      <span className="text-[10px] md:text-[12px] mt-2 font-bold line-clamp-2 leading-tight max-w-full text-slate-700 group-hover:text-[#153e25] transition-colors duration-205">
                         {sub.name}
                       </span>
                     </div>

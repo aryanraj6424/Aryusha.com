@@ -7,6 +7,9 @@ import {
   forgotPassword,
   verifyOtp,
   resetPassword,
+  sendAdminForgotPasswordOtp,
+  verifyAdminForgotPasswordOtp,
+  resetAdminPassword,
 } from "../controllers/adminAuthController.js";
 
 const router =
@@ -18,19 +21,33 @@ router.post(
   loginAdmin
 );
 
-// Forgot Password
+// WhatsApp OTP 3-Step Forgot Password Routes
+router.post(
+  "/forgot-password/send-otp",
+  sendAdminForgotPasswordOtp
+);
+
+router.post(
+  "/forgot-password/verify-otp",
+  verifyAdminForgotPasswordOtp
+);
+
+router.post(
+  "/forgot-password/reset",
+  resetAdminPassword
+);
+
+// Compatibility alias routes
 router.post(
   "/forgot-password",
   forgotPassword
 );
 
-// Verify OTP
 router.post(
   "/verify-otp",
   verifyOtp
 );
 
-// Reset Password
 router.post(
   "/reset-password",
   resetPassword

@@ -63,7 +63,7 @@
 //         </h1>
 
 //         <p className="text-gray-500 mt-3 text-lg">
-//           Login to continue selling on QuickCart
+//           Login to continue selling on Aryusha
 //         </p>
 
 //         <form
@@ -233,7 +233,7 @@ export default function VendorLogin() {
         <h1 className="text-5xl font-bold text-gray-800">Welcome Back 👋</h1>
 
         <p className="text-gray-500 mt-3 text-lg">
-          Login to continue selling on QuickCart
+          Login to continue selling on Aryusha
         </p>
 
         <form onSubmit={handleSubmit} className="mt-10">

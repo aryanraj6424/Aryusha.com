@@ -105,7 +105,7 @@ export default function DeliveryBoyLayout() {
       <div className="w-full max-w-md bg-white min-h-screen shadow-2xl flex flex-col relative pb-16">
         
         {/* Top Status Header */}
-        <header className="bg-[#6d28d9] text-white px-5 py-4 flex items-center justify-between sticky top-0 z-30 shadow-md">
+        <header className="bg-[#0B2214] text-white px-5 py-4 flex items-center justify-between sticky top-0 z-30 shadow-md">
           <div className="flex items-center gap-2.5">
             <img
               src="/aryushalogo.png"
@@ -205,13 +205,13 @@ export default function DeliveryBoyLayout() {
                   key={item.path}
                   onClick={() => navigate(item.path)}
                   className={`relative flex flex-col items-center justify-center gap-1 transition ${
-                    isActive ? "text-[#6d28d9] font-extrabold" : "text-slate-400 font-semibold"
+                    isActive ? "text-[#0B2214] font-extrabold" : "text-slate-400 font-semibold"
                   }`}
                 >
                   <Icon size={20} className={isActive ? "scale-110 transition-transform" : ""} />
                   <span className="text-[10px] tracking-wide">{item.label}</span>
                   {isActive && (
-                    <div className="absolute top-0 w-8 h-1 bg-[#6d28d9] rounded-b-full" />
+                    <div className="absolute top-0 w-8 h-1 bg-[#0B2214] rounded-b-full" />
                   )}
                 </button>
               );

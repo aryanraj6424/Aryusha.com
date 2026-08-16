@@ -120,33 +120,33 @@ function HeroBanner({ vendorId }) {
               Grocery, Khulaa Item <br className="hidden sm:inline" />
               <span className="flex items-center gap-1 flex-wrap mt-0.5 text-[#2D1B6B]">
                 &amp; more at 
-                <span className="bg-[#5B21B6] text-white text-[clamp(9px,2vw,12px)] font-black px-2 py-0.5 rounded-lg leading-none align-middle">
+                <span className="bg-[#153e25] text-white text-[clamp(9px,2vw,12px)] font-black px-2 py-0.5 rounded-lg leading-none align-middle">
                   ₹0
                 </span> 
                 Convenience Fee
               </span>
             </h2>
 
-            <p className="text-[#5B21B6] font-bold text-[clamp(9px,2vw,12px)] leading-none">
+            <p className="text-[#153e25] font-bold text-[clamp(9px,2vw,12px)] leading-none">
               Best Quality, Quick Delivery
             </p>
 
             {/* Badges list */}
             <div className="flex flex-row gap-1.5 flex-wrap text-[clamp(7px,1.6vw,10px)] font-bold text-slate-700 mt-1.5">
               <div className="flex items-center gap-1 bg-white/70 backdrop-blur-xs px-2 py-0.5 rounded-full border border-purple-100 shadow-2xs">
-                <span className="w-3.5 h-3.5 rounded-full bg-[#5B21B6] text-white flex items-center justify-center flex-shrink-0">
+                <span className="w-3.5 h-3.5 rounded-full bg-[#153e25] text-white flex items-center justify-center flex-shrink-0">
                   <Zap size={8} className="fill-white stroke-[2.5]" />
                 </span>
                 Super Fast Delivery
               </div>
               <div className="flex items-center gap-1 bg-white/70 backdrop-blur-xs px-2 py-0.5 rounded-full border border-purple-100 shadow-2xs">
-                <span className="w-3.5 h-3.5 rounded-full bg-[#5B21B6] text-white flex items-center justify-center flex-shrink-0">
+                <span className="w-3.5 h-3.5 rounded-full bg-[#153e25] text-white flex items-center justify-center flex-shrink-0">
                   <Percent size={8} className="stroke-[2.5]" />
                 </span>
                 Best Prices &amp; Offers
               </div>
               <div className="flex items-center gap-1 bg-white/70 backdrop-blur-xs px-2 py-0.5 rounded-full border border-purple-100 shadow-2xs">
-                <span className="w-3.5 h-3.5 rounded-full bg-[#5B21B6] text-white flex items-center justify-center flex-shrink-0">
+                <span className="w-3.5 h-3.5 rounded-full bg-[#153e25] text-white flex items-center justify-center flex-shrink-0">
                   <Grid size={8} className="stroke-[2.5]" />
                 </span>
                 Wide Range of Products
@@ -156,7 +156,7 @@ function HeroBanner({ vendorId }) {
             <div className="flex items-center gap-3 mt-3">
               <button
                 onClick={() => navigate("/customer/categories")}
-                className="bg-[#5B21B6] hover:bg-[#4C1D95] text-white text-[clamp(9px,1.8vw,12px)] font-black px-5 py-2 rounded-xl shadow-md transition duration-200 cursor-pointer active:scale-95"
+                className="bg-[#153e25] hover:bg-[#07170d] text-white text-[clamp(9px,1.8vw,12px)] font-black px-5 py-2 rounded-xl shadow-md transition duration-200 cursor-pointer active:scale-95"
               >
                 Order Now
               </button>
@@ -178,7 +178,7 @@ function HeroBanner({ vendorId }) {
 
         {/* Static Dot Indicators Outside */}
         <div className="flex justify-center gap-1.5 mt-1.5">
-          <span className="w-2.5 h-2.5 rounded-full bg-[#5B21B6]" />
+          <span className="w-2.5 h-2.5 rounded-full bg-[#153e25]" />
           <span className="w-2 h-2 rounded-full bg-slate-300" />
           <span className="w-2 h-2 rounded-full bg-slate-300" />
         </div>
@@ -247,7 +247,7 @@ function HeroBanner({ vendorId }) {
               onClick={(e) => { e.stopPropagation(); goTo(i); }}
               aria-label={`Go to banner ${i + 1}`}
               className={`h-2 rounded-full transition-all duration-300 cursor-pointer ${
-                i === current ? "w-6 bg-[#5B21B6]" : "w-2 bg-slate-300 hover:bg-slate-400"
+                i === current ? "w-6 bg-[#153e25]" : "w-2 bg-slate-300 hover:bg-slate-400"
               }`}
             />
           ))}

@@ -11,10 +11,10 @@ export function InputField({ id, label, type, name, value, onChange, placeholder
       <div className={`relative flex items-center bg-white rounded-2xl border transition-all duration-200 shadow-sm ${
         error 
           ? "border-red-400 bg-red-50/20 focus-within:ring-2 focus-within:ring-red-400/20" 
-          : "border-purple-100 hover:border-purple-200 focus-within:border-[#6B21D9] focus-within:ring-2 focus-within:ring-[#6B21D9]/15"
+          : "border-purple-100 hover:border-purple-200 focus-within:border-[#0B2214] focus-within:ring-2 focus-within:ring-[#0B2214]/15"
       }`}>
         {Icon && (
-          <span className="pl-4 text-[#6B21D9] flex items-center justify-center pointer-events-none">
+          <span className="pl-4 text-[#0B2214] flex items-center justify-center pointer-events-none">
             <Icon size={18} strokeWidth={2} />
           </span>
         )}
@@ -48,7 +48,7 @@ export function PasswordToggle({ show, onToggle, label = "password" }) {
       type="button"
       onClick={onToggle}
       aria-label={show ? `Hide ${label}` : `Show ${label}`}
-      className="text-slate-400 hover:text-[#6B21D9] transition-colors cursor-pointer"
+      className="text-slate-400 hover:text-[#0B2214] transition-colors cursor-pointer"
     >
       {show ? <EyeOff size={18} /> : <Eye size={18} />}
     </button>
@@ -95,7 +95,7 @@ export default function AuthLayout({ children }) {
     <div className="min-h-screen bg-[#FAF9FF] md:bg-gradient-to-br md:from-[#F5F3FF] md:via-[#F8F7FF] md:to-[#EDE9FE] flex flex-col justify-between md:justify-center items-center font-sans">
       
       {/* ─── MOBILE NATIVE HEADER (< 768px) ─── */}
-      <div className="w-full md:hidden bg-gradient-to-b from-[#6B21D9]/10 via-[#F5F3FF]/60 to-white px-5 pt-8 pb-3 border-b border-purple-50/80 flex items-center justify-between">
+      <div className="w-full md:hidden bg-gradient-to-b from-[#0B2214]/10 via-[#F5F3FF]/60 to-white px-5 pt-8 pb-3 border-b border-purple-50/80 flex items-center justify-between">
         <img
           src="/aryushalogo.png"
           alt="Aryusha"
@@ -104,7 +104,7 @@ export default function AuthLayout({ children }) {
         />
         <button
           onClick={() => navigate("/")}
-          className="text-xs font-bold text-[#6B21D9] bg-purple-100/60 px-3 py-1.5 rounded-full hover:bg-purple-100 transition-colors"
+          className="text-xs font-bold text-[#0B2214] bg-purple-100/60 px-3 py-1.5 rounded-full hover:bg-purple-100 transition-colors"
         >
           Explore Store ➔
         </button>
@@ -130,7 +130,7 @@ export default function AuthLayout({ children }) {
         </div>
 
         {/* Right Column (Hero Banner) - Desktop Only (≥ 768px) */}
-        <div className="hidden md:flex relative bg-gradient-to-br from-[#6B21D9] via-[#5B18C2] to-[#3B0764] flex-col justify-between p-6 lg:p-8 text-white overflow-hidden">
+        <div className="hidden md:flex relative bg-gradient-to-br from-[#0B2214] via-[#153e25] to-[#3B0764] flex-col justify-between p-6 lg:p-8 text-white overflow-hidden">
           {/* Grocery Hero Background Image */}
           <div className="absolute inset-0 z-0">
             <img
@@ -138,7 +138,7 @@ export default function AuthLayout({ children }) {
               alt="Fresh grocery delivery"
               className="w-full h-full object-cover object-center opacity-30 mix-blend-overlay"
             />
-            <div className="absolute inset-0 bg-gradient-to-b from-[#6B21D9]/80 via-transparent to-[#3B0764]/90" />
+            <div className="absolute inset-0 bg-gradient-to-b from-[#0B2214]/80 via-transparent to-[#3B0764]/90" />
           </div>
 
           {/* Top Banner Feature Badge */}
@@ -160,7 +160,7 @@ export default function AuthLayout({ children }) {
               
               {/* Badge 1: Trusted & Reliable */}
               <div className="flex items-center gap-1.5">
-                <div className="w-7 h-7 lg:w-8 lg:h-8 rounded-xl bg-purple-100 flex items-center justify-center text-[#6B21D9] flex-shrink-0">
+                <div className="w-7 h-7 lg:w-8 lg:h-8 rounded-xl bg-purple-100 flex items-center justify-center text-[#0B2214] flex-shrink-0">
                   <ShieldCheck size={16} strokeWidth={2.2} />
                 </div>
                 <div>
@@ -171,7 +171,7 @@ export default function AuthLayout({ children }) {
 
               {/* Badge 2: Fast & Efficient */}
               <div className="flex items-center gap-1.5 border-l border-slate-200/80 pl-1.5">
-                <div className="w-7 h-7 lg:w-8 lg:h-8 rounded-xl bg-purple-100 flex items-center justify-center text-[#6B21D9] flex-shrink-0">
+                <div className="w-7 h-7 lg:w-8 lg:h-8 rounded-xl bg-purple-100 flex items-center justify-center text-[#0B2214] flex-shrink-0">
                   <Zap size={16} strokeWidth={2.2} />
                 </div>
                 <div>
@@ -182,7 +182,7 @@ export default function AuthLayout({ children }) {
 
               {/* Badge 3: Made for You */}
               <div className="flex items-center gap-1.5 border-l border-slate-200/80 pl-1.5">
-                <div className="w-7 h-7 lg:w-8 lg:h-8 rounded-xl bg-purple-100 flex items-center justify-center text-[#6B21D9] flex-shrink-0">
+                <div className="w-7 h-7 lg:w-8 lg:h-8 rounded-xl bg-purple-100 flex items-center justify-center text-[#0B2214] flex-shrink-0">
                   <Heart size={16} strokeWidth={2.2} />
                 </div>
                 <div>
@@ -201,11 +201,11 @@ export default function AuthLayout({ children }) {
       {/* ─── MOBILE FOOTER TRUST BAR (< 768px) ─── */}
       <div className="w-full md:hidden px-5 py-3.5 bg-white border-t border-purple-50 text-slate-500 text-[11px] font-bold">
         <div className="flex items-center justify-around max-w-md mx-auto">
-          <span className="flex items-center gap-1.5"><ShieldCheck size={14} className="text-[#6B21D9]" /> 100% Secure</span>
+          <span className="flex items-center gap-1.5"><ShieldCheck size={14} className="text-[#0B2214]" /> 100% Secure</span>
           <span className="text-slate-300">•</span>
-          <span className="flex items-center gap-1.5"><Zap size={14} className="text-[#6B21D9]" /> Same Day Delivery</span>
+          <span className="flex items-center gap-1.5"><Zap size={14} className="text-[#0B2214]" /> Same Day Delivery</span>
           <span className="text-slate-300">•</span>
-          <span className="flex items-center gap-1.5"><Heart size={14} className="text-[#6B21D9]" /> Easy Returns</span>
+          <span className="flex items-center gap-1.5"><Heart size={14} className="text-[#0B2214]" /> Easy Returns</span>
         </div>
       </div>
 

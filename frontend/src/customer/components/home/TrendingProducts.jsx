@@ -146,7 +146,7 @@ function ProductCard({ product }) {
       <div>
         {/* Price details */}
         <div className="flex items-baseline gap-1.5 mb-2">
-          <span className="text-[#6B21D9] font-black text-sm sm:text-base">
+          <span className="text-[#0B2214] font-black text-sm sm:text-base">
             ₹{displayPrice}
           </span>
           {displayMrp > displayPrice && (
@@ -165,7 +165,7 @@ function ProductCard({ product }) {
                 onClick={() => handleVariantChange(v)}
                 className={`flex-shrink-0 px-2 py-0.5 text-[9px] font-black rounded-md border transition ${
                   selectedVariant?._id === v._id
-                    ? "border-purple-600 bg-purple-50 text-[#6B21D9]"
+                    ? "border-purple-600 bg-purple-50 text-[#0B2214]"
                     : "border-slate-200 text-slate-500 hover:border-slate-300 hover:bg-slate-50"
                 }`}
               >
@@ -187,14 +187,14 @@ function ProductCard({ product }) {
           <div className="flex items-center justify-between bg-purple-50 border border-purple-200 rounded-lg overflow-hidden shadow-sm h-[34px] w-full">
             <button
               onClick={() => handleDecrementCart()}
-              className="h-full w-8 flex-shrink-0 hover:bg-purple-100 text-[#6B21D9] font-black transition flex items-center justify-center cursor-pointer"
+              className="h-full w-8 flex-shrink-0 hover:bg-purple-100 text-[#0B2214] font-black transition flex items-center justify-center cursor-pointer"
             >
               <Minus size={12} />
             </button>
             <span className="text-xs font-black text-purple-800 flex-1 text-center select-none">{cartQty}</span>
             <button
               onClick={() => handleAddToCart(1)}
-              className="h-full w-8 flex-shrink-0 hover:bg-purple-100 text-[#6B21D9] font-black transition flex items-center justify-center cursor-pointer"
+              className="h-full w-8 flex-shrink-0 hover:bg-purple-100 text-[#0B2214] font-black transition flex items-center justify-center cursor-pointer"
             >
               <Plus size={12} />
             </button>
@@ -202,7 +202,7 @@ function ProductCard({ product }) {
         ) : (
           <button
             onClick={() => handleAddToCart(1)}
-            className="w-full py-1.5 rounded-lg font-black bg-[#6B21D9] hover:bg-[#5B18C2] text-white shadow-sm transition flex items-center justify-center gap-1 text-[11px] h-[34px] cursor-pointer"
+            className="w-full py-1.5 rounded-lg font-black bg-[#0B2214] hover:bg-[#153e25] text-white shadow-sm transition flex items-center justify-center gap-1 text-[11px] h-[34px] cursor-pointer"
           >
             <ShoppingCart size={11} className="stroke-[2.5]" /> Add
           </button>
@@ -213,6 +213,7 @@ function ProductCard({ product }) {
 }
 
 function TrendingProducts({ products = [], groupedProducts = {}, isFilterActive = false, serviceAvailable = true }) {
+  const navigate = useNavigate();
 
   // If service is not available
   if (!serviceAvailable) {
@@ -306,7 +307,17 @@ function TrendingProducts({ products = [], groupedProducts = {}, isFilterActive 
                 <h2 className="text-xl font-bold text-slate-800">
                   {group.category.name}
                 </h2>
-                <span className="text-xs font-semibold text-purple-600">Explore Category</span>
+                <button
+                  onClick={() => {
+                    const catId = group.category._id || group.category.slug || group.category.id;
+                    if (catId) {
+                      navigate(`/?category=${catId}`);
+                    }
+                  }}
+                  className="text-xs font-semibold text-purple-600 hover:text-purple-800 cursor-pointer bg-transparent border-none p-0"
+                >
+                  Explore Category
+                </button>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4">
                 {group.products.slice(0, 4).map((product) => <ProductCard key={product._id} product={product} />)}

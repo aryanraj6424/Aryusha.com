@@ -25,6 +25,17 @@ export default function VendorList() {
     return token ? { headers: { Authorization: `Bearer ${token}` } } : {};
   };
 
+  const handleUnauthorized = (error) => {
+    if (error.response?.status === 401) {
+      localStorage.removeItem("adminToken");
+      localStorage.removeItem("admin");
+      showToast({ type: "error", message: error.response?.data?.message || "Session expired or unauthorized. Please log in again." });
+      navigate("/admin/login");
+      return true;
+    }
+    return false;
+  };
+
   const fetchVendors = async () => {
     try {
       setLoading(true);
@@ -32,7 +43,9 @@ export default function VendorList() {
       setVendors(response.data.vendors || []);
     } catch (error) {
       console.log(error);
-      showToast({ type: "error", message: "Failed to fetch vendors." });
+      if (!handleUnauthorized(error)) {
+        showToast({ type: "error", message: error.response?.data?.message || "Failed to fetch vendors." });
+      }
     } finally {
       setLoading(false);
     }
@@ -49,7 +62,9 @@ export default function VendorList() {
       fetchVendors();
     } catch (error) {
       console.log(error);
-      showToast({ type: "error", message: "Failed to approve vendor." });
+      if (!handleUnauthorized(error)) {
+        showToast({ type: "error", message: error.response?.data?.message || "Failed to approve vendor." });
+      }
     }
   };
 
@@ -60,7 +75,9 @@ export default function VendorList() {
       fetchVendors();
     } catch (error) {
       console.log(error);
-      showToast({ type: "error", message: "Failed to reject vendor." });
+      if (!handleUnauthorized(error)) {
+        showToast({ type: "error", message: error.response?.data?.message || "Failed to reject vendor." });
+      }
     }
   };
 
@@ -72,7 +89,9 @@ export default function VendorList() {
       fetchVendors();
     } catch (error) {
       console.log(error);
-      showToast({ type: "error", message: "Failed to update account status." });
+      if (!handleUnauthorized(error)) {
+        showToast({ type: "error", message: error.response?.data?.message || "Failed to update account status." });
+      }
     }
   };
 
@@ -98,7 +117,9 @@ export default function VendorList() {
       fetchVendors();
     } catch (error) {
       console.log(error);
-      showToast({ type: "error", message: "Failed to assign vendor area." });
+      if (!handleUnauthorized(error)) {
+        showToast({ type: "error", message: error.response?.data?.message || "Failed to assign vendor area." });
+      }
     }
   };
 
@@ -112,7 +133,9 @@ export default function VendorList() {
       fetchVendors();
     } catch (error) {
       console.log(error);
-      showToast({ type: "error", message: "Failed to delete vendor." });
+      if (!handleUnauthorized(error)) {
+        showToast({ type: "error", message: error.response?.data?.message || "Failed to delete vendor." });
+      }
     }
   };
 

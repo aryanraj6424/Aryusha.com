@@ -5,6 +5,8 @@ import {
   SubCategory,
   ProductVariant
 } from "../../models/catalog.js";
+import CustomerOrder from "../../customer/models/CustomerOrder.js";
+import mongoose from "mongoose";
 
 // @desc    Get all vendor's own products
 // @route   GET /api/vendor/product/all
@@ -45,8 +47,15 @@ export const createVendorProduct = async (req, res) => {
       mrp,
       sellingPrice,
       sku,
-      status
+      status,
+      coupon_allowed,
+      couponAllowed,
+      max_discount_amount,
+      maxDiscountAmount
     } = req.body;
+
+    const finalCouponAllowed = coupon_allowed !== undefined ? Boolean(coupon_allowed) : Boolean(couponAllowed);
+    const finalMaxDiscount = max_discount_amount !== undefined ? max_discount_amount : maxDiscountAmount;
 
     const normalizedUnitType = String(unitType).toLowerCase();
     if (!['weight', 'volume', 'count'].includes(normalizedUnitType)) {
@@ -82,6 +91,8 @@ export const createVendorProduct = async (req, res) => {
       description,
       images: Array.isArray(images) ? images : [],
       unitType: normalizedUnitType,
+      coupon_allowed: finalCouponAllowed,
+      max_discount_amount: finalMaxDiscount !== "" && finalMaxDiscount !== null && finalMaxDiscount !== undefined ? Number(finalMaxDiscount) : null,
       status: initialStatus,
       createdBy: req.vendor._id,
       creatorModel: "Vendor",
@@ -144,7 +155,11 @@ export const updateVendorProduct = async (req, res) => {
       unitType,
       description,
       images,
-      status
+      status,
+      coupon_allowed,
+      couponAllowed,
+      max_discount_amount,
+      maxDiscountAmount
     } = req.body;
 
     if (name) product.name = name;
@@ -161,6 +176,14 @@ export const updateVendorProduct = async (req, res) => {
     }
     if (description !== undefined) product.description = description;
     if (images) product.images = images;
+
+    if (coupon_allowed !== undefined || couponAllowed !== undefined) {
+      product.coupon_allowed = coupon_allowed !== undefined ? Boolean(coupon_allowed) : Boolean(couponAllowed);
+    }
+    if (max_discount_amount !== undefined || maxDiscountAmount !== undefined) {
+      const val = max_discount_amount !== undefined ? max_discount_amount : maxDiscountAmount;
+      product.max_discount_amount = val !== "" && val !== null && val !== undefined ? Number(val) : null;
+    }
 
     // Transition status to draft or pending
     const updatedStatus = status === "draft" ? "draft" : "pending";
@@ -428,6 +451,133 @@ export const getVendorProductById = async (req, res) => {
 
     res.json({ success: true, product });
   } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Get top selling products for the logged-in vendor
+// @route   GET /api/vendor/products/top-selling
+// @access  Private/Vendor
+export const getTopSellingProducts = async (req, res) => {
+  try {
+    if (!req.vendor?._id) {
+      return res.status(400).json({ success: false, message: "Vendor identification required" });
+    }
+    const vendorId = new mongoose.Types.ObjectId(req.vendor._id);
+    const limit = req.query.limit ? parseInt(req.query.limit) : 100;
+
+    const topSelling = await CustomerOrder.aggregate([
+      {
+        $match: {
+          orderStatus: { $nin: ["Cancelled", "Rejected"] },
+          $or: [
+            { vendorId: vendorId },
+            { "vendorSubOrders.vendorId": vendorId }
+          ]
+        }
+      },
+      {
+        $project: {
+          orderId: 1,
+          orderStatus: 1,
+          vendorId: 1,
+          itemsToUse: {
+            $cond: {
+              if: { $eq: ["$vendorId", vendorId] },
+              then: "$items",
+              else: {
+                $reduce: {
+                  input: "$vendorSubOrders",
+                  initialValue: [],
+                  in: {
+                    $cond: {
+                      if: {
+                        $and: [
+                          { $eq: ["$$this.vendorId", vendorId] },
+                          { $not: [{ $in: ["$$this.subOrderStatus", ["Cancelled", "Rejected"]] }] }
+                        ]
+                      },
+                      then: { $concatArrays: ["$$value", "$$this.items"] },
+                      else: "$$value"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      { $unwind: "$itemsToUse" },
+      {
+        $group: {
+          _id: {
+            productId: "$itemsToUse.productId",
+            variantId: "$itemsToUse.variantId"
+          },
+          name: { $first: "$itemsToUse.name" },
+          img: { $first: "$itemsToUse.img" },
+          totalQtySold: { $sum: "$itemsToUse.qty" },
+          totalRevenue: { $sum: { $multiply: ["$itemsToUse.price", "$itemsToUse.qty"] } },
+          ordersSet: { $addToSet: "$_id" }
+        }
+      },
+      {
+        $project: {
+          _id: 0,
+          productId: "$_id.productId",
+          variantId: "$_id.variantId",
+          name: 1,
+          img: 1,
+          totalQtySold: 1,
+          totalRevenue: 1,
+          distinctOrdersCount: { $size: "$ordersSet" }
+        }
+      },
+      { $sort: { totalQtySold: -1, totalRevenue: -1 } },
+      { $limit: limit }
+    ]);
+
+    const variantIds = topSelling.map(item => item.variantId).filter(Boolean);
+    const productIds = topSelling.map(item => item.productId).filter(Boolean);
+
+    const [variants, products] = await Promise.all([
+      ProductVariant.find({ _id: { $in: variantIds } }).lean(),
+      Product.find({ _id: { $in: productIds } }).lean()
+    ]);
+
+    const variantMap = new Map(variants.map(v => [v._id.toString(), v]));
+    const productMap = new Map(products.map(p => [p._id.toString(), p]));
+
+    const enriched = topSelling.map(item => {
+      const variant = variantMap.get(item.variantId?.toString());
+      const product = productMap.get(item.productId?.toString());
+
+      let packSize = "";
+      if (variant?.variantLabel) {
+        packSize = variant.variantLabel;
+      } else if (variant?.packSize?.value) {
+        packSize = `${variant.packSize.value} ${variant.packSize.unit || ""}`.trim();
+      }
+
+      return {
+        productId: item.productId,
+        variantId: item.variantId,
+        name: item.name || product?.name || "Product",
+        packSize,
+        img: item.img || variant?.images?.[0] || product?.images?.[0] || "",
+        totalQtySold: item.totalQtySold,
+        totalRevenue: Number(item.totalRevenue.toFixed(2)),
+        distinctOrdersCount: item.distinctOrdersCount
+      };
+    });
+
+    res.json({
+      success: true,
+      count: enriched.length,
+      topSelling: enriched
+    });
+  } catch (error) {
+    console.error("getTopSellingProducts error:", error);
     res.status(500).json({ success: false, message: error.message });
   }
 };
