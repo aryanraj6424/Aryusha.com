@@ -181,18 +181,10 @@ function LocationSelector() {
   };
 
   const handleCurrentLocation = () => {
-    if (!window.isSecureContext) {
-      showToast({
-        type: "warning",
-        message: "Location detection requires an HTTPS connection. You can still set your address by searching above or dragging the pin on the map.",
-      });
-      return;
-    }
-
     if (!navigator.geolocation) {
       showToast({
         type: "warning",
-        message: "Geolocation is not supported by your browser. Please search or drag the pin on the map.",
+        message: "Geolocation is not supported by your browser or environment. Please search or drag the pin on the map.",
       });
       return;
     }
@@ -220,7 +212,7 @@ function LocationSelector() {
       }
     };
 
-    const tryLowAccuracyFallback = () => {
+    const tryFallbackPosition = () => {
       navigator.geolocation.getCurrentPosition(
         (position) => onGpsSuccess(position, true),
         (err) => {
@@ -237,13 +229,28 @@ function LocationSelector() {
             });
           }
         },
-        { timeout: 5000, enableHighAccuracy: false, maximumAge: 30000 }
+        { timeout: 10000, enableHighAccuracy: false, maximumAge: Infinity }
       );
     };
 
-    // Stage 1: High-accuracy GPS request (8-second timeout)
+    // Stage 1: Fast network/Wi-Fi positioning (8-second timeout, allowing cached location up to 1 min)
     navigator.geolocation.getCurrentPosition(
-      (position) => onGpsSuccess(position, false),
+      (position) => {
+        onGpsSuccess(position, false);
+
+        // Optional background GPS refinement if accuracy is coarse and hardware GPS might be available
+        if (position.coords.accuracy > 100 && navigator.geolocation) {
+          navigator.geolocation.getCurrentPosition(
+            (refinedPos) => {
+              if (mapInstanceRef.current && refinedPos.coords.accuracy < position.coords.accuracy) {
+                onGpsSuccess(refinedPos, false);
+              }
+            },
+            () => {},
+            { timeout: 6000, enableHighAccuracy: true, maximumAge: 0 }
+          );
+        }
+      },
       (err) => {
         if (err.code === 1) {
           // Permission denied by browser — do not retry, show friendly guidance
@@ -253,11 +260,11 @@ function LocationSelector() {
             message: "Location access is turned off for this site. You can set your address by searching above or dragging the pin — or enable location access in browser settings.",
           });
         } else {
-          // Stage 2: Automatic fallback to network/WiFi location (5-second timeout)
-          tryLowAccuracyFallback();
+          // Stage 2: Automatic fallback query
+          tryFallbackPosition();
         }
       },
-      { timeout: 8000, enableHighAccuracy: true, maximumAge: 0 }
+      { timeout: 8000, enableHighAccuracy: false, maximumAge: 60000 }
     );
   };
 

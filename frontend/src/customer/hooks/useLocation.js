@@ -44,12 +44,25 @@ export default function useLocation() {
           });
         },
         (error) => {
+          if (error.code !== 1) {
+            navigator.geolocation.getCurrentPosition(
+              (pos2) => {
+                resolve({
+                  latitude: pos2.coords.latitude,
+                  longitude: pos2.coords.longitude,
+                });
+              },
+              (err2) => reject(err2),
+              { enableHighAccuracy: false, timeout: 8000, maximumAge: Infinity }
+            );
+            return;
+          }
           reject(error);
         },
         {
-          enableHighAccuracy: true,
-          timeout: 10000,
-          maximumAge: 0,
+          enableHighAccuracy: false,
+          timeout: 8000,
+          maximumAge: 60000,
         }
       );
     });

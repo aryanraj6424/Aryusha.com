@@ -51,38 +51,53 @@ function CustomerDashboard() {
     }
 
     setGeoStatus("requesting");
+
+    const savePosition = async (position) => {
+      try {
+        const { latitude, longitude } = position.coords;
+        const result = await getAddressFromCoords(latitude, longitude);
+        const newAddress = {
+          latitude,
+          longitude,
+          fullAddress: result.formatted || "Current Location",
+          pincode: result.postcode || "",
+          city: result.city || "",
+          addressType: "Current Location",
+        };
+        localStorage.setItem("selectedAddress", JSON.stringify(newAddress));
+        setAddress(newAddress);
+        setGeoStatus("granted");
+      } catch (err) {
+        console.error("Reverse geocoding failed:", err);
+        const { latitude, longitude } = position.coords;
+        const fallbackAddress = { latitude, longitude, fullAddress: "Current Location", pincode: "" };
+        localStorage.setItem("selectedAddress", JSON.stringify(fallbackAddress));
+        setAddress(fallbackAddress);
+        setGeoStatus("granted");
+      }
+    };
+
     navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        try {
-          const { latitude, longitude } = position.coords;
-          const result = await getAddressFromCoords(latitude, longitude);
-          const newAddress = {
-            latitude,
-            longitude,
-            fullAddress: result.formatted || "Current Location",
-            pincode: result.postcode || "",
-            city: result.city || "",
-            addressType: "Current Location",
-          };
-          localStorage.setItem("selectedAddress", JSON.stringify(newAddress));
-          setAddress(newAddress);
-          setGeoStatus("granted");
-        } catch (err) {
-          console.error("Reverse geocoding failed:", err);
-          // Still save coords even if reverse geocoding fails
-          const { latitude, longitude } = position.coords;
-          const fallbackAddress = { latitude, longitude, fullAddress: "Current Location", pincode: "" };
-          localStorage.setItem("selectedAddress", JSON.stringify(fallbackAddress));
-          setAddress(fallbackAddress);
-          setGeoStatus("granted");
-        }
-      },
+      savePosition,
       (error) => {
+        if (error.code !== 1) {
+          // Retry with low accuracy / cached position if initial request timed out
+          navigator.geolocation.getCurrentPosition(
+            savePosition,
+            (err2) => {
+              console.error("Geolocation denied or failed:", err2);
+              setGeoStatus("denied");
+              setLoading(false);
+            },
+            { timeout: 10000, enableHighAccuracy: false, maximumAge: Infinity }
+          );
+          return;
+        }
         console.error("Geolocation denied:", error);
         setGeoStatus("denied");
         setLoading(false);
       },
-      { timeout: 10000 }
+      { timeout: 8000, enableHighAccuracy: false, maximumAge: 60000 }
     );
   }, []);
 

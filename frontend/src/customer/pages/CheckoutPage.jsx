@@ -454,30 +454,43 @@ export default function CheckoutPage() {
     try {
       setLoading(true);
 
-      // Capture customer's real GPS coordinates at order time (one-shot, high accuracy)
+      // Capture customer's real GPS coordinates at order time (one-shot, high accuracy with low accuracy fallback)
       const getLiveLocation = () => {
         return new Promise((resolve) => {
           if (!navigator.geolocation) {
             resolve({ customerLiveLocation: null, locationUnavailable: true });
             return;
           }
-          navigator.geolocation.getCurrentPosition(
-            (position) => {
-              resolve({
-                customerLiveLocation: {
-                  lat: position.coords.latitude,
-                  lng: position.coords.longitude,
-                  accuracy: position.coords.accuracy,
-                  capturedAt: new Date(position.timestamp || Date.now())
-                },
-                locationUnavailable: false
-              });
+
+          const makeLocationObject = (position) => ({
+            customerLiveLocation: {
+              lat: position.coords.latitude,
+              lng: position.coords.longitude,
+              accuracy: position.coords.accuracy,
+              capturedAt: new Date(position.timestamp || Date.now())
             },
+            locationUnavailable: false
+          });
+
+          navigator.geolocation.getCurrentPosition(
+            (position) => resolve(makeLocationObject(position)),
             (error) => {
+              if (error.code !== 1) {
+                // Retry with network positioning if high accuracy timed out or failed
+                navigator.geolocation.getCurrentPosition(
+                  (pos2) => resolve(makeLocationObject(pos2)),
+                  (err2) => {
+                    console.warn("One-shot GPS capture failed or denied:", err2);
+                    resolve({ customerLiveLocation: null, locationUnavailable: true });
+                  },
+                  { enableHighAccuracy: false, timeout: 6000, maximumAge: 60000 }
+                );
+                return;
+              }
               console.warn("One-shot GPS capture failed or denied:", error);
               resolve({ customerLiveLocation: null, locationUnavailable: true });
             },
-            { enableHighAccuracy: true, timeout: 6000 }
+            { enableHighAccuracy: true, timeout: 5000 }
           );
         });
       };

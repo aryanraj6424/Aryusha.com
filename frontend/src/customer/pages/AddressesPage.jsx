@@ -415,35 +415,50 @@ function AddressesPage() {
       return;
     }
     setLocLoading(true);
-    navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        const latitude = position.coords.latitude;
-        const longitude = position.coords.longitude;
-        setLat(latitude);
-        setLng(longitude);
-        setLocLoading(false);
 
-        // Autofill address details using the backend-proxied getAddressFromCoords
-        try {
-          const result = await getAddressFromCoords(latitude, longitude);
-          setFormData((prev) => ({
-            ...prev,
-            pincode: result.postcode || prev.pincode,
-            city: result.city || prev.city,
-            state: prev.state || "",
-            area: result.formatted.split(",")[0] || prev.area || "",
-          }));
-          showToast({ type: "success", message: "Location coordinates and address resolved successfully!" });
-        } catch (err) {
-          console.error(err);
-          showToast({ type: "warning", message: `Coordinates detected: Lat ${latitude.toFixed(6)}, Lng ${longitude.toFixed(6)}. Please input address details manually.` });
-        }
-      },
+    const onLocationFound = async (position) => {
+      const latitude = position.coords.latitude;
+      const longitude = position.coords.longitude;
+      setLat(latitude);
+      setLng(longitude);
+      setLocLoading(false);
+
+      try {
+        const result = await getAddressFromCoords(latitude, longitude);
+        setFormData((prev) => ({
+          ...prev,
+          pincode: result.postcode || prev.pincode,
+          city: result.city || prev.city,
+          state: prev.state || "",
+          area: result.formatted.split(",")[0] || prev.area || "",
+        }));
+        showToast({ type: "success", message: "Location coordinates and address resolved successfully!" });
+      } catch (err) {
+        console.error(err);
+        showToast({ type: "warning", message: `Coordinates detected: Lat ${latitude.toFixed(6)}, Lng ${longitude.toFixed(6)}. Please input address details manually.` });
+      }
+    };
+
+    navigator.geolocation.getCurrentPosition(
+      onLocationFound,
       (error) => {
+        if (error.code !== 1) {
+          navigator.geolocation.getCurrentPosition(
+            onLocationFound,
+            (err2) => {
+              setLocLoading(false);
+              console.error(err2);
+              showToast({ type: "error", message: "Location access denied or failed. Please enter coordinates and address details manually." });
+            },
+            { timeout: 10000, enableHighAccuracy: false, maximumAge: Infinity }
+          );
+          return;
+        }
         setLocLoading(false);
         console.error(error);
         showToast({ type: "error", message: "Location access denied or failed. Please enter coordinates and address details manually." });
-      }
+      },
+      { timeout: 8000, enableHighAccuracy: false, maximumAge: 60000 }
     );
   };
 
