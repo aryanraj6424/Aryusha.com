@@ -35,18 +35,28 @@ export default function OrderCard({ order }) {
 
       <div className="mt-5 space-y-2">
 
-        {order.items.map((item, index) => (
-          <div
-            key={index}
-            className="flex justify-between"
-          >
-            <span>{item.name}</span>
+        {order.items.map((item, index) => {
+          const variantText = item.variantLabel || item.variantName || (item.packSize ? (typeof item.packSize === 'string' ? item.packSize : `${item.packSize.value} ${item.packSize.unit}`) : "") || item.unit || item.weight;
+          return (
+            <div
+              key={index}
+              className="flex justify-between items-center"
+            >
+              <div>
+                <span>{item.name}</span>
+                {variantText && (
+                  <span className="text-xs text-purple-700 bg-purple-50 px-1.5 py-0.5 rounded font-bold border border-purple-100 ml-2">
+                    {variantText}
+                  </span>
+                )}
+              </div>
 
-            <span>
-              {item.quantity} x ₹{item.price}
-            </span>
-          </div>
-        ))}
+              <span>
+                {item.quantity || item.qty} x ₹{item.price}
+              </span>
+            </div>
+          );
+        })}
 
       </div>
 

@@ -16,15 +16,19 @@ export default function ProductList() {
   const [categories, setCategories] = useState([]);
   const [subCategories, setSubCategories] = useState([]);
   const [productFamilies, setProductFamilies] = useState([]);
+  const [vendors, setVendors] = useState([]);
+  const [vendorListings, setVendorListings] = useState([]);
   
   const [loading, setLoading] = useState(true);
   const [selectedProducts, setSelectedProducts] = useState([]);
+  const [activeTab, setActiveTab] = useState("products");
   
   // Search & filters state
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [subCategoryFilter, setSubCategoryFilter] = useState("all");
   const [familyFilter, setFamilyFilter] = useState("all");
+  const [vendorFilter, setVendorFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [stockFilter, setStockFilter] = useState("all");
   const [dateRange, setDateRange] = useState({ start: "", end: "" });
@@ -37,18 +41,24 @@ export default function ProductList() {
     { id: "subcategory", label: "Sub Category" },
     { id: "productfamily", label: "Product Family" },
     { id: "products", label: "Products" },
+    { id: "vendorlistings", label: "Vendor Listings" }
   ];
 
   const fetchFilters = async () => {
     try {
-      const [catsRes, subCatsRes, familiesRes] = await Promise.all([
+      const token = localStorage.getItem("adminToken");
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      
+      const [catsRes, subCatsRes, familiesRes, vendorsRes] = await Promise.all([
         axios.get(`${import.meta.env.VITE_API_URL}/categories`),
         axios.get(`${import.meta.env.VITE_API_URL}/sub-categories`),
-        axios.get(`${import.meta.env.VITE_API_URL}/product-families`)
+        axios.get(`${import.meta.env.VITE_API_URL}/product-families`),
+        axios.get(`${import.meta.env.VITE_API_URL}/admin/vendors`, { headers }).catch(() => ({ data: { vendors: [] } }))
       ]);
       setCategories(catsRes.data.categories || []);
       setSubCategories(subCatsRes.data.subCategories || []);
       setProductFamilies(familiesRes.data.productFamilies || []);
+      setVendors(vendorsRes.data?.vendors || vendorsRes.data || []);
     } catch (error) {
       console.error("Error fetching filters:", error);
     }
@@ -58,8 +68,8 @@ export default function ProductList() {
     try {
       setLoading(true);
       const token = localStorage.getItem("adminToken");
-      
-      // Build query string
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+
       let params = new URLSearchParams();
       if (search) params.append("search", search);
       if (categoryFilter !== "all") params.append("categoryId", categoryFilter);
@@ -70,13 +80,22 @@ export default function ProductList() {
       if (dateRange.start) params.append("startDate", dateRange.start);
       if (dateRange.end) params.append("endDate", dateRange.end);
 
-      const res = await axios.get(
-        `${import.meta.env.VITE_API_URL}/admin/product/all?${params.toString()}`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      setProducts(res.data.products || []);
+      if (activeTab === "vendorlistings") {
+        if (vendorFilter !== "all") params.append("vendorId", vendorFilter);
+        const res = await axios.get(
+          `${import.meta.env.VITE_API_URL}/admin/product/vendor-listings?${params.toString()}`,
+          { headers }
+        );
+        setVendorListings(res.data.vendorListings || []);
+      } else {
+        const res = await axios.get(
+          `${import.meta.env.VITE_API_URL}/admin/product/all?${params.toString()}`,
+          { headers }
+        );
+        setProducts(res.data.products || []);
+      }
     } catch (error) {
-      console.error("Error loading products:", error);
+      console.error("Error loading catalog data:", error);
     } finally {
       setLoading(false);
     }
@@ -88,7 +107,7 @@ export default function ProductList() {
 
   useEffect(() => {
     fetchProducts();
-  }, [search, categoryFilter, subCategoryFilter, familyFilter, statusFilter, stockFilter, dateRange]);
+  }, [activeTab, search, categoryFilter, subCategoryFilter, familyFilter, vendorFilter, statusFilter, stockFilter, dateRange]);
 
   const handleSelectAll = (e) => {
     if (e.target.checked) {
@@ -172,6 +191,22 @@ export default function ProductList() {
       fetchProducts();
     } catch (error) {
       console.error(error);
+    }
+  };
+
+  const handleVendorListingStatus = async (listingId, newStatus) => {
+    try {
+      const token = localStorage.getItem("adminToken");
+      await axios.put(
+        `${import.meta.env.VITE_API_URL}/admin/product/vendor-listings/${listingId}/status`,
+        { status: newStatus },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      showToast({ type: "success", message: `Vendor listing status updated to ${newStatus}` });
+      fetchProducts();
+    } catch (error) {
+      console.error("Error updating vendor listing status:", error);
+      showToast({ type: "error", message: "Failed to update vendor listing status" });
     }
   };
 
@@ -298,12 +333,13 @@ export default function ProductList() {
             key={tab.id}
             onClick={() => {
               if (tab.id === "category") navigate("/admin/categories");
-              if (tab.id === "subcategory") navigate("/admin/sub-categories");
-              if (tab.id === "productfamily") navigate("/admin/product-families");
-              if (tab.id === "products") navigate("/admin/products");
+              else if (tab.id === "subcategory") navigate("/admin/sub-categories");
+              else if (tab.id === "productfamily") navigate("/admin/product-families");
+              else if (tab.id === "products") setActiveTab("products");
+              else if (tab.id === "vendorlistings") setActiveTab("vendorlistings");
             }}
             className={`px-3 sm:px-6 py-2 rounded-md text-xs sm:text-sm font-medium transition-colors whitespace-nowrap ${
-              tab.id === "products"
+              activeTab === tab.id
                 ? "bg-green-600 text-white"
                 : "text-gray-400 hover:bg-gray-700"
             }`}
@@ -385,6 +421,20 @@ export default function ProductList() {
         </div>
 
         <div>
+          <label className="text-xs font-semibold text-gray-400 block mb-1">VENDOR</label>
+          <select
+            value={vendorFilter}
+            onChange={(e) => setVendorFilter(e.target.value)}
+            className="w-full bg-gray-700 text-white border border-gray-600 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-green-500"
+          >
+            <option value="all">All Vendors</option>
+            {vendors.map((v) => (
+              <option key={v._id} value={v._id}>{v.shopName || v.name || v.email}</option>
+            ))}
+          </select>
+        </div>
+
+        <div>
           <label className="text-xs font-semibold text-gray-400 block mb-1">STOCK LEVEL</label>
           <select
             value={stockFilter}
@@ -426,11 +476,109 @@ export default function ProductList() {
         </div>
       )}
 
-      {/* Products Table */}
+      {/* Catalog Table */}
       {loading ? (
         <div className="bg-gray-800 rounded-xl p-10 text-center text-gray-400 border border-gray-700">
-          Loading products catalog...
+          Loading catalog data...
         </div>
+      ) : activeTab === "vendorlistings" ? (
+        vendorListings.length === 0 ? (
+          <div className="bg-gray-800 rounded-xl p-12 text-center text-gray-400 border border-gray-700">
+            <p className="text-lg font-semibold text-white">No vendor listings found</p>
+            <p className="mt-2 text-sm">Select a different vendor or status filter.</p>
+          </div>
+        ) : (
+          <div className="bg-gray-800 rounded-xl overflow-x-auto border border-gray-700 shadow-sm">
+            <table className="min-w-full divide-y divide-gray-700">
+              <thead className="bg-gray-850">
+                <tr>
+                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-400 uppercase tracking-wider">Product Name</th>
+                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-400 uppercase tracking-wider">Vendor / Store</th>
+                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-400 uppercase tracking-wider">Price / MRP</th>
+                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-400 uppercase tracking-wider">Stock</th>
+                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-400 uppercase tracking-wider">Status</th>
+                  <th className="px-6 py-4 text-center text-xs font-bold text-gray-400 uppercase tracking-wider">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-700">
+                {vendorListings.map((item) => (
+                  <tr key={item._id} className="hover:bg-gray-750 transition-colors">
+                    <td className="px-6 py-4 font-semibold text-white">
+                      {item.masterProductId?.name || "Product Listing"}
+                      {item.masterProductId?.brand && (
+                        <span className="text-xs text-gray-400 block font-normal">{item.masterProductId.brand}</span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 text-gray-300 font-medium">
+                      {item.vendorId?.shopName || "Vendor Store"}
+                    </td>
+                    <td className="px-6 py-4 text-emerald-400 font-extrabold">
+                      ₹{item.price} {item.mrp > item.price && <span className="text-gray-400 text-xs font-normal line-through ml-1.5">₹{item.mrp}</span>}
+                    </td>
+                    <td className="px-6 py-4 text-gray-300 font-bold">
+                      {item.stock}
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className={`px-2 py-0.5 rounded text-xs font-bold uppercase ${
+                        item.status === "active"
+                          ? "bg-green-900 text-green-300"
+                          : item.status === "pending"
+                          ? "bg-yellow-900 text-yellow-300"
+                          : item.status === "rejected"
+                          ? "bg-red-900 text-red-300"
+                          : "bg-gray-700 text-gray-300"
+                      }`}>
+                        {item.status}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center justify-center gap-2">
+                        {item.status === "pending" && (
+                          <>
+                            <button
+                              onClick={() => handleVendorListingStatus(item._id, "active")}
+                              className="p-1.5 bg-green-900/50 hover:bg-green-900 text-green-400 rounded transition-colors"
+                              title="Approve Listing"
+                            >
+                              <Check size={16} />
+                            </button>
+                            <button
+                              onClick={() => handleVendorListingStatus(item._id, "rejected")}
+                              className="p-1.5 bg-red-900/50 hover:bg-red-900 text-red-400 rounded transition-colors"
+                              title="Reject Listing"
+                            >
+                              <X size={16} />
+                            </button>
+                          </>
+                        )}
+
+                        {item.status === "active" && (
+                          <button
+                            onClick={() => handleVendorListingStatus(item._id, "inactive")}
+                            className="px-2.5 py-1 bg-yellow-900/50 hover:bg-yellow-900 text-yellow-300 rounded text-xs font-bold transition-colors"
+                            title="Deactivate Listing"
+                          >
+                            Deactivate
+                          </button>
+                        )}
+
+                        {(item.status === "inactive" || item.status === "rejected") && (
+                          <button
+                            onClick={() => handleVendorListingStatus(item._id, "active")}
+                            className="px-2.5 py-1 bg-green-900/50 hover:bg-green-900 text-green-300 rounded text-xs font-bold transition-colors"
+                            title="Activate Listing"
+                          >
+                            Activate
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )
       ) : products.length === 0 ? (
         <div className="bg-gray-800 rounded-xl p-12 text-center text-gray-400 border border-gray-700">
           <p className="text-lg font-semibold text-white">No products found</p>
@@ -470,6 +618,11 @@ export default function ProductList() {
                   </td>
                   <td className="px-6 py-4 font-semibold text-white">
                     {product.name}
+                    {product.isVendorLink && (
+                      <span className="ml-2 px-1.5 py-0.5 rounded text-[10px] bg-emerald-950 border border-emerald-700 text-emerald-300 font-extrabold uppercase">
+                        Vendor Link (₹{product.price})
+                      </span>
+                    )}
                   </td>
                   <td className="px-6 py-4 text-gray-300">{product.brand || "N/A"}</td>
                   <td className="px-6 py-4 text-gray-350">{product.categoryId?.name || "N/A"}</td>
@@ -489,7 +642,7 @@ export default function ProductList() {
                     </span>
                   </td>
                   <td className="px-6 py-4 text-xs font-bold text-gray-400">
-                    {product.creatorModel.toUpperCase()}
+                    {product.isVendorLink ? `VENDOR: ${product.vendorName}` : (product.creatorModel ? product.creatorModel.toUpperCase() : "ADMIN")}
                   </td>
                   <td className="px-6 py-4">
                     <div className="flex items-center justify-center gap-2">

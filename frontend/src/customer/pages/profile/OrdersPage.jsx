@@ -13,6 +13,7 @@ export default function OrdersPage() {
 
   const [ratingSelected, setRatingSelected] = useState({});
   const [ratingFeedback, setRatingFeedback] = useState({});
+  const [reorderingId, setReorderingId] = useState(null);
 
   const user = JSON.parse(localStorage.getItem("user") || "null");
 
@@ -21,37 +22,138 @@ export default function OrdersPage() {
     showToast({ type: "success", message: "Order ID copied to clipboard!" });
   };
 
-  const handleRepeatOrder = (order) => {
+  const handleRepeatOrder = async (order) => {
+    if (!order?.items || order.items.length === 0) {
+      showToast({ type: "warning", message: "No items found in this order." });
+      return;
+    }
+
     try {
+      setReorderingId(order._id);
+
+      // Fetch live catalog products with location context if available
+      const storedAddr = localStorage.getItem("selectedAddress");
+      const params = {};
+      if (storedAddr) {
+        try {
+          const parsed = JSON.parse(storedAddr);
+          if (parsed.latitude) params.latitude = parsed.latitude;
+          if (parsed.longitude) params.longitude = parsed.longitude;
+          if (parsed.pincode) params.pincode = parsed.pincode;
+        } catch (e) {
+          console.error("Error parsing stored address:", e);
+        }
+      }
+
+      const res = await axios.get(`${import.meta.env.VITE_API_URL}/products`, { params });
+      const liveProducts = res.data.products || [];
+
       const storedCart = localStorage.getItem("cart");
-      const currentCart = storedCart ? JSON.parse(storedCart) : [];
+      let currentCart = [];
+      try {
+        currentCart = storedCart ? JSON.parse(storedCart) : [];
+        if (!Array.isArray(currentCart)) currentCart = [];
+      } catch {
+        currentCart = [];
+      }
 
       const updatedCart = [...currentCart];
-      for (const item of order.items) {
-        const idx = updatedCart.findIndex(c => c.variantId === item.variantId);
-        if (idx > -1) {
-          updatedCart[idx].qty += item.qty;
-        } else {
-          updatedCart.push({
-            productId: item.productId,
-            variantId: item.variantId,
-            qty: item.qty,
-            price: item.price,
-            name: item.name,
-            img: item.img || "",
-            packSize: item.packSize || "",
-            brand: item.brand || "",
-          });
+      const skippedItemNames = [];
+      let addedCount = 0;
+
+      for (const oldItem of order.items) {
+        const targetVariantId = oldItem.variantId ? oldItem.variantId.toString() : null;
+        const targetProductId = oldItem.productId ? oldItem.productId.toString() : null;
+
+        let matchedProduct = null;
+        let matchedVariant = null;
+
+        for (const prod of liveProducts) {
+          if (targetProductId && prod._id.toString() === targetProductId) {
+            matchedProduct = prod;
+            if (targetVariantId) {
+              matchedVariant = (prod.variants || []).find(v => v._id.toString() === targetVariantId);
+            }
+            if (!matchedVariant && prod.variants?.length > 0) {
+              matchedVariant = prod.variants[0];
+            }
+            break;
+          }
+
+          if (targetVariantId) {
+            const vFound = (prod.variants || []).find(v => v._id.toString() === targetVariantId);
+            if (vFound) {
+              matchedProduct = prod;
+              matchedVariant = vFound;
+              break;
+            }
+          }
         }
+
+        const isAvailable = matchedProduct && matchedVariant && (matchedVariant.stockQty > 0 || matchedVariant.stockStatus === "in_stock");
+
+        if (isAvailable) {
+          const livePrice = Number(matchedVariant.sellingPrice || matchedVariant.price || oldItem.price || 0);
+          const liveMrp = Number(matchedVariant.mrp || matchedVariant.sellingPrice || oldItem.mrp || livePrice);
+          const liveVendorId = matchedVariant.vendorId || matchedProduct.primaryVendorId || oldItem.vendorId;
+          const liveVendorName = matchedVariant.vendorName || matchedProduct.primaryVendorName || oldItem.vendorName || "";
+          const packLabel = matchedVariant.variantLabel || (matchedVariant.packSize ? `${matchedVariant.packSize.value} ${matchedVariant.packSize.unit}` : "") || oldItem.packSize || "";
+          const liveImg = matchedVariant.images?.[0] || matchedProduct.images?.[0] || oldItem.img || "https://via.placeholder.com/150";
+
+          const existingIdx = updatedCart.findIndex(c => c.variantId.toString() === matchedVariant._id.toString());
+          if (existingIdx > -1) {
+            updatedCart[existingIdx].qty += (oldItem.qty || 1);
+            updatedCart[existingIdx].price = livePrice;
+            updatedCart[existingIdx].mrp = liveMrp;
+            updatedCart[existingIdx].vendorId = liveVendorId;
+            updatedCart[existingIdx].vendorName = liveVendorName;
+          } else {
+            updatedCart.push({
+              variantId: matchedVariant._id,
+              productId: matchedProduct._id,
+              name: matchedProduct.name || oldItem.name,
+              brand: matchedProduct.brand || oldItem.brand || "",
+              price: livePrice,
+              mrp: liveMrp,
+              qty: oldItem.qty || 1,
+              img: liveImg,
+              vendorName: liveVendorName,
+              vendorId: liveVendorId,
+              packSize: packLabel
+            });
+          }
+          addedCount++;
+        } else {
+          skippedItemNames.push(oldItem.name || "Unknown Item");
+        }
+      }
+
+      if (addedCount === 0) {
+        showToast({
+          type: "error",
+          message: "None of the items from this order are currently available for delivery at your location."
+        });
+        return;
       }
 
       localStorage.setItem("cart", JSON.stringify(updatedCart));
       window.dispatchEvent(new Event("cart-updated"));
-      showToast({ type: "success", message: "All items from this order added to cart!" });
+
+      if (skippedItemNames.length > 0) {
+        showToast({
+          type: "warning",
+          message: `Added ${addedCount} item(s) to cart. Skipped unavailable: ${skippedItemNames.join(", ")}`
+        });
+      } else {
+        showToast({ type: "success", message: "All items from this order added to cart with current prices!" });
+      }
+
       navigate("/customer/cart");
     } catch (err) {
       console.error("Repeat order fail:", err);
-      showToast({ type: "error", message: "Failed to repeat order." });
+      showToast({ type: "error", message: "Failed to repeat order. Please try again." });
+    } finally {
+      setReorderingId(null);
     }
   };
 
@@ -120,7 +222,7 @@ export default function OrdersPage() {
       link.click();
     } catch (err) {
       console.error(err);
-      showToast({ type: "error", message: "Failed to download invoice. Please make sure the order is Delivered." });
+      showToast({ type: "error", message: "Failed to download invoice. Please try again." });
     }
   };
 
@@ -263,24 +365,34 @@ export default function OrdersPage() {
                   <div className="space-y-3">
                     <h4 className="text-xs font-black text-slate-400 uppercase tracking-wider">Ordered Items</h4>
                     <div className="divide-y divide-slate-100">
-                      {order.items.map((item, idx) => (
-                        <div key={idx} className="py-3 flex items-center justify-between gap-3 text-xs font-semibold">
-                          <div className="flex items-center gap-3">
-                            <div className="w-12 h-12 bg-slate-50 border border-slate-100 rounded-xl flex items-center justify-center overflow-hidden flex-shrink-0">
-                              {item.img ? (
-                                <img src={item.img} alt={item.name} className="max-h-full max-w-full object-contain p-1" />
-                              ) : (
-                                <ShoppingBag className="text-slate-350" size={16} />
-                              )}
+                      {order.items.map((item, idx) => {
+                        const variantText = item.variantLabel || item.variantName || (item.packSize ? (typeof item.packSize === 'string' ? item.packSize : `${item.packSize.value} ${item.packSize.unit}`) : "") || item.unit || item.weight || (item.variantId && typeof item.variantId === 'object' ? (item.variantId.variantLabel || (item.variantId.packSize ? `${item.variantId.packSize.value} ${item.variantId.packSize.unit}` : "")) : "");
+                        return (
+                          <div key={idx} className="py-3 flex items-center justify-between gap-3 text-xs font-semibold">
+                            <div className="flex items-center gap-3">
+                              <div className="w-12 h-12 bg-slate-50 border border-slate-100 rounded-xl flex items-center justify-center overflow-hidden flex-shrink-0">
+                                {item.img ? (
+                                  <img src={item.img} alt={item.name} className="max-h-full max-w-full object-contain p-1" />
+                                ) : (
+                                  <ShoppingBag className="text-slate-350" size={16} />
+                                )}
+                              </div>
+                              <div>
+                                <h5 className="font-extrabold text-slate-800 leading-snug">{item.name}</h5>
+                                <div className="flex items-center gap-2 mt-0.5">
+                                  {variantText && (
+                                    <span className="text-[10px] text-purple-700 bg-purple-50 px-1.5 py-0.5 rounded font-bold border border-purple-100">
+                                      {variantText}
+                                    </span>
+                                  )}
+                                  <span className="text-[10px] text-slate-400 font-bold">Qty: {item.qty || item.quantity}</span>
+                                </div>
+                              </div>
                             </div>
-                            <div>
-                              <h5 className="font-extrabold text-slate-800 leading-snug">{item.name}</h5>
-                              <span className="text-[10px] text-slate-400 font-bold block mt-0.5">Qty: {item.qty}</span>
-                            </div>
+                            <span className="text-slate-800 font-black text-sm">₹{((item.price || 0) * (item.qty || item.quantity || 1)).toFixed(2)}</span>
                           </div>
-                          <span className="text-slate-800 font-black text-sm">₹{(item.price * item.qty).toFixed(2)}</span>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
 
@@ -477,9 +589,10 @@ export default function OrdersPage() {
                       <button
                         type="button"
                         onClick={() => handleRepeatOrder(order)}
-                        className="flex-1 md:flex-none bg-emerald-50 hover:bg-emerald-100 border border-emerald-250 text-emerald-700 px-4 py-2.5 rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 transition cursor-pointer shadow-sm"
+                        disabled={reorderingId === order._id}
+                        className="flex-1 md:flex-none bg-emerald-50 hover:bg-emerald-100 border border-emerald-250 text-emerald-700 px-4 py-2.5 rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 transition cursor-pointer shadow-sm disabled:opacity-50"
                       >
-                        Repeat Order
+                        {reorderingId === order._id ? "Reordering..." : "Repeat Order"}
                       </button>
 
                       <button
@@ -490,24 +603,13 @@ export default function OrdersPage() {
                         Track Order
                       </button>
 
-                      {isDelivered ? (
-                        <button
-                          type="button"
-                          onClick={() => handleDownloadInvoice(order._id, order.orderId)}
-                          className="flex-1 md:flex-none bg-purple-600 hover:bg-purple-700 text-white px-4 py-2.5 rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 shadow-sm transition cursor-pointer"
-                        >
-                          <Download size={14} /> Download Invoice
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          disabled
-                          className="flex-1 md:flex-none bg-slate-100 text-slate-400 px-4 py-2.5 rounded-xl text-xs font-bold cursor-not-allowed flex items-center justify-center gap-1.5"
-                          title="Invoice only available after order is delivered."
-                        >
-                          <Download size={14} /> Download Invoice
-                        </button>
-                      )}
+                      <button
+                        type="button"
+                        onClick={() => handleDownloadInvoice(order._id, order.orderId)}
+                        className="flex-1 md:flex-none bg-emerald-700 hover:bg-emerald-800 text-white px-4 py-2.5 rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 shadow-sm transition cursor-pointer"
+                      >
+                        <Download size={14} /> Download Invoice
+                      </button>
                     </div>
                   </div>
                 </div>

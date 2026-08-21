@@ -58,13 +58,13 @@ export default function VendorForgotPassword() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-50 to-white flex items-center justify-center px-4">
-      <div className="bg-white border border-purple-100 p-8 rounded-3xl shadow-lg w-full max-w-md">
-        <h2 className="text-3xl font-bold mb-2 text-center">
+    <div className="min-h-screen bg-gradient-to-br from-purple-50 to-white flex items-center justify-center p-3 sm:p-6">
+      <div className="bg-white border border-purple-100 p-4 sm:p-8 rounded-2xl sm:rounded-3xl shadow-lg w-full max-w-md">
+        <h2 className="text-2xl sm:text-3xl font-bold mb-2 text-center text-gray-800">
           Forgot Password
         </h2>
 
-        <p className="text-center text-gray-500 mb-6">
+        <p className="text-center text-xs sm:text-sm text-gray-500 mb-4 sm:mb-6">
           Enter your registered phone number
         </p>
 
@@ -74,14 +74,14 @@ export default function VendorForgotPassword() {
             placeholder="Phone Number (e.g. 9876543210)"
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
-            className="w-full px-4 py-3 border border-purple-200 rounded-2xl outline-none focus:border-purple-500"
+            className="w-full px-3.5 sm:px-4 py-2.5 sm:py-3 text-sm sm:text-base border border-purple-200 rounded-xl sm:rounded-2xl outline-none focus:border-purple-500 transition"
             required
           />
 
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-gradient-to-r from-purple-600 to-violet-700 text-white py-3 rounded-2xl font-semibold cursor-pointer disabled:opacity-60"
+            className="w-full bg-gradient-to-r from-purple-600 to-violet-700 text-white py-3 sm:py-3.5 rounded-xl sm:rounded-2xl font-semibold text-sm sm:text-base cursor-pointer disabled:opacity-60 hover:opacity-95 transition shadow-md"
           >
             {loading ? "Sending OTP..." : "Send OTP"}
           </button>

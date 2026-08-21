@@ -33,7 +33,7 @@ export default function OrderDetail() {
     fetchOrderDetails();
 
     const rider = JSON.parse(localStorage.getItem("deliveryBoy") || "{}");
-    const riderId = rider._id;
+    const riderId = rider._id || rider.id;
     if (riderId) {
       const socket = getSocket();
       joinRoom(`deliveryBoy:${riderId}`);
@@ -57,11 +57,12 @@ export default function OrderDetail() {
       const token = localStorage.getItem("deliveryBoyToken");
       const headers = { Authorization: `Bearer ${token}` };
       
+      const storeObj = order.vendorId || order.primaryVendor || (order.vendorSubOrders && order.vendorSubOrders[0]?.vendorId);
       // Send coordinate mock data (representing rider coordinates)
       const payload = {
         status: nextStatus,
-        latitude: order.vendorId?.latitude || 28.6139,
-        longitude: order.vendorId?.longitude || 77.2090,
+        latitude: storeObj?.latitude || 28.6139,
+        longitude: storeObj?.longitude || 77.2090,
         note: `Order marked as ${nextStatus.replace(/_/g, " ")}`
       };
 
@@ -110,7 +111,7 @@ export default function OrderDetail() {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-purple-650"></div>
+        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#0B2214]"></div>
       </div>
     );
   }
@@ -129,13 +130,14 @@ export default function OrderDetail() {
 
   const subOrders = order.vendorSubOrders || [];
   const isMultiVendor = subOrders.length > 1;
+  const storeObj = order.vendorId || order.primaryVendor || (order.vendorSubOrders && order.vendorSubOrders[0]?.vendorId);
 
   return (
     <div className="space-y-6 pb-6">
       {/* Header Back Link */}
       <button 
         onClick={() => navigate("/delivery-boy/orders")}
-        className="flex items-center gap-2 text-slate-400 hover:text-slate-800 font-extrabold text-xs transition"
+        className="flex items-center gap-2 text-slate-400 hover:text-[#0B2214] font-extrabold text-xs transition"
       >
         <ArrowLeft size={16} /> Back to Assignments
       </button>
@@ -144,13 +146,13 @@ export default function OrderDetail() {
       <div className="space-y-4">
         
         {/* Order Details Header */}
-        <div className="bg-white border border-slate-100 rounded-3xl p-5 shadow-sm space-y-3">
+        <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-sm space-y-3">
           <div className="flex justify-between items-start">
             <div>
               <span className="text-[10px] text-slate-400 uppercase tracking-widest font-black block">Order ID</span>
-              <h3 className="text-md font-black text-slate-800">#{order.orderId}</h3>
+              <h3 className="text-md font-black text-[#0B2214]">#{order.orderId}</h3>
             </div>
-            <span className={`text-[9px] font-black uppercase px-2.5 py-1 rounded-full ${order.paymentMethod === "COD" ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"}`}>
+            <span className={`text-[9px] font-black uppercase px-2.5 py-1 rounded-full ${order.paymentMethod === "COD" ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-[#047857]"}`}>
               {order.paymentMethod === "COD" ? "COD" : "PREPAID"} - {order.paymentStatus === "Paid" ? "PAID" : "PENDING"}
             </span>
           </div>
@@ -158,16 +160,16 @@ export default function OrderDetail() {
           <div className="flex gap-4 pt-3 border-t border-slate-50 text-xs font-bold text-slate-500">
             <div>
               <span className="text-[8px] text-slate-400 uppercase tracking-wider block font-bold">Payout</span>
-              <span className="text-slate-700 font-black">₹{order.riderPayout || order.deliveryCharge || 35}</span>
+              <span className="text-[#0B2214] font-black">₹{order.riderPayout || order.deliveryCharge || 35}</span>
             </div>
             <div>
               <span className="text-[8px] text-slate-400 uppercase tracking-wider block font-bold font-sans">Items</span>
-              <span className="text-slate-700 font-black">{order.items?.reduce((sum, i) => sum + i.qty, 0) || 0} items</span>
+              <span className="text-slate-700 font-black">{order.items?.reduce((sum, i) => sum + (i.qty || i.quantity || 1), 0) || 0} items</span>
             </div>
             {isMultiVendor && (
               <div>
-                <span className="text-[8px] text-purple-600 uppercase tracking-wider block font-bold font-sans">Stores</span>
-                <span className="text-purple-700 font-extrabold">{subOrders.filter(s => s.pickupStatus === "PICKED").length}/{subOrders.length} Picked</span>
+                <span className="text-[8px] text-[#047857] uppercase tracking-wider block font-bold font-sans">Stores</span>
+                <span className="text-[#047857] font-extrabold">{subOrders.filter(s => s.pickupStatus === "PICKED").length}/{subOrders.length} Picked</span>
               </div>
             )}
           </div>
@@ -175,69 +177,52 @@ export default function OrderDetail() {
 
         {/* Multi-Vendor Pickup Checklist / Single Pickup Location */}
         {isMultiVendor ? (
-          <div className="bg-white border border-purple-100 rounded-3xl p-5 shadow-sm space-y-4">
+          <div className="bg-white border border-emerald-100 rounded-3xl p-5 shadow-sm space-y-4">
             <div className="flex items-center justify-between border-b pb-3 border-slate-100">
               <div className="flex items-center gap-2.5">
-                <div className="p-2 bg-purple-50 text-[#0B2214] rounded-xl">
+                <div className="p-2 bg-emerald-50 text-[#0B2214] rounded-xl">
                   <Store size={18} />
                 </div>
                 <div>
                   <h4 className="text-xs font-black text-slate-800">Multi-Vendor Pickup Checklist</h4>
-                  <p className="text-[10px] text-purple-600 font-bold">Collect parcels from {subOrders.length} stores before delivery</p>
+                  <p className="text-[10px] text-[#047857] font-bold">Collect parcels from {subOrders.length} stores before delivery</p>
                 </div>
               </div>
-              <span className="text-xs font-black bg-purple-100 text-purple-800 px-2.5 py-1 rounded-full">
+              <span className="text-xs font-black bg-emerald-100 text-[#0B2214] px-2.5 py-1 rounded-full">
                 {subOrders.filter(s => s.pickupStatus === "PICKED").length}/{subOrders.length} Completed
               </span>
             </div>
 
             <div className="space-y-4">
               {subOrders.map((sub, idx) => {
-                const vendorObj = sub.vendorId || {};
+                const subVendorObj = sub.vendorId || {};
                 const isPicked = sub.pickupStatus === "PICKED";
                 return (
                   <div key={idx} className={`p-4 rounded-2xl border ${isPicked ? "bg-emerald-50/60 border-emerald-200" : "bg-slate-50 border-slate-200"} space-y-3 transition`}>
                     <div className="flex justify-between items-start">
                       <div>
-                        <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Pickup Stop #{idx + 1}</span>
-                        <p className="font-extrabold text-slate-800 text-sm">{vendorObj.shopName || "Merchant Store"}</p>
-                        <p className="text-xs text-slate-500 font-medium mt-0.5">
-                          {vendorObj.address?.village ? `${vendorObj.address.village}, ` : ""}
-                          {vendorObj.address?.district || "Store Address"}
-                        </p>
+                        <p className="font-extrabold text-xs text-slate-800">{subVendorObj.shopName || "Partner Store"}</p>
+                        <p className="text-[10px] text-slate-500 mt-0.5">{subVendorObj.address?.village || "Merchant Address"}, {subVendorObj.address?.district || "Store District"}</p>
                       </div>
-                      <span className={`text-[10px] font-black px-2.5 py-1 rounded-full ${isPicked ? "bg-emerald-100 text-emerald-800 border border-emerald-300" : "bg-amber-100 text-amber-800 border border-amber-300"}`}>
-                        {isPicked ? "✓ PICKED UP" : "PENDING PICKUP"}
+                      <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-full ${isPicked ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`}>
+                        {isPicked ? "Picked" : "Pending"}
                       </span>
                     </div>
 
-                    {/* Sub-order items */}
-                    <div className="bg-white rounded-xl p-2.5 border text-xs space-y-1">
-                      <p className="text-[10px] font-extrabold text-slate-400 uppercase">Items to collect:</p>
-                      {sub.items.map((it, itemIdx) => (
-                        <div key={itemIdx} className="flex justify-between text-slate-700 font-semibold text-xs">
-                          <span>{it.name} <span className="text-slate-400">x{it.qty}</span></span>
-                          <span className="font-bold text-slate-800">₹{(it.price * it.qty).toFixed(2)}</span>
-                        </div>
-                      ))}
-                    </div>
-
-                    <div className="flex items-center justify-between pt-1">
-                      {vendorObj.phone ? (
-                        <a
-                          href={`tel:${vendorObj.phone}`}
-                          className="inline-flex items-center gap-1 text-xs text-purple-700 font-bold border border-purple-200 px-2.5 py-1 rounded-lg bg-white hover:bg-purple-50"
-                        >
-                          <Phone size={11} /> Call Merchant
+                    <div className="flex justify-between items-center pt-2 border-t border-slate-200/60">
+                      {subVendorObj.phone ? (
+                        <a href={`tel:${subVendorObj.phone}`} className="text-[10px] font-extrabold text-[#047857] flex items-center gap-1">
+                          <Phone size={10} /> Call Merchant
                         </a>
-                      ) : <div />}
+                      ) : (
+                        <span className="text-[10px] text-slate-400 font-semibold">No Phone</span>
+                      )}
 
                       {!isPicked && (
                         <button
-                          type="button"
+                          onClick={() => handleVendorPickup(subVendorObj._id || subVendorObj.id)}
                           disabled={updating}
-                          onClick={() => handleVendorPickup(vendorObj._id || sub.vendorId)}
-                          className="px-3.5 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-bold text-xs shadow-xs transition cursor-pointer"
+                          className="px-3.5 py-1.5 bg-[#0B2214] hover:bg-[#047857] text-white rounded-xl font-bold text-xs shadow-xs transition cursor-pointer"
                         >
                           {updating ? "Updating..." : "Mark Store Picked Up"}
                         </button>
@@ -251,7 +236,7 @@ export default function OrderDetail() {
         ) : (
           <div className="bg-white border border-slate-100 rounded-3xl p-5 shadow-sm space-y-3">
             <div className="flex items-center gap-2.5">
-              <div className="p-2 bg-purple-50 text-[#0B2214] rounded-xl">
+              <div className="p-2 bg-emerald-50 text-[#0B2214] rounded-xl">
                 <Store size={18} />
               </div>
               <div>
@@ -261,13 +246,13 @@ export default function OrderDetail() {
             </div>
 
             <div className="text-xs font-semibold text-slate-600 pl-1">
-              <p className="font-extrabold text-slate-800">{order.vendorId?.shopName}</p>
-              <p className="mt-1 leading-relaxed">{order.vendorId?.address?.village || "Merchant Address"}, {order.vendorId?.address?.district || "Store District"}</p>
+              <p className="font-extrabold text-slate-800">{storeObj?.shopName || "Aryusha Merchant Store"}</p>
+              <p className="mt-1 leading-relaxed">{storeObj?.address?.village || storeObj?.address?.area || "Merchant Address"}, {storeObj?.address?.district || storeObj?.address?.city || "Store District"}</p>
               
-              {order.vendorId?.phone && (
+              {storeObj?.phone && (
                 <a 
-                  href={`tel:${order.vendorId.phone}`}
-                  className="mt-3 inline-flex items-center gap-1.5 text-purple-700 font-black border border-purple-200 px-3 py-1.5 rounded-xl hover:bg-purple-50 transition cursor-pointer"
+                  href={`tel:${storeObj.phone}`}
+                  className="mt-3 inline-flex items-center gap-1.5 text-[#047857] font-black border border-emerald-200 px-3 py-1.5 rounded-xl hover:bg-emerald-50 transition cursor-pointer"
                 >
                   <Phone size={12} /> Contact Merchant
                 </a>
@@ -384,7 +369,7 @@ export default function OrderDetail() {
           <button
             onClick={() => handleUpdateStatus("On_the_Way")}
             disabled={updating}
-            className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-bold transition shadow-lg shadow-indigo-200 flex items-center justify-center gap-2 cursor-pointer"
+            className="w-full py-4 bg-[#047857] hover:bg-[#065f46] text-white rounded-2xl font-bold transition shadow-lg shadow-emerald-200 flex items-center justify-center gap-2 cursor-pointer"
           >
             <Navigation size={18} /> {updating ? "Processing..." : "Start Journey (On the Way)"}
           </button>
@@ -394,14 +379,14 @@ export default function OrderDetail() {
           <div className="space-y-2">
             <button
               onClick={() => navigate(`/delivery-boy/orders/${id}/map`)}
-              className="w-full py-4 bg-purple-600 hover:bg-purple-750 text-white rounded-2xl font-bold transition shadow-lg flex items-center justify-center gap-2 cursor-pointer"
+              className="w-full py-4 bg-[#047857] hover:bg-[#065f46] text-white rounded-2xl font-bold transition shadow-lg flex items-center justify-center gap-2 cursor-pointer"
             >
               <Navigation size={18} /> Track Route Map
             </button>
             <button
               onClick={() => handleUpdateStatus("Reached_Customer")}
               disabled={updating}
-              className="w-full py-4.5 bg-[#0B2214] hover:bg-[#153e25] text-white rounded-2xl font-bold transition shadow-lg flex items-center justify-center gap-2 cursor-pointer"
+              className="w-full py-4.5 bg-[#0B2214] hover:bg-[#062c1a] text-white rounded-2xl font-bold transition shadow-lg flex items-center justify-center gap-2 cursor-pointer"
             >
               <CheckCircle size={18} /> {updating ? "Processing..." : "I have Reached Customer"}
             </button>
@@ -411,7 +396,7 @@ export default function OrderDetail() {
         {order.deliveryStatus === "Reached_Customer" && (
           <button
             onClick={() => navigate(`/delivery-boy/orders/${id}/verify`)}
-            className="w-full py-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-bold transition shadow-lg shadow-emerald-250 flex items-center justify-center gap-2 cursor-pointer"
+            className="w-full py-4 bg-[#047857] hover:bg-[#065f46] text-white rounded-2xl font-bold transition shadow-lg shadow-emerald-250 flex items-center justify-center gap-2 cursor-pointer"
           >
             <CheckCircle size={18} /> Enter Customer OTP
           </button>

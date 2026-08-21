@@ -4,7 +4,8 @@ import {
   Category,
   SubCategory,
   ProductVariant,
-  VendorListing
+  VendorListing,
+  VendorProduct
 } from "../../models/catalog.js";
 
 // ============================================================================
@@ -74,15 +75,58 @@ export const getProducts = async (req, res) => {
       query._id = { $in: productIds };
     }
 
-    const products = await Product.find(query)
+    let products = await Product.find(query)
       .populate("categoryId", "name")
       .populate("subCategoryId", "name")
       .populate("familyId", "name")
       .sort({ createdAt: -1 });
 
+    // Include pending VendorProduct listings when status filter includes "pending" or "all"
+    let vendorListings = [];
+    if (!status || status === "all" || status === "pending") {
+      const vpQuery = { status: "pending" };
+      if (createdBy) vpQuery.vendorId = createdBy;
+
+      const pendingVPs = await VendorProduct.find(vpQuery)
+        .populate({
+          path: "masterProductId",
+          populate: [
+            { path: "categoryId", select: "name" },
+            { path: "subCategoryId", select: "name" },
+            { path: "familyId", select: "name" }
+          ]
+        })
+        .populate("vendorId", "shopName phone email");
+
+      vendorListings = pendingVPs.map(vp => ({
+        _id: vp._id,
+        isVendorLink: true,
+        vendorProductId: vp._id,
+        masterProductId: vp.masterProductId?._id,
+        name: vp.masterProductId ? `[Vendor Listing] ${vp.masterProductId.name} (${vp.vendorId?.shopName || 'Store'})` : "Vendor Listing Request",
+        masterProductName: vp.masterProductId?.name || "Unknown Product",
+        vendorName: vp.vendorId?.shopName || "Vendor Store",
+        brand: vp.masterProductId?.brand || "N/A",
+        categoryId: vp.masterProductId?.categoryId,
+        subCategoryId: vp.masterProductId?.subCategoryId,
+        familyId: vp.masterProductId?.familyId,
+        status: vp.status || "pending",
+        creatorModel: "Vendor",
+        price: vp.price,
+        mrp: vp.mrp,
+        stock: vp.stock,
+        sku: vp.sku,
+        createdAt: vp.createdAt
+      }));
+    }
+
+    const allItems = [...vendorListings, ...products.map(p => p.toObject())].sort(
+      (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
+    );
+
     res.status(200).json({
       success: true,
-      products,
+      products: allItems,
     });
   } catch (error) {
     console.error("Get Products Error:", error);
@@ -396,6 +440,15 @@ export const deleteProduct = async (req, res) => {
 export const approveProduct = async (req, res) => {
   try {
     const { remarks } = req.body;
+
+    // Check if target is a VendorProduct reference link
+    const vendorProduct = await VendorProduct.findById(req.params.id);
+    if (vendorProduct) {
+      vendorProduct.status = "active";
+      await vendorProduct.save();
+      return res.json({ success: true, message: "Vendor listing approved successfully", product: vendorProduct });
+    }
+
     const product = await Product.findOne({ _id: req.params.id, isDeleted: { $ne: true } });
     if (!product) {
       return res.status(404).json({ success: false, message: "Product not found" });
@@ -419,6 +472,15 @@ export const approveProduct = async (req, res) => {
 export const rejectProduct = async (req, res) => {
   try {
     const { remarks } = req.body;
+
+    // Check if target is a VendorProduct reference link
+    const vendorProduct = await VendorProduct.findById(req.params.id);
+    if (vendorProduct) {
+      vendorProduct.status = "rejected";
+      await vendorProduct.save();
+      return res.json({ success: true, message: "Vendor listing rejected successfully", product: vendorProduct });
+    }
+
     const product = await Product.findOne({ _id: req.params.id, isDeleted: { $ne: true } });
     if (!product) {
       return res.status(404).json({ success: false, message: "Product not found" });
@@ -586,6 +648,77 @@ export const exportProducts = async (req, res) => {
       .populate("variants");
 
     res.json({ success: true, products });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// ============================================================================
+// ADMIN VENDOR LISTINGS (VendorProduct) CONTROLLERS
+// ============================================================================
+export const getAdminVendorListings = async (req, res) => {
+  try {
+    const { vendorId, status, search, categoryId, subCategoryId, familyId } = req.query;
+
+    let query = {};
+    if (status && status !== "all") {
+      query.status = status;
+    }
+    if (vendorId && vendorId !== "all") {
+      query.vendorId = vendorId;
+    }
+
+    let vendorListings = await VendorProduct.find(query)
+      .populate({
+        path: "masterProductId",
+        populate: [
+          { path: "categoryId", select: "name" },
+          { path: "subCategoryId", select: "name" },
+          { path: "familyId", select: "name" }
+        ]
+      })
+      .populate("vendorId", "shopName email phone")
+      .sort({ createdAt: -1 });
+
+    // Client-side filter if search or hierarchy filters specified
+    if (search) {
+      const searchRegex = new RegExp(search.trim(), "i");
+      vendorListings = vendorListings.filter(vp => 
+        searchRegex.test(vp.masterProductId?.name || "") ||
+        searchRegex.test(vp.vendorId?.shopName || "") ||
+        searchRegex.test(vp.sku || "")
+      );
+    }
+
+    if (categoryId && categoryId !== "all") {
+      vendorListings = vendorListings.filter(vp => vp.masterProductId?.categoryId?._id?.toString() === categoryId);
+    }
+    if (subCategoryId && subCategoryId !== "all") {
+      vendorListings = vendorListings.filter(vp => vp.masterProductId?.subCategoryId?._id?.toString() === subCategoryId);
+    }
+    if (familyId && familyId !== "all") {
+      vendorListings = vendorListings.filter(vp => vp.masterProductId?.familyId?._id?.toString() === familyId);
+    }
+
+    res.json({ success: true, vendorListings });
+  } catch (error) {
+    console.error("Get Admin Vendor Listings Error:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const updateVendorListingStatus = async (req, res) => {
+  try {
+    const { status } = req.body;
+    const vp = await VendorProduct.findById(req.params.id);
+    if (!vp) {
+      return res.status(404).json({ success: false, message: "Vendor listing not found" });
+    }
+
+    vp.status = status;
+    await vp.save();
+
+    res.json({ success: true, message: `Vendor listing status updated to ${status}`, vendorListing: vp });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }

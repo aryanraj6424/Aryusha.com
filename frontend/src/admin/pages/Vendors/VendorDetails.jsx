@@ -747,6 +747,22 @@ export default function VendorDetails() {
                   ))}
                 </div>
               </div>
+
+              {/* Commission Edit Access */}
+              <div className="p-4 grid md:grid-cols-4 items-center">
+                <span className="font-bold text-slate-700">Commission Edit Access</span>
+                <div className="col-span-3 flex flex-wrap gap-6">
+                  <label className="flex items-center gap-2 cursor-pointer font-medium text-slate-800">
+                    <input
+                      type="checkbox"
+                      checked={permissions.commissionEditAccess?.edit || false}
+                      onChange={() => handlePermissionToggle("commissionEditAccess", "edit")}
+                      className="w-4 h-4 rounded text-green-600 border-gray-300 focus:ring-green-500"
+                    />
+                    <span>Allow Vendor to Edit Listing Commission Override</span>
+                  </label>
+                </div>
+              </div>
             </div>
 
             <div className="flex justify-end pt-2">

@@ -88,7 +88,7 @@ const productSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
-    slug: { type: String, lowercase: true, trim: true },
+    slug: { type: String, lowercase: true, trim: true, index: true },
     coupon_allowed: { type: Boolean, default: false },
     max_discount_amount: { type: Number, default: null, min: 0 },
     metaTitle: { type: String, default: "" },
@@ -101,6 +101,8 @@ const productSchema = new mongoose.Schema(
   }
 );
 
-const Product = mongoose.model("Product", productSchema);
+productSchema.index({ slug: 1 }, { unique: true, sparse: true });
+
+const Product = mongoose.models.Product || mongoose.model("Product", productSchema);
 
 export default Product;

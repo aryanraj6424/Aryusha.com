@@ -48,7 +48,8 @@ export function generatePrintInvoiceHTML(order, { isAdmin = false } = {}) {
   let allocatedCommSum = 0;
 
   const itemsWithBreakdown = rawItems.map((item, idx) => {
-    const lineSubtotal = (Number(item.price) || 0) * (Number(item.qty) || 0);
+    const itemQty = Number(item.qty !== undefined && item.qty !== null ? item.qty : (item.quantity !== undefined && item.quantity !== null ? item.quantity : 1));
+    const lineSubtotal = (Number(item.price) || 0) * itemQty;
     
     // 1. Coupon Discount Share
     let itemCoupon = 0;
@@ -99,9 +100,32 @@ export function generatePrintInvoiceHTML(order, { isAdmin = false } = {}) {
 
     const itemNetEarning = Math.max(0, lineSubtotal - itemComm);
 
+    let variantText = "";
+    if (item.variantLabel) {
+      variantText = item.variantLabel;
+    } else if (item.variantName) {
+      variantText = item.variantName;
+    } else if (item.variant) {
+      variantText = typeof item.variant === "string" ? item.variant : (item.variant.variantLabel || item.variant.name || "");
+    } else if (item.variantId && typeof item.variantId === "object") {
+      if (item.variantId.variantLabel) {
+        variantText = item.variantId.variantLabel;
+      } else if (item.variantId.packSize && item.variantId.packSize.value && item.variantId.packSize.unit) {
+        variantText = `${item.variantId.packSize.value} ${item.variantId.packSize.unit}`;
+      }
+    } else if (item.packSize) {
+      variantText = typeof item.packSize === "string" ? item.packSize : (item.packSize.value && item.packSize.unit ? `${item.packSize.value} ${item.packSize.unit}` : "");
+    } else if (item.unit) {
+      variantText = item.unit;
+    } else if (item.weight) {
+      variantText = item.weight;
+    }
+
     return {
       ...item,
       lineSubtotal,
+      itemQty,
+      variantText,
       itemCoupon,
       itemComm,
       itemCommLabel,
@@ -502,7 +526,10 @@ export function generatePrintInvoiceHTML(order, { isAdmin = false } = {}) {
               <tr>
                 <td class="num-col tabular-num" style="color:#64748b; font-weight:700;">${i + 1}</td>
                 <td>
-                  <div class="item-name">${item.name}</div>
+                  <div class="item-name">
+                    ${item.name}
+                    ${item.variantText ? `<span style="color:#6b21a8; font-size:10px; font-weight:700; margin-left:6px; background:#f3e8ff; padding:1px 6px; border-radius:4px; border:1px solid #e9d5ff; display:inline-block;">${item.variantText}</span>` : ""}
+                  </div>
                   <div class="item-sub-info">
                     ${item.itemCoupon > 0 
                       ? `<div>• Coupon Discount: <span class="discount-green">−₹${item.itemCoupon.toFixed(2)}</span> ${order.couponCode ? "(" + order.couponCode + ")" : ""}</div>` 
@@ -512,7 +539,7 @@ export function generatePrintInvoiceHTML(order, { isAdmin = false } = {}) {
                     <div>• Vendor Earning: <span class="earning-purple">₹${item.itemNetEarning.toFixed(2)}</span></div>
                   </div>
                 </td>
-                <td style="text-align:center;" class="tabular-num">${item.qty}</td>
+                <td style="text-align:center;" class="tabular-num">${item.itemQty ?? item.qty ?? item.quantity ?? 1}</td>
                 <td style="text-align:right;" class="tabular-num">₹${Number(item.price || 0).toFixed(2)}</td>
                 <td style="text-align:right; font-weight:800;" class="tabular-num">₹${item.lineSubtotal.toFixed(2)}</td>
               </tr>
@@ -540,9 +567,15 @@ export function generatePrintInvoiceHTML(order, { isAdmin = false } = {}) {
                   <span>Delivery Charge</span>
                   <span class="tabular-num">₹${Number(order.deliveryCharge || 0).toFixed(2)}</span>
                 </div>
+                ${Number(platformFee) > 0 ? `
+                  <div class="summary-row">
+                    <span>Platform Fee</span>
+                    <span class="tabular-num">₹${Number(platformFee).toFixed(2)}</span>
+                  </div>
+                ` : ""}
                 ${Number(order.taxAmount || 0) > 0 ? `
                   <div class="summary-row">
-                    <span>Taxes</span>
+                    <span>Taxes (GST)</span>
                     <span class="tabular-num">₹${Number(order.taxAmount).toFixed(2)}</span>
                   </div>
                 ` : ""}

@@ -117,7 +117,7 @@ function App() {
           <Route path="category/slug/:slug" element={<CustomerDashboard />} />
           <Route path="categories/slug/:slug" element={<CustomerDashboard />} />
           <Route path="trending" element={<CustomerDashboard />} />
-          <Route path="product/:id" element={<ProductDetailsPage />} />
+          <Route path="product/:idOrSlug" element={<ProductDetailsPage />} />
           <Route path="product/slug/:slug" element={<ProductDetailsPage />} />
           <Route path="location" element={<LocationPage />} />
           <Route path="cart" element={<CartPage />} />

@@ -113,8 +113,8 @@ export default function DeliveryBoyLayout() {
               className="w-8 h-8 object-contain rounded-lg bg-white p-0.5"
             />
             <div>
-              <h1 className="text-md font-black tracking-wide">QuickKart Rider</h1>
-              <p className="text-[10px] text-purple-200 font-bold -mt-0.5">Delivery Partner</p>
+              <h1 className="text-md font-black tracking-wide">Aryusha Rider</h1>
+              <p className="text-[10px] text-emerald-200 font-bold -mt-0.5">Delivery Partner</p>
             </div>
           </div>
 

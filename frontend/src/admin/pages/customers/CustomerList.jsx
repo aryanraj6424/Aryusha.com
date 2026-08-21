@@ -258,59 +258,67 @@ export function InvoiceModal({ order, onClose }) {
               <span className="text-xxs font-bold text-slate-400">{itemsWithBreakdown.length} Item{itemsWithBreakdown.length > 1 ? "s" : ""}</span>
             </div>
 
-            {itemsWithBreakdown.map((item, i) => (
-              <div key={i} className="bg-slate-50/80 border border-slate-200/80 rounded-xl p-3.5 space-y-2 text-xs min-w-0 overflow-hidden">
-                {/* Item Main Info */}
-                <div className="flex justify-between items-start gap-2 min-w-0">
-                  <div className="space-y-0.5 min-w-0 flex-1">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className="font-mono text-xxs font-bold text-slate-400 flex-shrink-0">#{i + 1}</span>
-                      <span className="font-bold text-slate-800 text-xs sm:text-sm break-words min-w-0">{item.name}</span>
+            {itemsWithBreakdown.map((item, i) => {
+              const variantText = item.variantLabel || item.variantName || (item.packSize ? (typeof item.packSize === 'string' ? item.packSize : `${item.packSize.value} ${item.packSize.unit}`) : "") || item.unit || item.weight || (item.variantId && typeof item.variantId === 'object' ? (item.variantId.variantLabel || (item.variantId.packSize ? `${item.variantId.packSize.value} ${item.variantId.packSize.unit}` : "")) : "");
+              return (
+                <div key={i} className="bg-slate-50/80 border border-slate-200/80 rounded-xl p-3.5 space-y-2 text-xs min-w-0 overflow-hidden">
+                  {/* Item Main Info */}
+                  <div className="flex justify-between items-start gap-2 min-w-0">
+                    <div className="space-y-0.5 min-w-0 flex-1">
+                      <div className="flex items-center gap-2 min-w-0 flex-wrap">
+                        <span className="font-mono text-xxs font-bold text-slate-400 flex-shrink-0">#{i + 1}</span>
+                        <span className="font-bold text-slate-800 text-xs sm:text-sm break-words min-w-0">{item.name}</span>
+                        {variantText && (
+                          <span className="text-[10px] text-purple-700 bg-purple-100/70 border border-purple-200 px-1.5 py-0.5 rounded font-bold">
+                            {variantText}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xxs text-slate-500 font-mono">
+                        {item.qty || item.quantity} × ₹{Number(item.price || 0).toFixed(2)}
+                      </p>
                     </div>
-                    <p className="text-xxs text-slate-500 font-mono">
-                      {item.qty} × ₹{Number(item.price || 0).toFixed(2)}
-                    </p>
+                    <div className="text-right flex-shrink-0">
+                      <span className="text-xxs font-bold text-slate-400 block uppercase tracking-wider">Line Total</span>
+                      <span className="font-mono font-black text-slate-900 text-sm">₹{item.lineSubtotal.toFixed(2)}</span>
+                    </div>
                   </div>
-                  <div className="text-right flex-shrink-0">
-                    <span className="text-xxs font-bold text-slate-400 block uppercase tracking-wider">Line Total</span>
-                    <span className="font-mono font-black text-slate-900 text-sm">₹{item.lineSubtotal.toFixed(2)}</span>
-                  </div>
-                </div>
 
-                {/* Item Deductions */}
-                <div className="pt-2 border-t border-slate-200/60 space-y-1 text-xxs sm:text-xs min-w-0">
-                  {/* Coupon Share */}
-                  <div className="flex justify-between items-center min-w-0 gap-2">
-                    <span className="text-slate-500 font-medium flex-shrink-0">Coupon Share:</span>
-                    {item.itemCoupon > 0 ? (
-                      <span className="font-mono font-bold text-emerald-600 truncate">
-                        {order.couponCode ? `${order.couponCode} discount` : "Coupon discount"}: −₹{item.itemCoupon.toFixed(2)}
+                  {/* Item Deductions */}
+                  <div className="pt-2 border-t border-slate-200/60 space-y-1 text-xxs sm:text-xs min-w-0">
+                    {/* Coupon Share */}
+                    <div className="flex justify-between items-center min-w-0 gap-2">
+                      <span className="text-slate-500 font-medium flex-shrink-0">Coupon Share:</span>
+                      {item.itemCoupon > 0 ? (
+                        <span className="font-mono font-bold text-emerald-600 truncate">
+                          {order.couponCode ? `${order.couponCode} discount` : "Coupon discount"}: −₹{item.itemCoupon.toFixed(2)}
+                        </span>
+                      ) : (
+                        <span className="font-mono text-slate-400 italic">No coupon on this item</span>
+                      )}
+                    </div>
+
+                    {/* Commission */}
+                    <div className="flex justify-between items-center min-w-0 gap-2">
+                      <span className="text-slate-500 font-medium flex-shrink-0">Platform Commission:</span>
+                      <span className="font-mono font-bold text-red-600 truncate">
+                        {item.itemCommLabel}
                       </span>
-                    ) : (
-                      <span className="font-mono text-slate-400 italic">No coupon on this item</span>
-                    )}
+                    </div>
                   </div>
 
-                  {/* Commission */}
-                  <div className="flex justify-between items-center min-w-0 gap-2">
-                    <span className="text-slate-500 font-medium flex-shrink-0">Platform Commission:</span>
-                    <span className="font-mono font-bold text-red-600 truncate">
-                      {item.itemCommLabel}
+                  {/* Net Earning Highlight Line */}
+                  <div className="bg-purple-100/70 border border-purple-200/80 rounded-lg px-3 py-2 flex justify-between items-center min-w-0">
+                    <span className="font-bold text-purple-900 text-xxs sm:text-xs uppercase tracking-wider flex-shrink-0">
+                      Vendor earns on this item
+                    </span>
+                    <span className="font-mono font-black text-purple-800 text-xs sm:text-sm">
+                      ₹{item.itemNetEarning.toFixed(2)}
                     </span>
                   </div>
                 </div>
-
-                {/* Net Earning Highlight Line */}
-                <div className="bg-purple-100/70 border border-purple-200/80 rounded-lg px-3 py-2 flex justify-between items-center min-w-0">
-                  <span className="font-bold text-purple-900 text-xxs sm:text-xs uppercase tracking-wider flex-shrink-0">
-                    Vendor earns on this item
-                  </span>
-                  <span className="font-mono font-black text-purple-800 text-xs sm:text-sm">
-                    ₹{item.itemNetEarning.toFixed(2)}
-                  </span>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           {/* Totals & Financial Breakdown Section */}

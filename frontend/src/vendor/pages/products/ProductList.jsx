@@ -72,6 +72,18 @@ export default function ProductList() {
   const [editingLink, setEditingLink] = useState(null);
   const [showLinkEditModal, setShowLinkEditModal] = useState(false);
   const [linkCommissionInfo, setLinkCommissionInfo] = useState(null);
+  const [vendorPermissions, setVendorPermissions] = useState(null);
+
+  useEffect(() => {
+    const token = localStorage.getItem("vendorToken");
+    if (token) {
+      axios.get(`${import.meta.env.VITE_API_URL}/vendor/permissions`, {
+        headers: { Authorization: `Bearer ${token}` }
+      }).then(res => {
+        setVendorPermissions(res.data?.permissions?.permissions || null);
+      }).catch(err => console.error("Error fetching vendor permissions:", err));
+    }
+  }, []);
 
   useEffect(() => {
     if (editingLink) {
@@ -973,14 +985,16 @@ export default function ProductList() {
                 />
               </div>
 
-              {/* Role-Based Commission Section */}
-              {Boolean(localStorage.getItem("adminToken")) ? (
+              {/* Commission Section */}
+              {Boolean(localStorage.getItem("adminToken")) || vendorPermissions?.commissionEditAccess?.edit ? (
                 <div className="p-4 border rounded-2xl bg-purple-50/40 border-purple-200 space-y-3 col-span-1 sm:col-span-3">
                   <div className="flex items-center justify-between">
                     <div>
-                      <span className="text-xs font-bold text-purple-900 uppercase tracking-wider block">Listing Commission Override (Admin Only)</span>
+                      <span className="text-xs font-bold text-purple-900 uppercase tracking-wider block">
+                        Listing Commission Override {Boolean(localStorage.getItem("adminToken")) ? "(Admin)" : "(Vendor Permitted)"}
+                      </span>
                       <span className="text-[11px] text-slate-500 font-medium">
-                        Set custom commission for this specific listing. If unset, falls back to: <strong className="text-purple-700">{linkCommissionInfo ? linkCommissionInfo.displayText : "Platform default"}</strong>
+                        Set custom commission for this specific listing. If set to Inherit, falls back to: <strong className="text-purple-700">{linkCommissionInfo ? linkCommissionInfo.displayText : "Platform default"}</strong>
                       </span>
                     </div>
                   </div>
@@ -1019,7 +1033,7 @@ export default function ProductList() {
                 <div className="p-3.5 border rounded-xl bg-purple-50/70 border-purple-150 flex items-center justify-between col-span-1 sm:col-span-3">
                   <div>
                     <span className="text-xs font-bold text-slate-800 block">Platform Commission</span>
-                    <span className="text-[11px] text-slate-500 font-medium">Read-only platform rate applied to sales</span>
+                    <span className="text-[11px] text-slate-500 font-medium">Read-only platform rate (Admin permission required to edit)</span>
                   </div>
                   <span className="text-xs font-extrabold text-purple-700 bg-white px-3 py-1.5 rounded-lg border border-purple-200 shadow-sm">
                     {linkCommissionInfo ? linkCommissionInfo.displayText : "Loading..."}

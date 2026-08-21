@@ -14,8 +14,8 @@ const formatDescriptionHtml = (rawHtml) => {
 };
 
 export default function ProductDetailsPage() {
-  const { id, slug } = useParams();
-  const targetParam = slug || id;
+  const { id, idOrSlug, slug } = useParams();
+  const targetParam = idOrSlug || slug || id;
   const navigate = useNavigate();
   const { showToast } = useToast();
   
@@ -292,10 +292,12 @@ export default function ProductDetailsPage() {
   };
 
   const handleShareProduct = async () => {
+    const productSlug = product?.slug || product?._id;
+    const shareUrl = `${window.location.origin}/customer/product/${productSlug}`;
     const shareData = {
-      title: cleanName || product.name,
-      text: `Check out ${cleanName || product.name} on QuickCart!`,
-      url: window.location.href,
+      title: cleanName || product?.name || "Aryusha",
+      text: `Check out ${cleanName || product?.name} on Aryusha!`,
+      url: shareUrl,
     };
 
     if (navigator.share) {
@@ -306,13 +308,99 @@ export default function ProductDetailsPage() {
       }
     } else {
       try {
-        await navigator.clipboard.writeText(window.location.href);
+        await navigator.clipboard.writeText(shareUrl);
         showToast({ type: "success", message: "Link copied to clipboard!" });
       } catch (err) {
         console.error("Error copying link to clipboard:", err);
         showToast({ type: "error", message: "Could not copy link." });
       }
     }
+  };
+
+  const handleAddOtherSellerToCart = (seller) => {
+    const cartStr = localStorage.getItem("cart");
+    let cart = [];
+    try {
+      cart = cartStr ? JSON.parse(cartStr) : [];
+      if (!Array.isArray(cart)) cart = [];
+    } catch {
+      cart = [];
+    }
+
+    const targetVariantId = selectedVariant?._id || product?.variants?.[0]?._id || product?._id;
+
+    const existingIndex = cart.findIndex(
+      (item) => item.variantId === targetVariantId && item.vendorId === seller.vendorId
+    );
+
+    if (existingIndex > -1) {
+      cart[existingIndex].qty += 1;
+    } else {
+      cart.push({
+        variantId: targetVariantId,
+        productId: product._id,
+        name: cleanName || product.name,
+        brand: product.brand,
+        price: seller.price,
+        mrp: seller.mrp,
+        qty: 1,
+        img: selectedImage || product.images?.[0] || "https://via.placeholder.com/150",
+        vendorName: seller.vendorName,
+        vendorId: seller.vendorId,
+        packSize: packSizeLabel
+      });
+    }
+
+    localStorage.setItem("cart", JSON.stringify(cart));
+    window.dispatchEvent(new Event("cart-updated"));
+    showToast({ type: "success", message: `Added to cart from ${seller.vendorName} (₹${seller.price})!` });
+  };
+
+  const renderOtherSellers = () => {
+    if (!product?.otherSellers || product.otherSellers.length <= 1) return null;
+
+    return (
+      <div className="bg-white border border-slate-100 p-5 rounded-3xl shadow-sm space-y-3.5 my-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="font-extrabold text-slate-800 text-sm">More Offers from Partner Stores</h3>
+            <p className="text-[11px] text-slate-400 font-semibold">Choose your preferred seller for this product</p>
+          </div>
+          <span className="text-xs font-black text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-full">
+            {product.otherSellers.length} Sellers Available
+          </span>
+        </div>
+
+        <div className="divide-y divide-slate-100">
+          {product.otherSellers.map((seller, idx) => (
+            <div key={seller.vendorId || idx} className="py-3 flex items-center justify-between gap-3">
+              <div className="space-y-0.5">
+                <span className="text-xs font-extrabold text-slate-800 block">
+                  {seller.vendorName}
+                </span>
+                <div className="flex items-baseline gap-2">
+                  <span className="text-sm font-black text-purple-700">₹{seller.price}</span>
+                  {seller.mrp > seller.price && (
+                    <span className="text-xs text-slate-400 line-through">M.R.P. ₹{seller.mrp}</span>
+                  )}
+                  {seller.discount > 0 && (
+                    <span className="text-[10px] font-black text-emerald-600">({seller.discount}% OFF)</span>
+                  )}
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => handleAddOtherSellerToCart(seller)}
+                className="bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold text-xs px-3.5 py-2 rounded-xl transition cursor-pointer shadow-sm flex items-center gap-1.5"
+              >
+                <ShoppingCart size={13} /> Add to Cart
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
   };
 
   useEffect(() => {
@@ -343,7 +431,7 @@ export default function ProductDetailsPage() {
 
           // 301 Client Redirect from raw ID URL to canonical slug URL
           if (isObjectId && found.slug) {
-            navigate(`/customer/product/slug/${found.slug}`, { replace: true });
+            navigate(`/customer/product/${found.slug}`, { replace: true });
           }
           
           // Fetch product family details to load country of origin, shelf life, FSSAI, SEO, etc.
@@ -846,6 +934,7 @@ export default function ProductDetailsPage() {
           </div>
         </div>
 
+        {renderOtherSellers()}
         {renderRatingForm()}
         {renderSimilarProducts()}
 
@@ -1144,6 +1233,8 @@ export default function ProductDetailsPage() {
           </div>
         </div>
 
+        {renderOtherSellers()}
+
         {/* Description & Additional attributes */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {/* About details — expandable */}
@@ -1334,7 +1425,7 @@ function ProductCard({ product }) {
       <div>
         {/* Product Image */}
         <div 
-          onClick={() => navigate(product.slug ? `/customer/product/slug/${product.slug}` : `/customer/product/${product._id}`)}
+          onClick={() => navigate(`/customer/product/${product.slug || product._id}`)}
           className="h-28 sm:h-36 md:h-40 w-full rounded-xl bg-slate-50 flex items-center justify-center overflow-hidden mb-2 cursor-pointer hover:opacity-90 transition p-1"
         >
           <img
@@ -1357,7 +1448,7 @@ function ProductCard({ product }) {
           )}
         </div>
         <h3 
-          onClick={() => navigate(product.slug ? `/customer/product/slug/${product.slug}` : `/customer/product/${product._id}`)}
+          onClick={() => navigate(`/customer/product/${product.slug || product._id}`)}
           className="font-bold text-slate-800 text-xs sm:text-sm line-clamp-2 min-h-[32px] sm:min-h-[40px] cursor-pointer hover:text-purple-650 transition leading-tight mb-1"
         >
           {cleanName || product.name}

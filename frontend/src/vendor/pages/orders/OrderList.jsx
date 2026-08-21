@@ -391,7 +391,7 @@ export default function OrderList() {
                         <Clock size={10} className="shrink-0" /> {order.deliverySlot.date ? `${order.deliverySlot.date} • ` : ""}{order.deliverySlot.time}
                       </p>
                     )}
-                    <p className="font-bold text-slate-700">₹{order.grandTotal.toFixed(2)}</p>
+                    <p className="font-bold text-slate-700">₹{(order.vendorCustomerTotal !== undefined ? order.vendorCustomerTotal : (order.totalAmount || order.grandTotal || 0)).toFixed(2)}</p>
                   </div>
 
                   <div className="flex justify-between items-center gap-2 pt-2 border-t border-slate-50">
@@ -445,7 +445,7 @@ export default function OrderList() {
                     )}
                   </div>
                   <div className="text-right space-y-1 shrink-0">
-                    <span className="text-sm font-black text-[#0B2214] block">₹{selectedOrder.grandTotal.toFixed(2)}</span>
+                    <span className="text-sm font-black text-[#0B2214] block">₹{(selectedOrder.vendorCustomerTotal !== undefined ? selectedOrder.vendorCustomerTotal : (selectedOrder.totalAmount || selectedOrder.grandTotal || 0)).toFixed(2)}</span>
                     <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">
                       {selectedOrder.paymentMethod}
                     </span>
@@ -666,17 +666,28 @@ export default function OrderList() {
                     <h3 className="font-extrabold text-slate-800 text-xs uppercase tracking-wider">Parcels checklist</h3>
                   </div>
                   <div className="divide-y divide-slate-50 text-xs pl-1">
-                    {selectedOrder.items.map((item, idx) => (
-                      <div key={idx} className="py-2.5 flex justify-between font-semibold">
-                        <span className="text-slate-700">{item.name} <span className="text-slate-400 font-bold">x{item.qty}</span></span>
-                        <span className="text-slate-800 font-bold">₹{(item.price * item.qty).toFixed(2)}</span>
-                      </div>
-                    ))}
+                    {selectedOrder.items.map((item, idx) => {
+                      const variantText = item.variantLabel || item.variantName || (item.packSize ? (typeof item.packSize === 'string' ? item.packSize : `${item.packSize.value} ${item.packSize.unit}`) : "") || item.unit || item.weight || (item.variantId && typeof item.variantId === 'object' ? (item.variantId.variantLabel || (item.variantId.packSize ? `${item.variantId.packSize.value} ${item.variantId.packSize.unit}` : "")) : "");
+                      return (
+                        <div key={idx} className="py-2.5 flex justify-between items-center font-semibold">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-slate-700">{item.name}</span>
+                            {variantText && (
+                              <span className="text-[10px] text-purple-700 bg-purple-50 border border-purple-150 px-1.5 py-0.5 rounded font-bold">
+                                {variantText}
+                              </span>
+                            )}
+                            <span className="text-slate-400 font-bold">x{item.qty || item.quantity}</span>
+                          </div>
+                          <span className="text-slate-800 font-bold">₹{((item.price || 0) * (item.qty || item.quantity || 1)).toFixed(2)}</span>
+                        </div>
+                      );
+                    })}
 
                     <div className="pt-2 mt-2 border-t border-dashed border-slate-200 text-[11px] font-bold text-slate-500 space-y-1.5">
                       <div className="flex justify-between">
                         <span>Items Subtotal:</span>
-                        <span>₹{selectedOrder.totalAmount?.toFixed(2) || selectedOrder.items?.reduce((sum, item) => sum + item.price * item.qty, 0).toFixed(2)}</span>
+                        <span>₹{(selectedOrder.vendorSubtotal || selectedOrder.totalAmount || selectedOrder.items?.reduce((sum, item) => sum + item.price * item.qty, 0) || 0).toFixed(2)}</span>
                       </div>
                       {selectedOrder.couponDiscount > 0 && (
                         <div className="flex justify-between text-emerald-600">
@@ -696,17 +707,29 @@ export default function OrderList() {
                           <span>₹{selectedOrder.taxAmount.toFixed(2)}</span>
                         </div>
                       )}
-                      {/* Calculate any residual fees (Handling fee, small cart fee) */}
-                      {selectedOrder.grandTotal - (selectedOrder.totalAmount - (selectedOrder.couponDiscount || 0) + (selectedOrder.deliveryCharge || 0) + (selectedOrder.taxAmount || 0)) > 0 && (
+                      {selectedOrder.platformFee > 0 && (
                         <div className="flex justify-between">
                           <span>Platform Fees:</span>
-                          <span>₹{(selectedOrder.grandTotal - (selectedOrder.totalAmount - (selectedOrder.couponDiscount || 0) + (selectedOrder.deliveryCharge || 0) + (selectedOrder.taxAmount || 0))).toFixed(2)}</span>
+                          <span>₹{selectedOrder.platformFee.toFixed(2)}</span>
                         </div>
                       )}
-                      <div className="flex justify-between text-xs font-black text-slate-850 pt-1 border-t border-slate-100">
-                        <span>Customer Grand Total:</span>
-                        <span className="text-[#0B2214]">₹{selectedOrder.grandTotal.toFixed(2)}</span>
-                      </div>
+                      {selectedOrder.isMultiVendor && selectedOrder.fullOrderGrandTotal ? (
+                        <>
+                          <div className="flex justify-between text-[10px] text-slate-400 font-semibold pt-1 border-t border-slate-100">
+                            <span>Full Order Total (All Sellers):</span>
+                            <span>₹{selectedOrder.fullOrderGrandTotal.toFixed(2)}</span>
+                          </div>
+                          <div className="flex justify-between text-xs font-black text-slate-850">
+                            <span>Customer Paid (This Store):</span>
+                            <span className="text-[#0B2214]">₹{(selectedOrder.vendorCustomerTotal || selectedOrder.totalAmount || 0).toFixed(2)}</span>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="flex justify-between text-xs font-black text-slate-850 pt-1 border-t border-slate-100">
+                          <span>Customer Grand Total:</span>
+                          <span className="text-[#0B2214]">₹{(selectedOrder.vendorCustomerTotal || selectedOrder.grandTotal || 0).toFixed(2)}</span>
+                        </div>
+                      )}
                       {(() => {
                         const hasCommission = selectedOrder.vendorCommission && selectedOrder.vendorCommission.amount !== undefined;
                         const commRate = hasCommission ? selectedOrder.vendorCommission.rate : 8;

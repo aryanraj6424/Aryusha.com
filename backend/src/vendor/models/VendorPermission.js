@@ -42,6 +42,9 @@ const vendorPermissionSchema = new mongoose.Schema(
         edit: { type: Boolean, default: true },
         delete: { type: Boolean, default: true },
       },
+      commissionEditAccess: {
+        edit: { type: Boolean, default: false },
+      },
     },
     lastUpdatedBy: {
       type: mongoose.Schema.Types.ObjectId,

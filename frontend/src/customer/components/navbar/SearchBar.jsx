@@ -100,11 +100,7 @@ function SearchBar() {
 
   const handleSelectProduct = (product) => {
     setShowDropdown(false);
-    if (product.slug) {
-      navigate(`/customer/product/slug/${product.slug}`);
-    } else if (product._id) {
-      navigate(`/customer/product/${product._id}`);
-    }
+    navigate(`/customer/product/${product.slug || product._id}`);
   };
 
   return (

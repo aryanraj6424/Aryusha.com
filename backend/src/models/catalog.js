@@ -258,11 +258,23 @@ const productSchema = new Schema(
   { timestamps: true }
 );
 
-productSchema.pre('validate', function () {
+productSchema.pre('validate', async function () {
   if (this.name && (!this.slug || this.isModified('name'))) {
-    this.slug = this.name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+    const baseSlug = this.name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'product';
+    let candidate = baseSlug;
+    let counter = 1;
+    while (true) {
+      const query = { slug: candidate };
+      if (this._id) query._id = { $ne: this._id };
+      const existing = await this.constructor.findOne(query).select('_id').lean();
+      if (!existing) break;
+      candidate = `${baseSlug}-${counter}`;
+      counter++;
+    }
+    this.slug = candidate;
   }
 });
+productSchema.index({ slug: 1 }, { unique: true, sparse: true });
 productSchema.index({ familyId: 1, name: 1 });
 productSchema.index({ categoryId: 1, subCategoryId: 1, status: 1 });
 
@@ -427,7 +439,7 @@ const vendorProductSchema = new Schema(
     max_discount_amount: { type: Number, default: null, min: 0 },
     commissionType: { type: String, enum: ['percentage', 'flat', 'inherit'], default: 'inherit' },
     commissionValue: { type: Number, default: null },
-    status: { type: String, enum: ['active', 'inactive'], default: 'active', index: true }
+    status: { type: String, enum: ['active', 'inactive', 'pending', 'rejected'], default: 'pending', index: true }
   },
   { timestamps: true }
 );

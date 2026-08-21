@@ -28,7 +28,7 @@ export const getSitemapXml = async (req, res) => {
 
     try {
       categories = await Category.find({ status: "active", isDeleted: false }).select("_id updatedAt slug").lean();
-      products = await Product.find({ status: "active", isDeleted: false }).select("_id updatedAt").lean();
+      products = await Product.find({ status: "active", isDeleted: false }).select("_id slug updatedAt").lean();
     } catch (dbErr) {
       console.error("Sitemap DB Query Notice:", dbErr.message);
     }
@@ -59,8 +59,9 @@ export const getSitemapXml = async (req, res) => {
     // Product pages
     products.forEach((prod) => {
       const lastMod = prod.updatedAt ? new Date(prod.updatedAt).toISOString().split("T")[0] : new Date().toISOString().split("T")[0];
+      const productSlug = prod.slug || prod._id;
       xml += `  <url>\n`;
-      xml += `    <loc>${domain}/customer/product/${prod._id}</loc>\n`;
+      xml += `    <loc>${domain}/customer/product/${productSlug}</loc>\n`;
       xml += `    <lastmod>${lastMod}</lastmod>\n`;
       xml += `    <changefreq>daily</changefreq>\n`;
       xml += `    <priority>0.7</priority>\n`;

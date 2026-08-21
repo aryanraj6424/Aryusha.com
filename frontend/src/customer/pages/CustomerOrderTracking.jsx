@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import axios from "axios";
-import { ArrowLeft, User, Phone, CheckCircle2, Clock, MapPin, KeyRound, Copy, Star } from "lucide-react";
+import { ArrowLeft, User, Phone, CheckCircle2, Clock, MapPin, KeyRound, Copy, Star, Download } from "lucide-react";
 import { useToast } from "../../components/Toast";
 import { getSocket, joinRoom, leaveRoom } from "../../services/socket";
 import { loadGoogleMaps } from "../../utils/googleMapsLoader";
@@ -359,6 +359,28 @@ export default function CustomerOrderTracking() {
     showToast({ type: "success", message: `Thank you for rating your delivery experience: ${rating} Stars!` });
   };
 
+  const handleDownloadInvoice = async () => {
+    try {
+      const token = localStorage.getItem("userToken");
+      const res = await axios.get(
+        `${import.meta.env.VITE_API_URL}/customer/orders/${id}/invoice`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+          responseType: "blob",
+        }
+      );
+      const file = new Blob([res.data], { type: "application/pdf" });
+      const fileURL = URL.createObjectURL(file);
+      const link = document.createElement("a");
+      link.href = fileURL;
+      link.download = `invoice_${tracking?.orderId || "order"}.pdf`;
+      link.click();
+    } catch (err) {
+      console.error("Invoice download error:", err);
+      showToast({ type: "error", message: "Failed to download invoice." });
+    }
+  };
+
   if (loading && !tracking) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[400px]">
@@ -407,15 +429,25 @@ export default function CustomerOrderTracking() {
           <p className="text-xs text-slate-400 font-bold uppercase mt-0.5">Order #{tracking.orderId}</p>
         </div>
 
-        {/* ETA badge */}
-        {tracking.eta && !isDelivered && (
-          <div className="bg-purple-50 border border-purple-100 px-4 py-2 rounded-2xl text-right">
-            <span className="text-[9px] text-purple-650 font-black block uppercase tracking-wider">Estimated Delivery</span>
-            <span className="text-xs font-black text-slate-800 flex items-center gap-1 mt-0.5">
-              <Clock size={12} className="text-purple-600" /> {tracking.eta}
-            </span>
-          </div>
-        )}
+        {/* Actions & ETA badge */}
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={handleDownloadInvoice}
+            className="bg-emerald-700 hover:bg-emerald-800 text-white px-3.5 py-2 rounded-2xl text-xs font-extrabold flex items-center gap-1.5 shadow-sm transition cursor-pointer"
+          >
+            <Download size={14} /> Invoice
+          </button>
+
+          {tracking.eta && !isDelivered && (
+            <div className="bg-purple-50 border border-purple-100 px-4 py-2 rounded-2xl text-right">
+              <span className="text-[9px] text-purple-650 font-black block uppercase tracking-wider">Estimated Delivery</span>
+              <span className="text-xs font-black text-slate-800 flex items-center gap-1 mt-0.5">
+                <Clock size={12} className="text-purple-600" /> {tracking.eta}
+              </span>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* ── 1. STEP PROGRESS TIMELINE ── */}

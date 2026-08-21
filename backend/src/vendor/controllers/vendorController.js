@@ -12,6 +12,7 @@ import { emitToRoom } from "../../socket/socketManager.js";
 import RiderNotification from "../../deliveryBoy/models/RiderNotification.js";
 import PlatformFeeSettings from "../../admin/models/PlatformFeeSettings.js";
 import { calculateCommissionSync } from "../../utils/commissionCalculator.js";
+import { formatVendorScopedOrder } from "../../utils/financeSerializer.js";
 import mongoose from "mongoose";
 import { handleOrderStatusChange, runInTransaction } from "../../utils/ledgerSyncHelper.js";
 
@@ -259,6 +260,10 @@ export const getVendorPermissionsSelf = async (req, res) => {
       let modified = false;
       if (!permissions.permissions.product) {
         permissions.permissions.product = { view: true, add: true, edit: true, delete: true };
+        modified = true;
+      }
+      if (!permissions.permissions.commissionEditAccess) {
+        permissions.permissions.commissionEditAccess = { edit: false };
         modified = true;
       }
       if (modified) {
@@ -643,20 +648,17 @@ export const getVendorOrders = async (req, res) => {
     })
       .populate("customerId", "fullName email phoneNumber")
       .populate("deliveryBoyId", "fullName phone")
+      .populate({
+        path: "items.variantId",
+        select: "variantLabel packSize name sku"
+      })
+      .populate({
+        path: "vendorSubOrders.items.variantId",
+        select: "variantLabel packSize name sku"
+      })
       .sort({ createdAt: -1 });
 
-    const orders = rawOrders.map(order => {
-      const orderObj = order.toObject();
-      const sub = (order.vendorSubOrders || []).find(s => s.vendorId.toString() === vendorId.toString());
-      if (sub) {
-        orderObj.items = sub.items;
-        orderObj.orderStatus = sub.subOrderStatus;
-        orderObj.parentOrderStatus = order.orderStatus;
-        orderObj.totalAmount = sub.subtotal;
-        orderObj.vendorCommission = sub.vendorCommission;
-      }
-      return orderObj;
-    });
+    const orders = rawOrders.map(order => formatVendorScopedOrder(order, vendorId));
 
     res.status(200).json({
       success: true,

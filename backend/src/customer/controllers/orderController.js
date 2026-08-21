@@ -2,6 +2,9 @@ import mongoose from "mongoose";
 import PDFDocument from "pdfkit";
 import CustomerOrder from "../models/CustomerOrder.js";
 import Invoice from "../models/Invoice.js";
+import User from "../models/User.js";
+import Vendor from "../../vendor/models/Vendor.js";
+import DeliveryBoy from "../../deliveryBoy/models/DeliveryBoy.js";
 import Counter from "../../models/Counter.js";
 import { VendorListing, VendorProduct, ProductVariant, ProductReview, Product } from "../../models/catalog.js";
 import { calculateOrderFees } from "../../utils/feeCalculator.js";
@@ -362,6 +365,7 @@ export const getCustomerOrders = async (req, res) => {
     const orders = await CustomerOrder.find({ customerId: req.user._id })
       .select("-vendorCommission")
       .populate("vendorId", "shopName phone")
+      .populate({ path: "items.variantId", select: "variantLabel packSize name sku" })
       .sort({ createdAt: -1 });
 
     const serializedOrders = orders.map(order => serializeCustomerOrder(order));
@@ -384,7 +388,8 @@ export const getOrderById = async (req, res) => {
     const order = await CustomerOrder.findById(req.params.id)
       .select("-vendorCommission")
       .populate("vendorId", "shopName phone address")
-      .populate("customerId", "fullName phoneNumber email");
+      .populate("customerId", "fullName phoneNumber email")
+      .populate({ path: "items.variantId", select: "variantLabel packSize name sku" });
 
     if (!order) {
       return res.status(404).json({ success: false, message: "Order not found." });
@@ -410,178 +415,391 @@ export const getOrderById = async (req, res) => {
 // @desc    Download PDF invoice for delivered orders
 // @route   GET /api/customer/orders/:id/invoice
 // @access  Public (Customer)
+// @desc    Download PDF invoice for master order (Customer side)
+// @route   GET /api/customer/orders/:id/invoice
+// @access  Public (Customer)
 export const downloadInvoice = async (req, res) => {
   try {
     const order = await CustomerOrder.findById(req.params.id)
-      .populate("vendorId", "shopName phone address")
-      .populate("customerId", "fullName phoneNumber");
+      .populate("customerId", "fullName phoneNumber email")
+      .populate("deliveryBoyId", "fullName phone")
+      .populate("vendorId", "shopName phone address assignedArea storeDetails serviceAreas")
+      .populate({
+        path: "vendorSubOrders.vendorId",
+        select: "shopName phone address assignedArea storeDetails serviceAreas"
+      })
+      .populate({
+        path: "items.variantId",
+        select: "variantLabel packSize name sku"
+      });
 
     if (!order) {
       return res.status(404).json({ success: false, message: "Order not found." });
     }
 
-    const orderCustId = order.customerId._id ? order.customerId._id.toString() : order.customerId.toString();
-    if (orderCustId !== req.user._id.toString()) {
+    const orderCustId = order.customerId?._id ? order.customerId._id.toString() : order.customerId?.toString();
+    if (orderCustId && req.user?._id && orderCustId !== req.user._id.toString()) {
       return res.status(403).json({ success: false, message: "Unauthorized access to invoice." });
     }
 
-    if (order.orderStatus !== "Delivered") {
-      return res.status(400).json({
-        success: false,
-        message: "Invoice download is only available for delivered orders.",
-      });
+    // Ensure invoiceNumber is generated (AR-000xxx)
+    if (!order.invoiceNumber) {
+      order.invoiceNumber = await getNextInvoiceNumber();
+      await order.save();
     }
 
-    // Resolve or create Invoice record
+    // Resolve or create Invoice record for auditing
     let invoice = await Invoice.findOne({ orderId: order._id });
     if (!invoice) {
       const invoiceId = await generateUniqueId("INV", Invoice, "invoiceId");
       invoice = await Invoice.create({
         invoiceId,
         orderId: order._id,
-        customerId: order.customerId._id,
-        vendorId: order.vendorId._id,
+        customerId: order.customerId?._id || order.customerId,
+        vendorId: order.vendorId?._id || order.vendorId,
         totalAmount: order.grandTotal,
       });
     }
 
-    // Generate PDF document in-memory and stream
-    const doc = new PDFDocument({ margin: 50 });
+    // Date & Time formatting
+    const orderDate = new Date(order.createdAt || invoice.invoiceDate || Date.now());
+    const dateStr = orderDate.toLocaleDateString("en-IN", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+    const timeStr = orderDate.toLocaleTimeString("en-IN", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    });
+    const formattedDateTime = `${dateStr}, ${timeStr}`;
 
-    // Set Response Headers
+    // Initialize PDF Document
+    const doc = new PDFDocument({ margin: 40, size: "A4" });
+
     res.setHeader("Content-Type", "application/pdf");
-    res.setHeader(
-      "Content-Disposition",
-      `attachment; filename=invoice_${order.orderId}.pdf`
-    );
+    res.setHeader("Content-Disposition", `inline; filename=invoice_${order.orderId}.pdf`);
 
     doc.pipe(res);
 
-    // Document Header
-    doc
-      .fillColor("#4f46e5")
-      .fontSize(20)
-      .text("QUICKKART INVOICE", { align: "right" })
-      .fillColor("#475569")
-      .fontSize(10)
-      .text(`Invoice ID: ${invoice.invoiceId}`, { align: "right" })
-      .text(`Date: ${new Date(invoice.invoiceDate).toLocaleDateString()}`, { align: "right" })
-      .moveDown(1);
+    // Color Palette
+    const BRAND_GREEN = "#0B2214";
+    const ACCENT_GREEN = "#047857";
+    const TINT_GREEN = "#ECFDF5";
+    const BORDER_GREEN = "#A7F3D0";
+    const DARK_TEXT = "#1E293B";
+    const MUTED_TEXT = "#64748B";
+    const BORDER_GRAY = "#E2E8F0";
 
-    // Vendor and Customer Info Section
+    // ── HEADER ──
     doc
-      .fontSize(12)
-      .fillColor("#1e293b")
-      .text("Fulfillment Partner (Seller):", { underline: true })
-      .fontSize(10)
-      .fillColor("#475569")
-      .text(order.vendorId?.shopName || "Registered Partner")
-      .text(`Phone: ${order.vendorId?.phone || "N/A"}`)
-      .moveDown(1);
+      .fillColor(BRAND_GREEN)
+      .fontSize(22)
+      .font("Helvetica-Bold")
+      .text("ARYUSHA", 40, 40)
+      .fillColor(MUTED_TEXT)
+      .fontSize(8.5)
+      .font("Helvetica")
+      .text("Fresh groceries, delivered fast — aryusha.in", 40, 66);
 
-    const slotInfo = order.deliverySlot?.time
-      ? (order.deliverySlot.date ? `${order.deliverySlot.date} (${order.deliverySlot.time})` : order.deliverySlot.time)
-      : "Standard Delivery";
-
+    // Right Header Info
     doc
-      .fontSize(12)
-      .fillColor("#1e293b")
-      .text("Delivered To (Buyer):", { underline: true })
-      .fontSize(10)
-      .fillColor("#475569")
-      .text(order.deliveryAddress?.fullName)
-      .text(`Phone: ${order.deliveryAddress?.phoneNumber}`)
-      .text(
-        `Address: ${order.deliveryAddress?.houseNo}, ${order.deliveryAddress?.area}, ${order.deliveryAddress?.city}, ${order.deliveryAddress?.state} - ${order.deliveryAddress?.pincode}`
-      )
-      .text(`Delivery Slot: ${slotInfo}`)
-      .moveDown(1.5);
+      .fillColor(BRAND_GREEN)
+      .fontSize(14)
+      .font("Helvetica-Bold")
+      .text("TAX INVOICE", 350, 40, { width: 205, align: "right" })
+      .fillColor(DARK_TEXT)
+      .fontSize(9)
+      .font("Helvetica")
+      .text(`Invoice No: ${order.invoiceNumber || invoice.invoiceId}`, 350, 58, { width: 205, align: "right" })
+      .text(`Order ID: ${order.orderId}`, 350, 70, { width: 205, align: "right" })
+      .text(`Date: ${formattedDateTime}`, 350, 82, { width: 205, align: "right" });
 
-    // Items Table Header
-    const tableTop = 270;
+    // Header Divider Line
     doc
-      .fontSize(10)
-      .fillColor("#1e293b")
-      .text("Item Name", 50, tableTop)
-      .text("Unit Price", 250, tableTop, { width: 90, align: "right" })
-      .text("Qty", 350, tableTop, { width: 50, align: "right" })
-      .text("Total Price", 420, tableTop, { width: 100, align: "right" });
-
-    // Draw horizontal separator
-    doc
-      .strokeColor("#cbd5e1")
-      .lineWidth(1)
-      .moveTo(50, tableTop + 15)
-      .lineTo(550, tableTop + 15)
+      .strokeColor(BRAND_GREEN)
+      .lineWidth(2)
+      .moveTo(40, 98)
+      .lineTo(555, 98)
       .stroke();
 
-    // Items List
-    let currentY = tableTop + 25;
-    order.items.forEach((item) => {
-      doc
-        .fillColor("#475569")
-        .text(item.name, 50, currentY, { width: 190 })
-        .text(`₹${item.price.toFixed(2)}`, 250, currentY, { width: 90, align: "right" })
-        .text(item.qty.toString(), 350, currentY, { width: 50, align: "right" })
-        .text(`₹${(item.price * item.qty).toFixed(2)}`, 420, currentY, { width: 100, align: "right" });
+    // ── THREE-COLUMN META ROW ──
+    const metaY = 110;
 
-      currentY += 20;
+    // Col 1: Billed To
+    doc
+      .fillColor(BRAND_GREEN)
+      .fontSize(9)
+      .font("Helvetica-Bold")
+      .text("BILLED TO", 40, metaY)
+      .fillColor(DARK_TEXT)
+      .fontSize(9)
+      .font("Helvetica-Bold")
+      .text(order.deliveryAddress?.fullName || order.customerId?.fullName || "Valued Customer", 40, metaY + 14)
+      .fillColor(MUTED_TEXT)
+      .fontSize(8.5)
+      .font("Helvetica")
+      .text(`Ph: ${order.deliveryAddress?.phoneNumber || order.customerId?.phoneNumber || "N/A"}`, 40, metaY + 26);
+
+    const addrStr = order.deliveryAddress
+      ? `${order.deliveryAddress.houseNo || ""}, ${order.deliveryAddress.area || ""}, ${order.deliveryAddress.city || ""}, ${order.deliveryAddress.state || ""} - ${order.deliveryAddress.pincode || ""}`
+      : "Delivery Address N/A";
+    doc.text(addrStr, 40, metaY + 38, { width: 160 });
+
+    // Col 2: Delivered By & Status Pill
+    const fulfillingVendor = order.vendorId || (order.vendorSubOrders && order.vendorSubOrders[0]?.vendorId);
+    const vendorZone = fulfillingVendor?.assignedArea || fulfillingVendor?.storeDetails?.assignedArea || fulfillingVendor?.address?.area || fulfillingVendor?.address?.city || order.deliveryAddress?.area || "Local Service Area";
+
+    doc
+      .fillColor(BRAND_GREEN)
+      .fontSize(9)
+      .font("Helvetica-Bold")
+      .text("DELIVERED BY", 215, metaY)
+      .fillColor(DARK_TEXT)
+      .fontSize(9)
+      .font("Helvetica-Bold")
+      .text("Aryusha", 215, metaY + 14, { width: 160 })
+      .fillColor(MUTED_TEXT)
+      .fontSize(8.5)
+      .font("Helvetica")
+      .text(`Zone: ${vendorZone}`, 215, metaY + 26);
+
+    // Status Pill
+    const isDelivered = order.orderStatus === "Delivered";
+    const statusText = isDelivered ? "✓ Delivered" : (order.orderStatus ? order.orderStatus.replace(/_/g, " ") : "In Progress");
+
+    doc
+      .roundedRect(215, metaY + 54, 110, 18, 4)
+      .fillAndStroke(TINT_GREEN, BORDER_GREEN);
+
+    doc
+      .fillColor(ACCENT_GREEN)
+      .fontSize(8)
+      .font("Helvetica-Bold")
+      .text(statusText, 215, metaY + 59, { width: 110, align: "center" });
+
+    // Col 3: Payment Info
+    const isCOD = order.paymentMethod === "COD" || order.paymentMethod === "Cash on Delivery";
+    const payStatus = isCOD ? (isDelivered ? "Paid (COD)" : "Due (Pay on Delivery)") : (order.paymentStatus || "Paid");
+    const payMethod = order.paymentMethod || "Online Payment";
+    const txnId = order.paymentDetails?.transactionId || order.razorpayPaymentId || (isCOD ? "N/A (Cash on Delivery)" : "N/A");
+
+    doc
+      .fillColor(BRAND_GREEN)
+      .fontSize(9)
+      .font("Helvetica-Bold")
+      .text("PAYMENT DETAILS", 390, metaY)
+      .fillColor(MUTED_TEXT)
+      .fontSize(8.5)
+      .font("Helvetica")
+      .text("Mode: ", 390, metaY + 14)
+      .fillColor(DARK_TEXT)
+      .font("Helvetica-Bold")
+      .text(payMethod, 435, metaY + 14)
+      .fillColor(MUTED_TEXT)
+      .font("Helvetica")
+      .text("Status: ", 390, metaY + 26)
+      .fillColor(payStatus.includes("Due") ? "#B45309" : ACCENT_GREEN)
+      .font("Helvetica-Bold")
+      .text(payStatus, 435, metaY + 26)
+      .fillColor(MUTED_TEXT)
+      .font("Helvetica")
+      .text("Txn ID: ", 390, metaY + 38)
+      .fillColor(DARK_TEXT)
+      .font("Helvetica")
+      .text(txnId, 435, metaY + 38, { width: 120 });
+
+    // ── ITEMS TABLE ──
+    const tableTop = 205;
+
+    // Table Header Background
+    doc
+      .rect(40, tableTop, 515, 20)
+      .fill(BRAND_GREEN);
+
+    // Table Header Text
+    doc
+      .fillColor("#FFFFFF")
+      .fontSize(8.5)
+      .font("Helvetica-Bold")
+      .text("S.No", 45, tableTop + 5, { width: 25 })
+      .text("Item Description", 75, tableTop + 5, { width: 230 })
+      .text("Qty", 310, tableTop + 5, { width: 45, align: "right" })
+      .text("Unit Price", 365, tableTop + 5, { width: 75, align: "right" })
+      .text("Amount", 450, tableTop + 5, { width: 95, align: "right" });
+
+    // Items Rendering
+    let currentY = tableTop + 24;
+    const itemsList = order.items || [];
+
+    itemsList.forEach((item, index) => {
+      let variantDesc = "";
+      if (item.variantLabel) {
+        variantDesc = item.variantLabel;
+      } else if (item.variantName) {
+        variantDesc = item.variantName;
+      } else if (item.variant) {
+        variantDesc = typeof item.variant === "string" ? item.variant : (item.variant.variantLabel || item.variant.name || "");
+      } else if (item.variantId && typeof item.variantId === "object") {
+        if (item.variantId.variantLabel) {
+          variantDesc = item.variantId.variantLabel;
+        } else if (item.variantId.packSize && item.variantId.packSize.value && item.variantId.packSize.unit) {
+          variantDesc = `${item.variantId.packSize.value} ${item.variantId.packSize.unit}`;
+        }
+      } else if (item.packSize) {
+        variantDesc = typeof item.packSize === "string" ? item.packSize : (item.packSize.value && item.packSize.unit ? `${item.packSize.value} ${item.packSize.unit}` : "");
+      } else if (item.unit) {
+        variantDesc = item.unit;
+      } else if (item.weight) {
+        variantDesc = item.weight;
+      } else {
+        variantDesc = item.brand || "";
+      }
+
+      const unitPrice = Number(item.price || 0);
+      const itemQty = Number(item.qty !== undefined && item.qty !== null ? item.qty : (item.quantity !== undefined && item.quantity !== null ? item.quantity : 1));
+      const lineTotal = unitPrice * itemQty;
+
+      doc
+        .fillColor(DARK_TEXT)
+        .fontSize(8.5)
+        .font("Helvetica")
+        .text((index + 1).toString(), 45, currentY, { width: 25 })
+        .font("Helvetica-Bold")
+        .text(item.name, 75, currentY, { width: 230 });
+
+      if (variantDesc) {
+        doc
+          .fillColor(MUTED_TEXT)
+          .fontSize(7.5)
+          .font("Helvetica")
+          .text(`Variant: ${variantDesc}`, 75, currentY + 11, { width: 230 });
+      }
+
+      doc
+        .fillColor(DARK_TEXT)
+        .fontSize(8.5)
+        .font("Helvetica")
+        .text(itemQty.toString(), 310, currentY, { width: 45, align: "right" })
+        .text(`₹${unitPrice.toFixed(2)}`, 365, currentY, { width: 75, align: "right" })
+        .font("Helvetica-Bold")
+        .text(`₹${lineTotal.toFixed(2)}`, 450, currentY, { width: 95, align: "right" });
+
+      const rowHeight = variantDesc ? 24 : 18;
+      currentY += rowHeight;
+
+      // Subtle horizontal line separator
+      doc
+        .strokeColor(BORDER_GRAY)
+        .lineWidth(0.5)
+        .moveTo(40, currentY - 2)
+        .lineTo(555, currentY - 2)
+        .stroke();
     });
 
-    // Draw separator
+    currentY += 8;
+
+    // ── TOTALS SECTION ──
+    const totalsX = 320;
+    const itemTotal = order.totalAmount || (order.items || []).reduce((sum, i) => sum + (Number(i.price) || 0) * (Number(i.qty) || 0), 0) || 0;
+    const deliveryFee = order.deliveryCharge || order.deliveryFee || 0;
+    const platformFee = order.platformFee !== undefined ? order.platformFee : ((Number(order.handlingFee || 0) + Number(order.smallCartFee || 0) + Number(order.rainFee || 0)) || 0);
+    const taxAmount = order.taxAmount || 0;
+    const discount = order.couponDiscount || order.discountAmount || 0;
+
+    doc.fontSize(8.5).font("Helvetica");
+
+    // Item Total
     doc
-      .strokeColor("#cbd5e1")
-      .lineWidth(1)
-      .moveTo(50, currentY + 5)
-      .lineTo(550, currentY + 5)
+      .fillColor(MUTED_TEXT)
+      .text("Item Total:", totalsX, currentY, { width: 130, align: "right" })
+      .fillColor(DARK_TEXT)
+      .text(`₹${itemTotal.toFixed(2)}`, 450, currentY, { width: 95, align: "right" });
+    currentY += 14;
+
+    // Delivery Fee
+    doc
+      .fillColor(MUTED_TEXT)
+      .text("Delivery Fee:", totalsX, currentY, { width: 130, align: "right" })
+      .fillColor(DARK_TEXT)
+      .text(`₹${deliveryFee.toFixed(2)}`, 450, currentY, { width: 95, align: "right" });
+    currentY += 14;
+
+    // Platform Fee
+    doc
+      .fillColor(MUTED_TEXT)
+      .text("Platform Fee:", totalsX, currentY, { width: 130, align: "right" })
+      .fillColor(DARK_TEXT)
+      .text(`₹${platformFee.toFixed(2)}`, 450, currentY, { width: 95, align: "right" });
+    currentY += 14;
+
+    // Taxes (GST)
+    doc
+      .fillColor(MUTED_TEXT)
+      .text("Taxes (GST):", totalsX, currentY, { width: 130, align: "right" })
+      .fillColor(DARK_TEXT)
+      .text(`₹${taxAmount.toFixed(2)}`, 450, currentY, { width: 95, align: "right" });
+    currentY += 14;
+
+    // Coupon Discount (only if applicable)
+    if (discount > 0 || order.couponCode) {
+      const couponLabel = order.couponCode ? `Coupon (${order.couponCode}):` : "Coupon Discount:";
+      doc
+        .fillColor(ACCENT_GREEN)
+        .font("Helvetica-Bold")
+        .text(couponLabel, totalsX, currentY, { width: 130, align: "right" })
+        .text(`- ₹${discount.toFixed(2)}`, 450, currentY, { width: 95, align: "right" });
+      currentY += 14;
+    }
+
+    currentY += 4;
+
+    // Grand Total Divider & Row
+    doc
+      .strokeColor(BRAND_GREEN)
+      .lineWidth(1.5)
+      .moveTo(totalsX, currentY)
+      .lineTo(555, currentY)
       .stroke();
 
-    currentY += 15;
-
-    // Totals Section
-    doc
-      .fontSize(10)
-      .fillColor("#475569")
-      .text("Subtotal:", 320, currentY, { width: 100, align: "right" })
-      .text(`₹${order.totalAmount.toFixed(2)}`, 420, currentY, { width: 100, align: "right" });
-
-    currentY += 15;
+    currentY += 6;
 
     doc
-      .text("Delivery Charge:", 320, currentY, { width: 100, align: "right" })
-      .text(`₹${order.deliveryCharge.toFixed(2)}`, 420, currentY, { width: 100, align: "right" });
-
-    currentY += 15;
-
-    doc
-      .text("Tax Amount (GST):", 320, currentY, { width: 100, align: "right" })
-      .text(`₹${order.taxAmount.toFixed(2)}`, 420, currentY, { width: 100, align: "right" });
-
-    currentY += 20;
-
-    doc
+      .fillColor(BRAND_GREEN)
       .fontSize(12)
-      .fillColor("#1e293b")
-      .text("Grand Total:", 320, currentY, { width: 100, align: "right" })
-      .text(`₹${order.grandTotal.toFixed(2)}`, 420, currentY, { width: 100, align: "right" });
+      .font("Helvetica-Bold")
+      .text("Grand Total:", totalsX, currentY, { width: 130, align: "right" })
+      .text(`₹${order.grandTotal.toFixed(2)}`, 450, currentY, { width: 95, align: "right" });
 
     currentY += 30;
 
-    // Payment details
+    // ── COMPLIANCE NOTE BOX ──
+    const noteY = Math.max(currentY, 680);
     doc
-      .fontSize(10)
-      .fillColor("#475569")
-      .text(`Payment Method: ${order.paymentMethod} (Cash on Delivery)`, 50, currentY)
-      .text(`Payment Status: Paid`, 50, currentY + 15);
+      .roundedRect(40, noteY, 515, 45, 6)
+      .fillAndStroke("#F8FAFC", BORDER_GRAY);
 
-    // Thank you message
     doc
-      .moveDown(4)
-      .fontSize(12)
-      .fillColor("#4f46e5")
-      .text("Thank you for shopping with Aryusha! 🚀", { align: "center" });
+      .fillColor(MUTED_TEXT)
+      .fontSize(7)
+      .font("Helvetica")
+      .text(
+        "Notice: Aryusha is currently operating on a proprietary basis during initial rollout and is in process of formal corporate registration. A formal GST tax invoice with GSTIN will be updated post-incorporation. All taxes and platform fees are inclusive as indicated.",
+        48,
+        noteY + 8,
+        { width: 499, align: "left" }
+      );
 
-    // End Document Stream
+    // ── FOOTER DISCLAIMER ──
+    const footerY = noteY + 54;
+    doc
+      .fillColor(MUTED_TEXT)
+      .fontSize(7.5)
+      .font("Helvetica")
+      .text("This is a system-generated invoice from Aryusha and does not require a signature.", 40, footerY)
+      .text("Support: support@aryusha.in | aryusha.in", 350, footerY, { width: 205, align: "right" });
+
     doc.end();
   } catch (error) {
     console.error("PDF Invoice download failure:", error);

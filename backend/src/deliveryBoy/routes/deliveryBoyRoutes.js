@@ -16,7 +16,8 @@ import {
   getNotifications,
   markNotificationRead,
   toggleOnlineStatus,
-  submitSupportTicket
+  submitSupportTicket,
+  getOptimizedRoute
 } from "../controllers/deliveryBoyController.js";
 import { protectDeliveryBoy } from "../middleware/deliveryBoyAuthMiddleware.js";
 
@@ -27,6 +28,7 @@ router.use(protectDeliveryBoy);
 
 router.get("/dashboard", getDashboard);
 router.get("/orders", getOrders);
+router.get("/optimize-route", getOptimizedRoute);
 router.get("/orders/:id", getOrderById);
 router.put("/orders/:id/status", updateOrderStatus);
 router.put("/orders/:id/pickup-vendor", updateVendorPickupStatus);

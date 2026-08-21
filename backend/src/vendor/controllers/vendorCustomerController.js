@@ -1,6 +1,7 @@
 import CustomerOrder from "../../customer/models/CustomerOrder.js";
 import User from "../../customer/models/User.js";
 import { getNextInvoiceNumber } from "../../customer/controllers/orderController.js";
+import { formatVendorScopedOrder } from "../../utils/financeSerializer.js";
 
 // @desc    Get all customers with aggregated order stats for this vendor
 // @route   GET /api/vendor/customers
@@ -91,18 +92,20 @@ export const getCustomerOrders = async (req, res) => {
 
     const orderQuery = { customerId: id, $or: [{ vendorId }, { "vendorSubOrders.vendorId": vendorId }] };
 
-    const orders = await CustomerOrder.find(orderQuery)
+    const rawOrders = await CustomerOrder.find(orderQuery)
       .populate("vendorId", "shopName phone address")
       .populate("customerId", "fullName email phoneNumber")
       .sort({ createdAt: -1 });
 
     // Auto-assign invoiceNumber for any historical/existing orders missing one
-    for (const order of orders) {
+    for (const order of rawOrders) {
       if (!order.invoiceNumber) {
         order.invoiceNumber = await getNextInvoiceNumber();
         await order.save();
       }
     }
+
+    const orders = rawOrders.map(order => formatVendorScopedOrder(order, vendorId));
 
     res.status(200).json({ success: true, orders });
   } catch (error) {

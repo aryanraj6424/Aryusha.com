@@ -198,7 +198,7 @@ export default function WishlistPage() {
             return (
               <div
                 key={product._id}
-                onClick={() => navigate(product.slug ? `/customer/product/slug/${product.slug}` : `/customer/product/${product._id}`)}
+                onClick={() => navigate(`/customer/product/${product.slug || product._id}`)}
                 className="bg-white border border-slate-100 rounded-2xl p-4 flex gap-4 hover:shadow-md transition cursor-pointer relative justify-between flex-wrap sm:flex-nowrap"
               >
                 {/* Product Image and Details */}

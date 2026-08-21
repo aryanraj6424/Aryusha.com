@@ -1,4 +1,5 @@
 import { Product, VendorProduct, VendorListing, CommissionChangeHistory } from "../../models/catalog.js";
+import VendorPermission from "../models/VendorPermission.js";
 
 /**
  * ============================================================================
@@ -109,7 +110,9 @@ export const createVendorProductReference = async (req, res) => {
       targetCommVal = commissionValue !== "" && commissionValue !== null && commissionValue !== undefined ? Number(commissionValue) : null;
     }
 
-    // 3. Create the reference entry
+    // 3. Create the reference entry (pending admin approval if created by vendor)
+    const initialStatus = req.admin ? "active" : "pending";
+
     const link = await VendorProduct.create({
       masterProductId,
       vendorId,
@@ -122,7 +125,8 @@ export const createVendorProductReference = async (req, res) => {
       coupon_allowed: finalCouponAllowed,
       max_discount_amount: finalMaxDiscount !== "" && finalMaxDiscount !== null && finalMaxDiscount !== undefined ? Number(finalMaxDiscount) : null,
       commissionType: targetCommType,
-      commissionValue: targetCommVal
+      commissionValue: targetCommVal,
+      status: initialStatus
     });
 
     // 4. Audit trail: log if custom commission was assigned by Admin at creation
@@ -237,7 +241,7 @@ export const updateLinkedProductDetails = async (req, res) => {
       link.max_discount_amount = val !== "" && val !== null && val !== undefined ? Number(val) : null;
     }
 
-    // Admin-only commission update with Change History audit log
+    // Commission update logic (Admin ALWAYS allowed; Vendor allowed ONLY if commissionEditAccess permission is granted)
     if (req.admin && (commissionType !== undefined || commissionValue !== undefined)) {
       const targetType = commissionType || link.commissionType || "inherit";
       const targetVal = commissionValue !== "" && commissionValue !== null && commissionValue !== undefined ? Number(commissionValue) : null;
@@ -258,6 +262,16 @@ export const updateLinkedProductDetails = async (req, res) => {
           changedBy: req.admin._id,
           changedAt: new Date()
         });
+      }
+    } else if (req.vendor && (commissionType !== undefined || commissionValue !== undefined)) {
+      const permDoc = await VendorPermission.findOne({ vendor: req.vendor._id });
+      const canEditComm = permDoc?.permissions?.commissionEditAccess?.edit === true;
+
+      if (canEditComm) {
+        const targetType = commissionType || link.commissionType || "inherit";
+        const targetVal = commissionValue !== "" && commissionValue !== null && commissionValue !== undefined ? Number(commissionValue) : null;
+        link.commissionType = targetType;
+        link.commissionValue = targetVal;
       }
     }
 

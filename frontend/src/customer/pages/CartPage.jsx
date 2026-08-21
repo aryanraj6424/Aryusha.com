@@ -633,10 +633,10 @@ export default function CartPage() {
                 <div className="flex justify-between items-baseline">
                   <span>Item Total:</span>
                   <div className="flex items-center gap-1.5">
-                    {summary?.mrpTotal && summary.mrpTotal > summary.itemTotal && (
+                    {summary?.mrpTotal && summary.mrpTotal > (summary.itemTotal || 0) && (
                       <span className="text-xs text-slate-400 line-through">₹{summary.mrpTotal.toFixed(2)}</span>
                     )}
-                    <span className="text-slate-850 font-bold">₹{summary?.itemTotal.toFixed(2)}</span>
+                    <span className="text-slate-850 font-bold">₹{(summary?.itemTotal || 0).toFixed(2)}</span>
                   </div>
                 </div>
 
@@ -660,7 +660,7 @@ export default function CartPage() {
                       <div key={fee.feeType} className={`flex justify-between ${fee.feeType === "small_cart" ? "text-amber-800 font-bold" : ""}`}>
                         <span>{fee.label}:</span>
                         <span className={isFreeDelivery ? "text-emerald-600 font-bold bg-emerald-50 px-2 py-0.5 rounded text-xs uppercase" : "text-slate-850"}>
-                          {isFreeDelivery ? "FREE" : `₹${fee.amount.toFixed(2)}`}
+                          {isFreeDelivery ? "FREE" : `₹${(fee.amount || 0).toFixed(2)}`}
                         </span>
                       </div>
                     );
@@ -685,7 +685,7 @@ export default function CartPage() {
                     <div className="flex justify-between">
                       <span>Delivery Partner Fee:</span>
                       <span className={summary?.deliveryPartnerFee === 0 ? "text-emerald-600 font-bold" : "text-slate-850"}>
-                        {summary?.deliveryPartnerFee === 0 ? "FREE" : `₹${summary?.deliveryPartnerFee.toFixed(2)}`}
+                        {summary?.deliveryPartnerFee === 0 ? "FREE" : `₹${(summary?.deliveryPartnerFee || 0).toFixed(2)}`}
                       </span>
                     </div>
 

@@ -745,6 +745,10 @@ export const getVendorPermissions = async (req, res) => {
         permissions.permissions.product = { view: true, add: true, edit: true, delete: true };
         modified = true;
       }
+      if (!permissions.permissions.commissionEditAccess) {
+        permissions.permissions.commissionEditAccess = { edit: false };
+        modified = true;
+      }
       if (modified) {
         permissions.markModified("permissions");
         await permissions.save();

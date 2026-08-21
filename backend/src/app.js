@@ -210,6 +210,9 @@ app.use("/api/location", locationRoutes);
 app.use("/api", catalogRoutes);
 
 // Sitemap & SEO Routes
+import { handleProductSeo } from "./middleware/productSeoMiddleware.js";
+app.get("/customer/product/slug/:slug", handleProductSeo);
+app.get("/customer/product/:idOrSlug", handleProductSeo);
 app.use("/", sitemapRoutes);
 
 

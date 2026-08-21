@@ -13,12 +13,18 @@ import {
   bulkDeleteProducts,
   bulkUpdateProducts,
   importProducts,
-  exportProducts
+  exportProducts,
+  getAdminVendorListings,
+  updateVendorListingStatus
 } from "../controllers/productController.js";
 
 const router = express.Router();
 
 router.use(protectAdmin);
+
+// Vendor Listings Tab Endpoints
+router.get("/vendor-listings", getAdminVendorListings);
+router.put("/vendor-listings/:id/status", updateVendorListingStatus);
 
 // Bulk operations & files import/export
 router.post("/bulk-delete", bulkDeleteProducts);

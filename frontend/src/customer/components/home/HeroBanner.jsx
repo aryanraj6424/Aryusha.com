@@ -95,10 +95,8 @@ function HeroBanner({ vendorId }) {
   const handleBannerClick = (banner) => {
     const slug = banner.productId?.slug;
     const id = banner.productId?._id || banner.productId;
-    if (slug) {
-      navigate(`/customer/product/slug/${slug}`);
-    } else if (id) {
-      navigate(`/customer/product/${id}`);
+    if (slug || id) {
+      navigate(`/customer/product/${slug || id}`);
     }
   };
 

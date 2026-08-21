@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { ShoppingBag, CheckCircle, Clock, MapPin, ArrowRight, Wallet, HelpCircle, Phone } from "lucide-react";
+import { ShoppingBag, CheckCircle, Clock, MapPin, ArrowRight, Wallet, HelpCircle, Phone, Navigation, Route } from "lucide-react";
 import axios from "axios";
 import { useToast } from "../../../components/Toast";
 import { getSocket, joinRoom, leaveRoom } from "../../../services/socket";
@@ -38,11 +38,11 @@ export default function DeliveryBoyDashboard() {
 
     const timer = setInterval(() => {
       fetchDashboardData();
-    }, 6000);
+    }, 4000);
 
     // Socket real-time integration
     const rider = JSON.parse(localStorage.getItem("deliveryBoy") || "{}");
-    const riderId = rider._id;
+    const riderId = rider._id || rider.id;
     if (riderId) {
       const socket = getSocket();
       joinRoom(`deliveryBoy:${riderId}`);
@@ -60,11 +60,15 @@ export default function DeliveryBoyDashboard() {
       };
 
       socket.on("order:assigned", handleAssigned);
+      socket.on("order:updated", handleAssigned);
+      socket.on("order:status_changed", handleAssigned);
       socket.on("payout:updated", handlePayoutUpdate);
 
       return () => {
         clearInterval(timer);
         socket.off("order:assigned", handleAssigned);
+        socket.off("order:updated", handleAssigned);
+        socket.off("order:status_changed", handleAssigned);
         socket.off("payout:updated", handlePayoutUpdate);
         leaveRoom(`deliveryBoy:${riderId}`);
       };
@@ -76,7 +80,7 @@ export default function DeliveryBoyDashboard() {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-purple-600"></div>
+        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#0B2214]"></div>
       </div>
     );
   }
@@ -91,53 +95,53 @@ export default function DeliveryBoyDashboard() {
   return (
     <div className="space-y-6">
       
-      {/* Welcome Banner */}
-      <div className="bg-gradient-to-r from-purple-650 to-indigo-600 text-white rounded-3xl p-5 shadow-lg relative overflow-hidden">
+      {/* Welcome Banner - Zepto / Blinkit Green Theme */}
+      <div className="bg-gradient-to-r from-[#0B2214] via-[#047857] to-[#065f46] text-white rounded-3xl p-5 shadow-lg relative overflow-hidden">
         <div className="relative z-10 space-y-1">
-          <p className="text-[10px] uppercase font-bold tracking-widest text-purple-200">Welcome Back</p>
+          <p className="text-[10px] uppercase font-bold tracking-widest text-emerald-200">Welcome Back</p>
           <h2 className="text-xl font-black">Let's Deliver Smiles Today!</h2>
-          <div className="flex items-center gap-4 mt-3 pt-3 border-t border-white/10">
+          <div className="flex items-center gap-4 mt-3 pt-3 border-t border-white/15">
             <div>
-              <p className="text-[10px] text-purple-200 font-semibold">Wallet Balance</p>
-              <p className="text-lg font-black">₹{earnings?.walletBalance || 0}</p>
+              <p className="text-[10px] text-emerald-100 font-semibold">Wallet Balance</p>
+              <p className="text-lg font-black text-emerald-300">₹{earnings?.walletBalance || 0}</p>
             </div>
             <div className="w-px h-8 bg-white/20"></div>
             <div>
-              <p className="text-[10px] text-purple-200 font-semibold">Completed Deliveries</p>
+              <p className="text-[10px] text-emerald-100 font-semibold">Completed Deliveries</p>
               <p className="text-lg font-black">{stats?.completedDeliveries || 0}</p>
             </div>
           </div>
         </div>
-        <div className="absolute -right-8 -bottom-8 w-32 h-32 bg-white/10 rounded-full blur-xl"></div>
+        <div className="absolute -right-8 -bottom-8 w-32 h-32 bg-emerald-400/10 rounded-full blur-xl"></div>
       </div>
 
       {/* Grid Stats */}
       <div className="grid grid-cols-3 gap-3">
         {/* Today's Earnings */}
-        <div className="bg-white rounded-2xl border border-slate-100 p-4 text-center shadow-sm">
-          <div className="w-9 h-9 bg-purple-50 rounded-xl flex items-center justify-center mx-auto text-[#0B2214] mb-2">
+        <div className="bg-white rounded-2xl border border-emerald-100 p-3.5 text-center shadow-sm">
+          <div className="w-9 h-9 bg-emerald-50 rounded-xl flex items-center justify-center mx-auto text-[#047857] mb-1.5">
             <Wallet size={18} />
           </div>
           <p className="text-[9px] font-black uppercase text-slate-400 tracking-wider">Today's Pay</p>
-          <p className="text-sm font-black text-slate-800 mt-0.5">₹{stats?.todayEarnings || 0}</p>
+          <p className="text-sm font-black text-[#0B2214] mt-0.5">₹{stats?.todayEarnings || 0}</p>
         </div>
 
         {/* Pending */}
-        <div className="bg-white rounded-2xl border border-slate-100 p-4 text-center shadow-sm">
-          <div className="w-9 h-9 bg-amber-50 rounded-xl flex items-center justify-center mx-auto text-amber-600 mb-2">
+        <div className="bg-white rounded-2xl border border-amber-100 p-3.5 text-center shadow-sm">
+          <div className="w-9 h-9 bg-amber-50 rounded-xl flex items-center justify-center mx-auto text-amber-600 mb-1.5">
             <Clock size={18} />
           </div>
           <p className="text-[9px] font-black uppercase text-slate-400 tracking-wider">Pending</p>
-          <p className="text-sm font-black text-slate-800 mt-0.5">{stats?.pendingOrders || 0}</p>
+          <p className="text-sm font-black text-amber-700 mt-0.5">{stats?.pendingOrders || 0}</p>
         </div>
 
         {/* In Progress */}
-        <div className="bg-white rounded-2xl border border-slate-100 p-4 text-center shadow-sm">
-          <div className="w-9 h-9 bg-indigo-50 rounded-xl flex items-center justify-center mx-auto text-indigo-600 mb-2">
+        <div className="bg-white rounded-2xl border border-blue-100 p-3.5 text-center shadow-sm">
+          <div className="w-9 h-9 bg-blue-50 rounded-xl flex items-center justify-center mx-auto text-blue-600 mb-1.5">
             <ShoppingBag size={18} />
           </div>
           <p className="text-[9px] font-black uppercase text-slate-400 tracking-wider">Active</p>
-          <p className="text-sm font-black text-slate-800 mt-0.5">{stats?.inProgressOrders || 0}</p>
+          <p className="text-sm font-black text-blue-700 mt-0.5">{stats?.inProgressOrders || 0}</p>
         </div>
       </div>
 
@@ -145,9 +149,14 @@ export default function DeliveryBoyDashboard() {
       <div className="space-y-3">
         <div className="flex justify-between items-center px-1">
           <h3 className="font-extrabold text-slate-800 text-sm">Active Assignments ({activeDeliveries.length})</h3>
-          <button onClick={() => navigate("/delivery-boy/orders")} className="text-xs text-[#0B2214] font-bold hover:underline flex items-center gap-0.5">
-            View All <ArrowRight size={12} />
-          </button>
+          <div className="flex items-center gap-2">
+            <button onClick={() => navigate("/delivery-boy/orders")} className="px-2.5 py-1 bg-emerald-50 text-[#047857] border border-emerald-200 rounded-lg text-xs font-bold hover:bg-emerald-100 transition flex items-center gap-1 cursor-pointer">
+              <Navigation size={11} /> Calculate Route
+            </button>
+            <button onClick={() => navigate("/delivery-boy/orders")} className="text-xs text-[#047857] font-extrabold hover:underline flex items-center gap-0.5 cursor-pointer">
+              View All <ArrowRight size={12} />
+            </button>
+          </div>
         </div>
 
         {activeDeliveries.length === 0 ? (
@@ -156,33 +165,38 @@ export default function DeliveryBoyDashboard() {
           </div>
         ) : (
           <div className="space-y-3">
-            {activeDeliveries.map((order) => (
-              <div 
-                key={order._id}
-                onClick={() => navigate(`/delivery-boy/orders/${order._id}`)}
-                className="bg-white rounded-2xl border border-slate-150 p-4 shadow-sm hover:border-purple-200 transition cursor-pointer flex justify-between items-center gap-3"
-              >
-                <div className="space-y-1.5 flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="font-black text-xs text-[#0B2214]">#{order.orderId}</span>
-                    <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-full ${
-                      order.deliveryStatus === 'Assigned' ? 'bg-amber-100 text-amber-800 border border-amber-250' : 'bg-purple-100 text-purple-800 border border-purple-250'
-                    }`}>
-                      {order.deliveryStatus.replace(/_/g, " ")}
-                    </span>
+            {activeDeliveries.map((order) => {
+              const shopName = order.vendorId?.shopName || order.primaryVendor?.shopName || "Aryusha Partner Store";
+              return (
+                <div 
+                  key={order._id}
+                  onClick={() => navigate(`/delivery-boy/orders/${order._id}`)}
+                  className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm hover:border-[#047857] transition cursor-pointer flex justify-between items-center gap-3"
+                >
+                  <div className="space-y-1.5 flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="font-black text-xs text-[#0B2214]">#{order.orderId}</span>
+                      <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-full ${
+                        order.deliveryStatus === 'Assigned' 
+                          ? 'bg-amber-100 text-amber-800 border border-amber-250' 
+                          : 'bg-emerald-100 text-[#0B2214] border border-emerald-250'
+                      }`}>
+                        {order.deliveryStatus?.replace(/_/g, " ")}
+                      </span>
+                    </div>
+
+                    <div className="space-y-0.5 text-xs text-slate-600 font-semibold">
+                      <p className="truncate"><span className="font-bold text-slate-400">Store:</span> {shopName}</p>
+                      <p className="truncate"><span className="font-bold text-slate-400">Drop:</span> {order.deliveryAddress?.fullName} - {order.deliveryAddress?.area}</p>
+                    </div>
                   </div>
 
-                  <div className="space-y-0.5 text-xs text-slate-500 font-semibold">
-                    <p className="truncate"><span className="font-bold text-slate-400">Store:</span> {order.vendorId?.shopName}</p>
-                    <p className="truncate"><span className="font-bold text-slate-400">Drop:</span> {order.deliveryAddress?.fullName} - {order.deliveryAddress?.area}</p>
+                  <div className="text-[#047857] bg-emerald-50 p-2.5 rounded-xl border border-emerald-100">
+                    <ArrowRight size={16} />
                   </div>
                 </div>
-
-                <div className="text-slate-400 bg-slate-50 p-2 rounded-xl">
-                  <ArrowRight size={16} />
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
@@ -202,7 +216,7 @@ export default function DeliveryBoyDashboard() {
               <div key={index} className="flex-1 flex flex-col items-center gap-2 group">
                 <div className="w-full bg-slate-100 rounded-t-lg relative h-full flex items-end">
                   <div 
-                    className="w-full bg-gradient-to-t from-indigo-500 to-purple-650 rounded-t-lg group-hover:opacity-85 transition-all duration-500" 
+                    className="w-full bg-gradient-to-t from-[#0B2214] to-[#047857] rounded-t-lg group-hover:opacity-85 transition-all duration-500" 
                     style={{ height: `${pct}%` }}
                   >
                     {/* Tooltip on hover */}
@@ -218,10 +232,10 @@ export default function DeliveryBoyDashboard() {
         </div>
       </div>
 
-      {/* Support & Notification Widgets */}
-      <div className="bg-slate-100 border border-slate-200 rounded-3xl p-4 flex items-center justify-between gap-3 shadow-inner">
+      {/* Support Widget */}
+      <div className="bg-emerald-50/60 border border-emerald-100 rounded-3xl p-4 flex items-center justify-between gap-3 shadow-inner">
         <div className="flex items-center gap-3">
-          <div className="p-2.5 bg-purple-100 text-[#0B2214] rounded-xl shadow-sm">
+          <div className="p-2.5 bg-[#0B2214] text-white rounded-xl shadow-sm">
             <HelpCircle size={18} />
           </div>
           <div>
@@ -231,7 +245,7 @@ export default function DeliveryBoyDashboard() {
         </div>
         <button 
           onClick={() => navigate("/delivery-boy/support")}
-          className="px-3 py-1.5 bg-white border rounded-xl hover:bg-slate-50 font-black text-[10px] text-slate-700 transition cursor-pointer flex items-center gap-1 shadow-sm"
+          className="px-3 py-1.5 bg-white border border-emerald-200 rounded-xl hover:bg-emerald-50 font-black text-[10px] text-[#0B2214] transition cursor-pointer flex items-center gap-1 shadow-sm"
         >
           <Phone size={10} /> Call Dispatch
         </button>

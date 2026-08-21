@@ -25,7 +25,7 @@ export default function CheckoutPage() {
   const [viewItems, setViewItems] = useState(false);
 
   // Payment selection state
-  const [paymentMethod, setPaymentMethod] = useState(""); // "COD" or "Online"
+  const [paymentMethod, setPaymentMethod] = useState("COD");
   
   // Checkout process states
   const [loading, setLoading] = useState(false);
@@ -51,6 +51,23 @@ export default function CheckoutPage() {
     loadAddresses();
     fetchSlots();
   }, []);
+
+  const isSlotAvailableToday = (cutoffTimeStr) => {
+    if (!cutoffTimeStr) return true;
+    try {
+      const now = new Date();
+      const currentMinutes = now.getHours() * 60 + now.getMinutes();
+
+      let [hours, minutes] = cutoffTimeStr.split(":").map(Number);
+      if (isNaN(hours)) hours = 18;
+      if (isNaN(minutes)) minutes = 0;
+
+      const cutoffMinutes = hours * 60 + minutes;
+      return currentMinutes < cutoffMinutes;
+    } catch {
+      return true;
+    }
+  };
 
   useEffect(() => {
     if (slots.length > 0) {
@@ -340,18 +357,6 @@ export default function CheckoutPage() {
   const selectAddress = (addr) => {
     setSelectedAddress(addr);
     localStorage.setItem("selectedAddress", JSON.stringify(addr));
-  };
-
-  const isSlotAvailableToday = (cutoffTimeStr) => {
-    try {
-      const now = new Date();
-      const currentMinutes = now.getHours() * 60 + now.getMinutes();
-      const parts = cutoffTimeStr.split(":");
-      const cutoffMinutes = Number(parts[0]) * 60 + Number(parts[1] || 0);
-      return currentMinutes < cutoffMinutes;
-    } catch {
-      return false;
-    }
   };
 
   // Quantity updates
@@ -835,66 +840,7 @@ export default function CheckoutPage() {
             )}
           </div>
 
-          {/* Payment Method Option buttons */}
-          <div className="bg-white border border-slate-200/80 p-4 sm:p-6 rounded-2xl sm:rounded-3xl shadow-xs space-y-4 font-semibold">
-            <h2 className="font-extrabold text-slate-850 text-sm">Select Payment Method</h2>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {/* COD */}
-              <div
-                onClick={() => setPaymentMethod("COD")}
-                className={`border rounded-2xl p-3.5 sm:p-4 min-h-[56px] flex items-center justify-between cursor-pointer transition ${
-                  paymentMethod === "COD"
-                    ? "border-purple-600 bg-purple-50/10 shadow-xs"
-                    : "border-slate-200/80 hover:border-purple-300"
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <input
-                    type="radio"
-                    id="codPayment"
-                    name="paymentSelect"
-                    checked={paymentMethod === "COD"}
-                    onChange={() => setPaymentMethod("COD")}
-                    className="accent-purple-600 w-4.5 h-4.5 cursor-pointer"
-                  />
-                  <div>
-                    <label htmlFor="codPayment" className="text-xs font-extrabold text-slate-800 cursor-pointer">
-                      Cash on Delivery (COD)
-                    </label>
-                    <p className="text-[9px] text-slate-400 font-semibold">Pay with cash/UPI at delivery</p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Online Payment */}
-              <div
-                onClick={() => setPaymentMethod("Online")}
-                className={`border rounded-2xl p-3.5 sm:p-4 min-h-[56px] flex items-center justify-between cursor-pointer transition ${
-                  paymentMethod === "Online"
-                    ? "border-purple-600 bg-purple-50/10 shadow-xs"
-                    : "border-slate-200/80 hover:border-purple-300"
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <input
-                    type="radio"
-                    id="onlinePayment"
-                    name="paymentSelect"
-                    checked={paymentMethod === "Online"}
-                    onChange={() => setPaymentMethod("Online")}
-                    className="accent-purple-600 w-4.5 h-4.5 cursor-pointer"
-                  />
-                  <div>
-                    <label htmlFor="onlinePayment" className="text-xs font-extrabold text-slate-800 cursor-pointer">
-                      Online Payment
-                    </label>
-                    <p className="text-[9px] text-purple-700 font-bold">Simulate secure gateway checkout</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
 
           {/* Cross Sell Suggestions slider widget */}
           {checkoutSummary?.suggestions && checkoutSummary.suggestions.length > 0 && (

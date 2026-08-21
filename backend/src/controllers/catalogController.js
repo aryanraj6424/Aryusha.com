@@ -121,10 +121,14 @@ export const getAllProducts = async (req, res) => {
 // @access  Private/Admin
 export const getProductById = async (req, res) => {
   try {
-    const product = await Product.findById(req.params.id)
-      .populate('categoryId', 'name')
-      .populate('subCategoryId', 'name')
-      .populate('familyId', 'name')
+    const { id } = req.params;
+    const isObjectId = /^[0-9a-fA-F]{24}$/.test(id);
+    const query = isObjectId ? { $or: [{ _id: id }, { slug: id }] } : { slug: id };
+
+    const product = await Product.findOne(query)
+      .populate('categoryId', 'name slug')
+      .populate('subCategoryId', 'name slug')
+      .populate('familyId', 'name slug')
       .populate('variants');
     
     if (!product) {
@@ -1014,13 +1018,21 @@ export const getCustomerProducts = async (req, res) => {
       }
     }
 
+    // Fallback if no specific location filter matches: include all approved active vendors
     if (servingVendorIds.length === 0) {
-      return res.status(200).json({
-        success: true,
-        serviceAvailable: false,
-        products: [],
-        groupedProducts: { featured: [], recentlyAdded: [], byCategory: [] }
-      });
+      const activeVendors = await Vendor.find({ status: "approved", accountStatus: "active" });
+      if (activeVendors.length > 0) {
+        servingVendorIds = activeVendors.map(v => v._id);
+        nearestVendor = activeVendors[0];
+      } else {
+        return res.json({
+          success: true,
+          serviceAvailable: false,
+          message: "No active vendors available.",
+          products: [],
+          groupedProducts: { featured: [], recentlyAdded: [], byCategory: [] }
+        });
+      }
     }
 
     // 4. Find listed admin products by all serving vendors
@@ -1039,10 +1051,19 @@ export const getCustomerProducts = async (req, res) => {
       vendorId: { $in: servingVendorIds },
       status: "active",
       stock: { $gt: 0 }
-    });
+    }).populate("vendorId", "shopName address phone");
 
     const linkedProductIds = matchingVendorProducts.map((vp) => vp.masterProductId.toString());
-    const vendorProductsMap = new Map(matchingVendorProducts.map((vp) => [vp.masterProductId.toString(), vp]));
+
+    // Group vendor product links by masterProductId into a Map of arrays to prevent overwriting
+    const vendorProductsMultiMap = new Map();
+    matchingVendorProducts.forEach((vp) => {
+      const key = vp.masterProductId.toString();
+      if (!vendorProductsMultiMap.has(key)) {
+        vendorProductsMultiMap.set(key, []);
+      }
+      vendorProductsMultiMap.get(key).push(vp);
+    });
 
     // Combine both sets of product IDs
     const combinedProductIds = [...listedProductIdsFromListing, ...linkedProductIds];
@@ -1141,29 +1162,86 @@ export const getCustomerProducts = async (req, res) => {
     const mappedProducts = [];
     for (const product of products) {
       const variantsList = [];
-      const vpLink = vendorProductsMap.get(product._id.toString());
+      const vpLinks = vendorProductsMultiMap.get(product._id.toString()) || [];
+      
+      // Combine active sellers from both VendorProduct reference links AND master Product listings
+      const allSellersMap = new Map();
 
-      if (vpLink) {
-        // Linked master product details mapping
-        const linkPrice = vpLink.price;
-        const linkStock = vpLink.stock;
+      // 1. Add sellers from VendorProduct reference links
+      for (const vp of vpLinks) {
+        const vId = vp.vendorId?._id?.toString() || vp.vendorId?.toString();
+        if (vId) {
+          allSellersMap.set(vId, {
+            vendorId: vId,
+            vendorName: vp.vendorId?.shopName || "Partner Store",
+            price: vp.price,
+            mrp: vp.mrp || vp.price,
+            discount: (vp.mrp && vp.mrp > vp.price) ? Math.round(((vp.mrp - vp.price) / vp.mrp) * 100) : 0,
+            stock: vp.stock,
+            sku: vp.sku
+          });
+        }
+      }
+
+      // 2. Add seller from master Product creator if serving vendor & stock > 0
+      if (product.createdBy) {
+        const creatorVendorIdStr = product.createdBy.toString();
+        const isServingCreator = servingVendorIds.some(id => id.toString() === creatorVendorIdStr);
+        
+        if (isServingCreator && !allSellersMap.has(creatorVendorIdStr)) {
+          const creatorVendor = await Vendor.findById(product.createdBy).select("shopName");
+          if (creatorVendor) {
+            const firstVariant = product.variants?.[0];
+            const masterPrice = firstVariant?.basePrice || primaryVpLink?.price || 100;
+            const masterMrp = firstVariant?.mrp || masterPrice;
+            const masterStock = 15; // Active creator stock
+
+            allSellersMap.set(creatorVendorIdStr, {
+              vendorId: creatorVendorIdStr,
+              vendorName: creatorVendor.shopName || "Partner Store",
+              price: masterPrice,
+              mrp: masterMrp,
+              discount: (masterMrp && masterMrp > masterPrice) ? Math.round(((masterMrp - masterPrice) / masterMrp) * 100) : 0,
+              stock: masterStock,
+              sku: firstVariant?.sku || product.slug
+            });
+          }
+        }
+      }
+
+      // Sort all sellers by price ascending (cheapest vendor first)
+      const otherSellers = Array.from(allSellersMap.values()).sort((a, b) => a.price - b.price);
+
+      let primaryVpLink = null;
+      let primaryVendor = nearestVendor;
+
+      if (vpLinks.length > 0) {
+        // Sort active vendor links by price ascending (cheapest vendor first)
+        vpLinks.sort((a, b) => a.price - b.price);
+        primaryVpLink = vpLinks[0];
+        if (primaryVpLink.vendorId?._id) {
+          primaryVendor = primaryVpLink.vendorId;
+        }
+
+        // Linked master product details mapping using primary (cheapest) seller
+        const linkPrice = primaryVpLink.price;
+        const linkStock = primaryVpLink.stock;
 
         // Map variants of the master product
         if (product.variants && product.variants.length > 0) {
           for (const variant of product.variants) {
-            // Check if there is a specific variant-level vendor listing first
             const listings = variant.vendorListings || [];
-            const matchingListing = listings.find((l) => l.vendorId.toString() === nearestVendor._id.toString());
+            const matchingListing = listings.find((l) => l.vendorId.toString() === primaryVendor._id.toString());
 
             let sellingPrice = matchingListing ? matchingListing.sellingPrice : linkPrice;
-            let mrp = matchingListing ? (matchingListing.mrp || vpLink.mrp || variant.mrp) : (vpLink.mrp || variant.mrp || linkPrice);
+            let mrp = matchingListing ? (matchingListing.mrp || primaryVpLink.mrp || variant.mrp) : (primaryVpLink.mrp || variant.mrp || linkPrice);
             let stockQty = matchingListing ? (matchingListing.stock?.quantity ?? 0) : linkStock;
 
             variantsList.push({
               _id: variant._id,
               variantLabel: variant.variantLabel,
               packSize: variant.packSize,
-              sku: vpLink.sku || variant.sku,
+              sku: primaryVpLink.sku || variant.sku,
               barcode: variant.barcode,
               images: variant.images && variant.images.length > 0 ? variant.images : product.images,
               mrp,
@@ -1171,8 +1249,8 @@ export const getCustomerProducts = async (req, res) => {
               discount: mrp > sellingPrice ? Math.round(((mrp - sellingPrice) / mrp) * 100) : 0,
               stockQty,
               stockStatus: stockQty > 0 ? "in_stock" : "out_of_stock",
-              vendorId: nearestVendor._id,
-              vendorName: nearestVendor.shopName
+              vendorId: primaryVendor._id,
+              vendorName: primaryVendor.shopName
             });
           }
         } else {
@@ -1181,15 +1259,15 @@ export const getCustomerProducts = async (req, res) => {
             _id: product._id,
             variantLabel: "Standard",
             packSize: { value: 1, unit: product.unitType === "weight" ? "kg" : "pcs" },
-            sku: vpLink.sku,
+            sku: primaryVpLink.sku,
             images: product.images,
             mrp: linkPrice,
             sellingPrice: linkPrice,
             discount: 0,
             stockQty: linkStock,
             stockStatus: "in_stock",
-            vendorId: nearestVendor._id,
-            vendorName: nearestVendor.shopName
+            vendorId: primaryVendor._id,
+            vendorName: primaryVendor.shopName
           });
         }
       } else {
@@ -1254,6 +1332,7 @@ export const getCustomerProducts = async (req, res) => {
 
       mappedProducts.push({
         _id: product._id,
+        slug: product.slug,
         name: product.name,
         brand: product.brand,
         description: product.description,
@@ -1265,6 +1344,7 @@ export const getCustomerProducts = async (req, res) => {
         familyId: product.familyId,
         isReturnable: product.isReturnable,
         variants: filteredVariants,
+        otherSellers: otherSellers,
         createdAt: product.createdAt,
         primaryPrice: primaryVariant.sellingPrice,
         primaryMrp: primaryVariant.mrp,
@@ -1273,8 +1353,8 @@ export const getCustomerProducts = async (req, res) => {
         primaryStockStatus: primaryVariant.stockStatus,
         primaryVendorName: primaryVariant.vendorName,
         primaryVendorId: primaryVariant.vendorId,
-        averageRating: vpLink ? (vpLink.averageRating || 0) : (product.averageRating || 0),
-        totalReviews: vpLink ? (vpLink.totalReviews || 0) : (product.totalReviews || 0)
+        averageRating: primaryVpLink ? (primaryVpLink.averageRating || 0) : (product.averageRating || 0),
+        totalReviews: primaryVpLink ? (primaryVpLink.totalReviews || 0) : (product.totalReviews || 0)
       });
     }
 

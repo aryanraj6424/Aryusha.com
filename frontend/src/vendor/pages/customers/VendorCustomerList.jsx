@@ -256,19 +256,26 @@ function InvoiceModal({ order, onClose }) {
               <span className="text-xxs font-bold text-slate-400">{itemsWithBreakdown.length} Item{itemsWithBreakdown.length > 1 ? "s" : ""}</span>
             </div>
 
-            {itemsWithBreakdown.map((item, i) => (
-              <div key={i} className="bg-slate-50/80 border border-slate-200/80 rounded-xl p-3.5 space-y-2 text-xs min-w-0 overflow-hidden">
-                {/* Item Main Info */}
-                <div className="flex justify-between items-start gap-2 min-w-0">
-                  <div className="space-y-0.5 min-w-0 flex-1">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className="font-mono text-xxs font-bold text-slate-400 flex-shrink-0">#{i + 1}</span>
-                      <span className="font-bold text-slate-800 text-xs sm:text-sm break-words min-w-0">{item.name}</span>
+            {itemsWithBreakdown.map((item, i) => {
+              const variantText = item.variantLabel || item.variantName || (item.packSize ? (typeof item.packSize === 'string' ? item.packSize : `${item.packSize.value} ${item.packSize.unit}`) : "") || item.unit || item.weight || (item.variantId && typeof item.variantId === 'object' ? (item.variantId.variantLabel || (item.variantId.packSize ? `${item.variantId.packSize.value} ${item.variantId.packSize.unit}` : "")) : "");
+              return (
+                <div key={i} className="bg-slate-50/80 border border-slate-200/80 rounded-xl p-3.5 space-y-2 text-xs min-w-0 overflow-hidden">
+                  {/* Item Main Info */}
+                  <div className="flex justify-between items-start gap-2 min-w-0">
+                    <div className="space-y-0.5 min-w-0 flex-1">
+                      <div className="flex items-center gap-2 min-w-0 flex-wrap">
+                        <span className="font-mono text-xxs font-bold text-slate-400 flex-shrink-0">#{i + 1}</span>
+                        <span className="font-bold text-slate-800 text-xs sm:text-sm break-words min-w-0">{item.name}</span>
+                        {variantText && (
+                          <span className="text-[10px] text-purple-700 bg-purple-100/70 border border-purple-200 px-1.5 py-0.5 rounded font-bold">
+                            {variantText}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xxs text-slate-500 font-mono">
+                        {item.qty || item.quantity} × ₹{Number(item.price || 0).toFixed(2)}
+                      </p>
                     </div>
-                    <p className="text-xxs text-slate-500 font-mono">
-                      {item.qty} × ₹{Number(item.price || 0).toFixed(2)}
-                    </p>
-                  </div>
                   <div className="text-right flex-shrink-0">
                     <span className="text-xxs font-bold text-slate-400 block uppercase tracking-wider">Line Total</span>
                     <span className="font-mono font-black text-slate-900 text-sm">₹{item.lineSubtotal.toFixed(2)}</span>
@@ -308,7 +315,8 @@ function InvoiceModal({ order, onClose }) {
                   </span>
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
 
           {/* Totals & Financial Breakdown Section */}
@@ -346,10 +354,23 @@ function InvoiceModal({ order, onClose }) {
                     <span className="font-mono font-semibold">₹{Number(order.taxAmount).toFixed(2)}</span>
                   </div>
                 )}
-                <div className="flex justify-between pt-2 text-sm font-extrabold text-slate-900 border-t border-slate-200">
-                  <span>Customer Grand Total</span>
-                  <span className="font-mono text-purple-700">₹{Number(order.grandTotal || 0).toFixed(2)}</span>
-                </div>
+                {order.isMultiVendor && order.fullOrderGrandTotal ? (
+                  <>
+                    <div className="flex justify-between pt-1 text-[11px] text-slate-400 font-semibold border-t border-slate-150">
+                      <span>Full Order Total (All Sellers)</span>
+                      <span className="font-mono">₹{Number(order.fullOrderGrandTotal).toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between pt-1 text-sm font-extrabold text-slate-900">
+                      <span>Customer Paid (This Store)</span>
+                      <span className="font-mono text-purple-700">₹{Number(order.vendorCustomerTotal || order.totalAmount || itemSubtotal).toFixed(2)}</span>
+                    </div>
+                  </>
+                ) : (
+                  <div className="flex justify-between pt-2 text-sm font-extrabold text-slate-900 border-t border-slate-200">
+                    <span>Customer Grand Total</span>
+                    <span className="font-mono text-purple-700">₹{Number(order.vendorCustomerTotal || order.grandTotal || 0).toFixed(2)}</span>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -512,7 +533,9 @@ function CustomerOrdersPanel({ customer, onClose }) {
                     </div>
                   </div>
                   <div className="flex flex-col items-end gap-2 flex-shrink-0">
-                    <p className="text-base font-extrabold text-slate-800">₹{order.grandTotal?.toFixed(2)}</p>
+                    <p className="text-base font-extrabold text-slate-800">
+                      ₹{(order.vendorCustomerTotal !== undefined ? order.vendorCustomerTotal : (order.totalAmount || order.grandTotal || 0)).toFixed(2)}
+                    </p>
                     <button
                       onClick={() => setSelectedOrder(order)}
                       className="flex items-center gap-1 px-3 py-1 bg-purple-50 text-purple-700 border border-purple-200 rounded-lg text-xs font-bold hover:bg-purple-100 transition"
@@ -530,7 +553,7 @@ function CustomerOrdersPanel({ customer, onClose }) {
         <div className="p-4 border-t bg-slate-50 flex justify-between text-sm">
           <span className="text-slate-500 font-semibold">{filtered.length} order{filtered.length !== 1 ? "s" : ""}</span>
           <span className="font-bold text-purple-700">
-            Total: ₹{filtered.reduce((sum, o) => sum + (o.grandTotal || 0), 0).toFixed(2)}
+            Total: ₹{filtered.reduce((sum, o) => sum + (o.vendorCustomerTotal !== undefined ? o.vendorCustomerTotal : (o.totalAmount || o.grandTotal || 0)), 0).toFixed(2)}
           </span>
         </div>
       </div>

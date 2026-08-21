@@ -100,7 +100,7 @@ export default function EnterOtp() {
               placeholder="0 0 0 0"
               value={otp}
               onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
-              className="w-48 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent font-black tracking-widest text-center text-2xl text-slate-850"
+              className="w-48 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-[#047857] focus:border-transparent font-black tracking-widest text-center text-2xl text-slate-850"
               required
             />
           </div>
@@ -108,7 +108,7 @@ export default function EnterOtp() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-bold transition shadow-lg shadow-emerald-100 flex items-center justify-center gap-2 cursor-pointer"
+            className="w-full py-4 bg-[#0B2214] hover:bg-[#047857] text-white rounded-2xl font-bold transition shadow-lg shadow-emerald-100 flex items-center justify-center gap-2 cursor-pointer"
           >
             {loading ? "Verifying..." : "Verify & Complete Delivery"}
           </button>
