@@ -483,14 +483,14 @@ export default function CheckoutPage() {
                     console.warn("One-shot GPS capture failed or denied:", err2);
                     resolve({ customerLiveLocation: null, locationUnavailable: true });
                   },
-                  { enableHighAccuracy: false, timeout: 6000, maximumAge: 60000 }
+                  { enableHighAccuracy: false, timeout: 8000, maximumAge: 0 }
                 );
                 return;
               }
               console.warn("One-shot GPS capture failed or denied:", error);
               resolve({ customerLiveLocation: null, locationUnavailable: true });
             },
-            { enableHighAccuracy: true, timeout: 5000 }
+            { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
           );
         });
       };

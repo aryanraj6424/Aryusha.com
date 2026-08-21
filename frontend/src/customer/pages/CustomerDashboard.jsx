@@ -81,7 +81,7 @@ function CustomerDashboard() {
       savePosition,
       (error) => {
         if (error.code !== 1) {
-          // Retry with low accuracy / cached position if initial request timed out
+          // Retry with low accuracy if high accuracy timed out or failed
           navigator.geolocation.getCurrentPosition(
             savePosition,
             (err2) => {
@@ -89,7 +89,7 @@ function CustomerDashboard() {
               setGeoStatus("denied");
               setLoading(false);
             },
-            { timeout: 10000, enableHighAccuracy: false, maximumAge: Infinity }
+            { timeout: 10000, enableHighAccuracy: false, maximumAge: 0 }
           );
           return;
         }
@@ -97,7 +97,7 @@ function CustomerDashboard() {
         setGeoStatus("denied");
         setLoading(false);
       },
-      { timeout: 8000, enableHighAccuracy: false, maximumAge: 60000 }
+      { timeout: 15000, enableHighAccuracy: true, maximumAge: 0 }
     );
   }, []);
 

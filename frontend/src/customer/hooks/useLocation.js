@@ -53,16 +53,16 @@ export default function useLocation() {
                 });
               },
               (err2) => reject(err2),
-              { enableHighAccuracy: false, timeout: 8000, maximumAge: Infinity }
+              { enableHighAccuracy: false, timeout: 10000, maximumAge: 0 }
             );
             return;
           }
           reject(error);
         },
         {
-          enableHighAccuracy: false,
-          timeout: 8000,
-          maximumAge: 60000,
+          enableHighAccuracy: true,
+          timeout: 15000,
+          maximumAge: 0,
         }
       );
     });

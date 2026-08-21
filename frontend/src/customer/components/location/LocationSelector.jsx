@@ -199,9 +199,10 @@ function LocationSelector() {
 
       if (mapInstanceRef.current) {
         mapInstanceRef.current.setZoom(16);
-        mapInstanceRef.current.panTo({ lat: latitude, lng: longitude });
+        mapInstanceRef.current.setCenter({ lat: latitude, lng: longitude });
       }
 
+      // Reverse geocode exact fresh coordinates directly
       fetchAddressDetails(latitude, longitude, true);
 
       if (isFallback || accuracy > 2000) {
@@ -212,7 +213,7 @@ function LocationSelector() {
       }
     };
 
-    const tryFallbackPosition = () => {
+    const tryLowAccuracyFallback = () => {
       navigator.geolocation.getCurrentPosition(
         (position) => onGpsSuccess(position, true),
         (err) => {
@@ -229,42 +230,27 @@ function LocationSelector() {
             });
           }
         },
-        { timeout: 10000, enableHighAccuracy: false, maximumAge: Infinity }
+        { timeout: 10000, enableHighAccuracy: false, maximumAge: 0 }
       );
     };
 
-    // Stage 1: Fast network/Wi-Fi positioning (8-second timeout, allowing cached location up to 1 min)
+    // Stage 1: High-accuracy GPS / Wi-Fi positioning (15-second timeout, fresh fix)
     navigator.geolocation.getCurrentPosition(
-      (position) => {
-        onGpsSuccess(position, false);
-
-        // Optional background GPS refinement if accuracy is coarse and hardware GPS might be available
-        if (position.coords.accuracy > 100 && navigator.geolocation) {
-          navigator.geolocation.getCurrentPosition(
-            (refinedPos) => {
-              if (mapInstanceRef.current && refinedPos.coords.accuracy < position.coords.accuracy) {
-                onGpsSuccess(refinedPos, false);
-              }
-            },
-            () => {},
-            { timeout: 6000, enableHighAccuracy: true, maximumAge: 0 }
-          );
-        }
-      },
+      (position) => onGpsSuccess(position, false),
       (err) => {
         if (err.code === 1) {
-          // Permission denied by browser — do not retry, show friendly guidance
+          // Permission denied by browser — stop loading, show friendly guidance
           setGpsLoading(false);
           showToast({
             type: "warning",
             message: "Location access is turned off for this site. You can set your address by searching above or dragging the pin — or enable location access in browser settings.",
           });
         } else {
-          // Stage 2: Automatic fallback query
-          tryFallbackPosition();
+          // Stage 2: Low-accuracy fallback query
+          tryLowAccuracyFallback();
         }
       },
-      { timeout: 8000, enableHighAccuracy: false, maximumAge: 60000 }
+      { timeout: 15000, enableHighAccuracy: true, maximumAge: 0 }
     );
   };
 

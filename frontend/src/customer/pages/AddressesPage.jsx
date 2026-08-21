@@ -450,7 +450,7 @@ function AddressesPage() {
               console.error(err2);
               showToast({ type: "error", message: "Location access denied or failed. Please enter coordinates and address details manually." });
             },
-            { timeout: 10000, enableHighAccuracy: false, maximumAge: Infinity }
+            { timeout: 10000, enableHighAccuracy: false, maximumAge: 0 }
           );
           return;
         }
@@ -458,7 +458,7 @@ function AddressesPage() {
         console.error(error);
         showToast({ type: "error", message: "Location access denied or failed. Please enter coordinates and address details manually." });
       },
-      { timeout: 8000, enableHighAccuracy: false, maximumAge: 60000 }
+      { timeout: 15000, enableHighAccuracy: true, maximumAge: 0 }
     );
   };
 
